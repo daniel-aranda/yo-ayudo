@@ -1,0 +1,144 @@
+extends layout
+
+block content
+  if !tenant || !branch
+    .empty Sucursal no encontrada.
+  else
+    section.page-header
+      h1 #{tenant.name} · #{branch.name}
+      p Día #{operation_date}
+
+    .metrics
+      article.metric
+        span.label Ventas
+        strong= operation ? money(operation.total_sales) : "$0"
+      article.metric
+        span.label Compras
+        strong= money(total_purchases)
+      article.metric
+        span.label Caja inicial
+        strong= operation ? money(operation.opening_cash) : "$0"
+      article.metric
+        span.label Caja final
+        strong= operation ? money(operation.closing_cash) : "$0"
+
+    .two-column
+      section.panel
+        h2 Métodos de pago
+        if operation
+          dl.compact
+            div
+              dt Efectivo
+              dd= money(operation.cash_sales)
+            div
+              dt Tarjeta
+              dd= money(operation.card_sales)
+            div
+              dt Transferencia
+              dd= money(operation.transfer_sales)
+            div
+              dt Apps
+              dd= money(operation.delivery_app_sales)
+        else
+          .empty Sin operación del día.
+
+      section.panel
+        h2 Reporte diario
+        if report
+          p= report.summary_text
+          if report.alerts_json && report.alerts_json.length
+            ul.clean-list
+              each alert in report.alerts_json
+                li
+                  strong= alert.severity
+                  span  · #{alert.message}
+        else
+          .empty Todavía no hay reporte generado.
+
+    .two-column
+      section.panel
+        h2 Compras
+        if purchases && purchases.length
+          table
+            thead
+              tr
+                th Producto
+                th Cantidad
+                th Costo
+            tbody
+              each purchase in purchases
+                tr
+                  td= purchase.item_name
+                  td #{purchase.quantity} #{purchase.unit}
+                  td= money(purchase.total_cost)
+        else
+          .empty Sin compras capturadas.
+
+      section.panel
+        h2 Inventario
+        if inventory && inventory.length
+          table
+            thead
+              tr
+                th Tipo
+                th Item
+                th Cantidad
+            tbody
+              each item in inventory
+                tr
+                  td= item.snapshot_type
+                  td= item.item_name
+                  td #{item.quantity} #{item.unit}
+        else
+          .empty Sin inventario capturado.
+
+    .two-column
+      section.panel
+        h2 Notas y operación
+        if operation
+          dl.compact
+            div
+              dt Sobrantes
+              dd= operation.surplus_notes || "Sin datos"
+            div
+              dt Faltantes
+              dd= operation.shortage_notes || "Sin datos"
+            div
+              dt Merma
+              dd= operation.waste_notes || "Sin datos"
+            div
+              dt Comentario
+              dd= operation.free_comment || "Sin datos"
+        else
+          .empty Sin notas.
+
+      section.panel
+        h2 Review pendiente
+        if review_items && review_items.length
+          ul.clean-list
+            each item in review_items
+              li
+                strong= item.reason
+                div= item.raw_text
+        else
+          .empty Sin pendientes.
+
+    section.panel
+      h2 Mensajes recientes
+      if messages && messages.length
+        table
+          thead
+            tr
+              th Dirección
+              th Texto
+              th Intent
+              th Estado
+          tbody
+            each message in messages
+              tr
+                td= message.direction
+                td= message.text_body
+                td= message.parsed_intent || "-"
+                td= message.processing_status
+      else
+        .empty Sin mensajes.

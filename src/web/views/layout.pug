@@ -1,0 +1,15 @@
+doctype html
+html(lang="es")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1")
+    title YoAyudo
+    link(rel="stylesheet", href="/public/css/dashboard.css")
+  body
+    header.topbar
+      a.brand(href="/dashboard") YoAyudo
+      nav.nav
+        a(href="/dashboard") Dashboard
+        a(href="/review") Review
+    main.container
+      block content

@@ -1,0 +1,27 @@
+extends layout
+
+block content
+  section.page-header
+    h1 Negocios
+    p WhatsApp Bot Engine operativo
+
+  if !tenants || tenants.length === 0
+    .empty Ejecuta el seed de desarrollo para crear el cliente demo.
+  else
+    .table-wrap
+      table
+        thead
+          tr
+            th Negocio
+            th Estado
+            th Sucursales
+            th
+        tbody
+          each tenant in tenants
+            tr
+              td= tenant.name
+              td
+                span.status= tenant.status
+              td= tenant.branch_count
+              td
+                a.button(href=`/dashboard/tenants/${tenant.id}`) Abrir

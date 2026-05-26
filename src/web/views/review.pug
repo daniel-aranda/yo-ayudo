@@ -1,0 +1,20 @@
+extends layout
+
+block content
+  section.page-header
+    h1 Review queue
+    p Mensajes con baja confianza o datos incompletos
+
+  if !review_items || review_items.length === 0
+    .empty No hay pendientes.
+  else
+    .grid
+      each item in review_items
+        article.card
+          h2= item.reason
+          p.meta #{item.tenant_name} #{item.branch_name ? "· " + item.branch_name : ""}
+          p= item.raw_text
+          form(method="post", action=`/review/${item.id}/resolve`)
+            label(for=`note-${item.id}`) Resolución
+            textarea(id=`note-${item.id}`, name="note", rows="3")
+            button.button(type="submit") Resolver
