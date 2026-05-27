@@ -1,7 +1,12 @@
-import { memory_retrieval_service } from "../memory/memory_retrieval_service.js";
+import { business_knowledge_service as default_business_knowledge_service } from "../knowledge/business_knowledge_service.js";
+import { conversation_memory_service as default_conversation_memory_service } from "../memory/conversation_memory_service.js";
 import { create_agent_run } from "./agent_run_repository.js";
 import { default_agent_by_intent } from "./agent_registry.js";
-import { retrieval_request_for_message } from "./agent_context_builder.js";
+import {
+  build_agent_context,
+  business_knowledge_request_for_message,
+  conversation_memory_request_for_message,
+} from "./agent_context_builder.js";
 
 async function find_routing_rule(pool, input) {
   const result = await pool.query(
@@ -34,15 +39,30 @@ async function find_routing_rule(pool, input) {
 }
 
 export class agent_router {
-  constructor({ pool, retrieval_service = new memory_retrieval_service({ pool }) }) {
+  constructor({
+    pool,
+    business_knowledge_service = new default_business_knowledge_service({ pool }),
+    conversation_memory_service = new default_conversation_memory_service({ pool }),
+  }) {
     this.pool = pool;
-    this.retrieval_service = retrieval_service;
+    this.business_knowledge_service = business_knowledge_service;
+    this.conversation_memory_service = conversation_memory_service;
   }
 
   async route_message(input) {
-    const retrieved_context = await this.retrieval_service.retrieve_context(
-      retrieval_request_for_message(input),
-    );
+    const [business_knowledge, conversation_memory] = await Promise.all([
+      this.business_knowledge_service.retrieve_relevant_knowledge(
+        business_knowledge_request_for_message(input),
+      ),
+      this.conversation_memory_service.retrieve_relevant_memory(
+        conversation_memory_request_for_message(input),
+      ),
+    ]);
+    const retrieved_context = {
+      business_knowledge: business_knowledge.documents,
+      conversation_memory: conversation_memory.documents,
+    };
+    const agent_context = build_agent_context(input, retrieved_context);
     const routing_rule = await find_routing_rule(this.pool, input);
     const agent_key =
       routing_rule?.agent_key ?? default_agent_by_intent[input.parsed_intent] ?? "unknown_agent";
@@ -53,7 +73,11 @@ export class agent_router {
       agent_key,
       confidence: routing_rule ? 0.95 : 0.85,
       reason,
-      retrieved_context: retrieved_context.documents,
+      context_used: {
+        business_knowledge_count: retrieved_context.business_knowledge.length,
+        conversation_memory_count: retrieved_context.conversation_memory.length,
+      },
+      retrieved_context,
     };
 
     await create_agent_run(this.pool, {
@@ -66,8 +90,11 @@ export class agent_router {
       agent_profile_id: routing_rule?.agent_profile_id ?? null,
       agent_key,
       run_type: "route",
-      input_json: input,
-      retrieved_context_json: retrieved_context.documents,
+      input_json: {
+        ...input,
+        agent_context,
+      },
+      retrieved_context_json: retrieved_context,
       output_json: output,
       status: "completed",
       completed_at: new Date().toISOString(),

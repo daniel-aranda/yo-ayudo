@@ -32,6 +32,7 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - Endpoint dev para simular mensajes.
 - AI Gateway con interfaz documentada y `mock_provider`.
 - Memory layer con `memory_documents`, `knowledge_sources`, store local, S3 stub, embedding mock y retrieval local.
+- BusinessKnowledgeService y ConversationMemoryService separados por contrato y por `document_family`.
 - Agent router determinístico con `agent_profiles`, `agent_routing_rules` y `agent_runs`.
 - Conversation Inspector interno con organizations, accounts, bots, conversaciones, message trace y timeline tecnica.
 - Modelo SaaS base para onboarding:
@@ -42,6 +43,15 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
   - `whatsapp_phone_numbers.account_id`
   - `phone_number_bot_assignments` para asignar un bot activo a un numero
 - Resolver WhatsApp por `phone_number_id` que prioriza assignment activo numero -> bot y conserva fallback legacy por tenant/bot profile.
+- Custom bot definition inicial:
+  - `bots.bot_type` con `system` o `custom`
+  - `bots.description`
+  - `bots.definition_json`
+  - `bots.definition_version`
+  - `bots.created_by_user_id`
+  - schema Zod para definiciones custom
+  - servicio para crear custom bots por account
+  - seed demo `Bot Ventas Clínica Dental`
 - `processing_events` para registrar hitos del pipeline sin depender solo de JSON crudo.
 - `bot_id` en conversaciones, mensajes, agent runs, memory docs y review items.
 - `reply_to_message_id` en mensajes outbound generados como respuesta.
@@ -70,7 +80,9 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - Tests unitarios de reglas operativas.
 - Tests de integracion del pipeline inbound con DB en memoria.
 - Tests unitarios de memory ingestion, local store, document service, retrieval y router.
+- Tests unitarios de business knowledge, conversation memory y agent context separado.
 - Test unitario del resolver WhatsApp por assignment activo.
+- Tests unitarios de custom bot service y validacion de definition JSON.
 - Tests de integracion del Conversation Inspector, trace builder y rutas server-rendered.
 - Test de integracion que confirma que `conversations.bot_id`, `messages.bot_id` y `processing_events.bot_id` salen del bot asignado al numero.
 
@@ -82,6 +94,7 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - Middleware de auth del dashboard es dev/pass-through.
 - Jobs existen como funciones invocables, sin scheduler.
 - `solution_templates`, `bot_profiles` y `bot_intents` estan modelados en DB, pero no tienen UI ni repositorios runtime dedicados.
+- `bots.definition_json` se carga y queda disponible en runtime, pero todavia no dirige routing inteligente ni prompts LLM.
 - `s3_memory_store` y `bedrock_embedding_provider` existen como adapters/stubs; local no requiere AWS.
 - `agent_router` es deterministico; no hay agentes LLM autónomos.
 - Conversation Inspector usa auth interna minima por env; no reemplaza auth productiva.
@@ -172,15 +185,37 @@ Ademas, el runner crea `schema_migrations`.
 
 `phone_number_bot_assignments` modela un solo bot activo por numero usando `active_key = 'active'`. Las asignaciones inactivas conservan historial con `active_key = NULL`.
 
+## Columnas En Migracion 0005
+
+- `bots.bot_type`
+- `bots.description`
+- `bots.definition_json`
+- `bots.definition_version`
+- `bots.created_by_user_id`
+
+`bot_type = 'system'` representa bots predefinidos o legacy. `bot_type = 'custom'` representa bots de un account creados desde una definicion estructurada validada.
+
+## Columnas En Migracion 0006
+
+- `knowledge_sources.organization_id`
+- `knowledge_sources.account_id`
+- `knowledge_sources.bot_id`
+- `knowledge_sources.source_family`
+- `memory_documents.organization_id`
+- `memory_documents.account_id`
+- `memory_documents.document_family`
+
+`document_family` separa `business_knowledge`, `conversation_memory`, `system_knowledge` y `legacy`.
+
 ## Comandos Verificados
 
 - `npm install`: OK. No genero `package-lock.json`.
-- `npm test`: OK. 9 archivos, 23 tests.
+- `npm test`: OK. 13 archivos, 30 tests.
 - `npm run db:up`: OK. Levanta `yoayudo_postgres`.
 - `npm run db:down`: OK.
 - `npm run db:reset`: OK. Recrea volumen local.
-- `npm run db:migrate`: OK. Aplica `0001_initial.sql`, `0002_memory_agents.sql`, `0003_conversation_inspector.sql` y `0004_account_phone_bot_assignments.sql`.
-- `npm run db:seed`: OK. Crea demo, assignment numero -> bot, agent profiles/rules y knowledge documents.
+- `npm run db:migrate`: OK. Aplica `0001_initial.sql`, `0002_memory_agents.sql`, `0003_conversation_inspector.sql`, `0004_account_phone_bot_assignments.sql`, `0005_bot_definitions.sql` y `0006_memory_knowledge_families.sql`.
+- `npm run db:seed`: OK. Crea demo, assignment numero -> bot, custom bot demo, agent profiles/rules y knowledge documents.
 - `npm run start`: OK. Levanta sin compilar.
 - `npm run dev`: OK. Corre doctor y levanta sin compilar.
 - `GET /health`: OK, responde 200.
@@ -193,20 +228,22 @@ Con PostgreSQL local levantado, migrado y sembrado:
 
 1. `POST /dev/simulate-whatsapp-message` recibe mensajes demo.
 2. El pipeline resuelve `phone_number_id -> whatsapp_phone_numbers -> phone_number_bot_assignments -> bot -> account -> organization -> tenant`.
-3. El pipeline guarda el inbound raw payload en `messages.raw_payload_json`.
-4. El `mock_provider` clasifica intent.
-5. El parser valida con Zod.
-6. El router registra `agent_runs` con `run_type = route`.
-7. El subagente elegido delega al handler operativo generico.
-8. Se guardan datos en tablas `op_*`.
-9. Se crea `memory_documents` para mensajes útiles.
-10. `local_memory_store` escribe documentos en `.storage/memory`.
-11. Se registra outbound corto en `messages`.
-12. Se vincula outbound con inbound por `reply_to_message_id`.
-13. Se crean `processing_events` para inspeccion.
-14. El cierre genera reporte diario.
-15. El dashboard de dia renderiza operacion y reporte.
-16. `/inspector` muestra bots/conversaciones y `/inspector/messages/:message_id` muestra parsing, router, agente, memoria, AI calls, escrituras operativas, review y respuesta.
+3. El bot resuelto incluye `bot_type` y `definition_json` cuando aplica.
+4. El pipeline guarda el inbound raw payload en `messages.raw_payload_json`.
+5. El `mock_provider` clasifica intent.
+6. El parser valida con Zod.
+7. Agent context recupera `business_knowledge` y `conversation_memory` como bloques separados.
+8. El router registra `agent_runs` con `run_type = route` y `retrieved_context_json` separado por familia.
+9. El subagente elegido delega al handler operativo generico.
+10. Se guardan datos en tablas `op_*`.
+11. Se crea conversation memory para mensajes útiles.
+12. `local_memory_store` escribe documentos en `.storage/memory`.
+13. Se registra outbound corto en `messages`.
+14. Se vincula outbound con inbound por `reply_to_message_id`.
+15. Se crean `processing_events` para inspeccion.
+16. El cierre genera reporte diario.
+17. El dashboard de dia renderiza operacion y reporte.
+18. `/inspector` muestra bots/conversaciones y `/inspector/messages/:message_id` muestra parsing, router, agente, memoria, AI calls, escrituras operativas, review y respuesta.
 
 Mensajes verificados:
 
@@ -243,6 +280,7 @@ Verificacion de DB despues del flujo:
 - UI de knowledge management.
 - UI de alta de organization/account/numero/bot.
 - Builder de custom bots con lenguaje humano.
+- Routing inteligente usando `definition_json`.
 - Agentes autónomos con tool calling complejo.
 - Multi-item purchase robusto.
 - Tests HTTP con `supertest` para todos los endpoints principales.

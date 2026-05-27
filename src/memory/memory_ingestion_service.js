@@ -1,4 +1,8 @@
 import { logger } from "../shared/logger.js";
+import {
+  build_conversation_message_memory_document,
+  conversation_memory_service,
+} from "./conversation_memory_service.js";
 import { memory_document_service } from "./memory_document_service.js";
 
 const ignored_texts = new Set(["ok", "okay", "gracias", "va", "sale", "listo", "si", "sí"]);
@@ -42,68 +46,8 @@ export function should_ingest_message_to_memory({ message, parsing_result }) {
   return accepted_intents.has(parsing_result.intent) || parsing_result.metadata_json?.knowledge_candidate === true;
 }
 
-function format_json(value) {
-  return JSON.stringify(value ?? {}, null, 2);
-}
-
-function iso_datetime(value) {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  return new Date(value).toISOString();
-}
-
 export function build_message_memory_document(context, parsed) {
-  const branch_name = context.branch?.name ?? "sin sucursal";
-  const contact_name = context.contact.display_name ?? context.contact.whatsapp_phone;
-
-  return {
-    tenant_id: context.tenant.id,
-    branch_id: context.branch?.id ?? null,
-    contact_id: context.contact.id,
-    conversation_id: context.conversation.id,
-    message_id: context.message.id,
-    bot_id: context.bot?.id ?? context.message.bot_id ?? null,
-    solution_template_id: context.bot_profile?.solution_template_id ?? null,
-    bot_profile_id: context.bot_profile?.id ?? null,
-    scope: "conversation",
-    document_type: "message",
-    title: `Mensaje ${parsed.intent}`,
-    content: [
-      `Tenant: ${context.tenant.name}`,
-      `Branch: ${branch_name}`,
-      `Contact: ${contact_name}`,
-      "Channel: whatsapp",
-      `Direction: ${context.message.direction}`,
-      `Created at: ${iso_datetime(context.message.created_at)}`,
-      `Intent: ${parsed.intent}`,
-      `Confidence: ${parsed.confidence}`,
-      "",
-      "Message:",
-      context.message.text_body ?? "",
-      "",
-      "Extracted data:",
-      format_json(parsed.data),
-    ].join("\n"),
-    source_table: "messages",
-    source_id: context.message.id,
-    source_created_at: context.message.created_at,
-    metadata_json: {
-      scope: "conversation",
-      document_type: "message",
-      tenant_id: context.tenant.id,
-      branch_id: context.branch?.id ?? null,
-      contact_id: context.contact.id,
-      conversation_id: context.conversation.id,
-      message_id: context.message.id,
-      bot_id: context.bot?.id ?? context.message.bot_id ?? null,
-      intent: parsed.intent,
-      confidence: parsed.confidence,
-      source: "whatsapp",
-    },
-    visibility: "private",
-  };
+  return build_conversation_message_memory_document(context, parsed);
 }
 
 export async function ingest_message_to_memory(input) {
@@ -118,13 +62,23 @@ export async function ingest_message_to_memory(input) {
 
   const service =
     input.service ??
-    new memory_document_service({
+    new conversation_memory_service({
       pool: input.context.pool,
-      store: input.store,
-      embedding: input.embedding,
+      document_service: new memory_document_service({
+        pool: input.context.pool,
+        store: input.store,
+        embedding: input.embedding,
+      }),
     });
 
-  return service.create_document(build_message_memory_document(input.context, input.parsed));
+  if (input.service) {
+    return service.create_document(build_message_memory_document(input.context, input.parsed));
+  }
+
+  return service.record_message({
+    context: input.context,
+    parsed: input.parsed,
+  });
 }
 
 export async function safe_ingest_message_to_memory(input) {
@@ -165,13 +119,14 @@ export async function summarize_conversation_memory({ pool, conversation_id, ser
     branch_id: row.branch_id,
     contact_id: row.contact_id,
     conversation_id: row.conversation_id,
+    document_family: "conversation_memory",
     scope: "conversation",
     document_type: "conversation_summary",
     title: "Resumen de conversación",
     content: row.summary_text,
     source_table: "conversations",
     source_id: row.conversation_id,
-    metadata_json: { source: "mock_summary" },
+    metadata_json: { source: "mock_summary", document_family: "conversation_memory" },
   });
 }
 
@@ -201,12 +156,13 @@ export async function summarize_daily_memory({ pool, business_day_id, service })
     tenant_id: row.tenant_id,
     branch_id: row.branch_id,
     business_day_id: row.id,
+    document_family: "conversation_memory",
     scope: "operational_day",
     document_type: "daily_summary",
     title: `Resumen diario ${row.operation_date}`,
     content: `Día ${row.operation_date}: ventas ${row.total_sales ?? 0}, caja final ${row.closing_cash ?? 0}. ${row.free_comment ?? ""}`,
     source_table: "op_business_days",
     source_id: row.id,
-    metadata_json: { source: "mock_summary", operation_date: row.operation_date },
+    metadata_json: { source: "mock_summary", document_family: "conversation_memory", operation_date: row.operation_date },
   });
 }

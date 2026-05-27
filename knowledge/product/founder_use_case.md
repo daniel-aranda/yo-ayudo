@@ -24,6 +24,8 @@ El caso principal del founder es dar de alta un negocio, conectarle uno o mas nu
 4. `bots`
    - A cada numero se le asigna un bot activo.
    - El bot puede ser predefinido del sistema o custom.
+   - Un `system` bot es una configuracion predefinida o legacy lista para asignarse.
+   - Un `custom` bot pertenece a un account y guarda una definicion estructurada en `definition_json`.
 
 5. `custom bots`
    - Un custom bot debe poder crearse casi con lenguaje humano.
@@ -44,3 +46,21 @@ organization -> account -> whatsapp_phone_number -> active bot assignment -> bot
 Un numero de WhatsApp tiene un solo bot activo asignado.
 
 El modelo conserva historial de asignaciones para poder cambiar el bot de un numero sin perder trazabilidad, pero no implementa multiples bots activos por numero todavia.
+
+## Regla De Producto Fase 2
+
+Un custom bot puede existir como dato estructurado antes de tener builder visual o LLM builder.
+
+La definicion inicial incluye objetivo, intents soportados, campos requeridos, subagentes declarativos, routing declarativo, politica de handoff, necesidades de knowledge, estilo de respuesta y restricciones.
+
+La definicion queda disponible para runtime y trazabilidad, pero el routing inteligente y el uso formal de business knowledge/conversation memory quedan para fases posteriores.
+
+## Regla De Producto Fase 3
+
+La definicion del bot no es knowledge del negocio ni memoria conversacional.
+
+- `bot_definition`: que debe hacer el bot, que campos pide, como escala y que estilo usa.
+- `business_knowledge`: como opera el negocio. Servicios, precios, reglas, procesos, politicas, horarios, FAQs e instrucciones del duenho.
+- `conversation_memory`: que ha pasado con este cliente o conversacion. Mensajes relevantes, datos capturados, pendientes, objeciones, decisiones y estado.
+
+Esta separacion permite vender custom bots sin hardcodear clientes y prepara el camino para S3, Bedrock Knowledge Bases, embeddings y retrieval semantico sin obligarlos en el MVP.

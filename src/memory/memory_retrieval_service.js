@@ -14,7 +14,7 @@ function document_type_weight(document_type) {
     return 3;
   }
 
-  if (document_type.endsWith("_knowledge")) {
+  if (document_type.endsWith("_knowledge") || document_type.startsWith("business_")) {
     return 2;
   }
 
@@ -59,6 +59,18 @@ export class memory_retrieval_service {
     const input = retrieve_context_schema.parse(raw_input);
     const filters = ["status = 'stored'"];
     const values = [];
+
+    if (input.document_family) {
+      add_filter(filters, values, "document_family = ?", input.document_family);
+    }
+
+    if (input.organization_id) {
+      add_filter(filters, values, "(organization_id = ? OR organization_id IS NULL)", input.organization_id);
+    }
+
+    if (input.account_id) {
+      add_filter(filters, values, "(account_id = ? OR account_id IS NULL)", input.account_id);
+    }
 
     if (input.tenant_id) {
       add_filter(filters, values, "(tenant_id = ? OR tenant_id IS NULL)", input.tenant_id);
@@ -108,6 +120,7 @@ export class memory_retrieval_service {
     const documents = result.rows
       .map((document) => ({
         id: document.id,
+        document_family: document.document_family,
         scope: document.scope,
         document_type: document.document_type,
         title: document.title,

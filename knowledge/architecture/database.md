@@ -19,6 +19,13 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `bots` conecta organization/account con tenant, bot profile y canal.
 
+`bots.bot_type` distingue:
+
+- `system`: bot predefinido o legacy, normalmente conectado a `bot_profiles`.
+- `custom`: bot definido por `definition_json` para un account especifico.
+
+`bots.definition_json` guarda la definicion estructurada inicial del bot custom. En fase 2 no ejecuta routing inteligente todavia; queda disponible para runtime, router y trazabilidad futura.
+
 `accounts.tenant_id` mantiene la compatibilidad explicita entre el modelo SaaS vendible y el runtime legacy basado en tenants.
 
 `phone_number_bot_assignments` asigna un bot activo a un numero de WhatsApp. En fase 1 la regla de producto es un bot activo por numero; las asignaciones inactivas conservan historial.
@@ -73,6 +80,17 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 - `memory_documents`
 
 `memory_documents` mantiene documentos normalizados con `scope`, `document_type`, `source`, `version`, `metadata_json`, ubicación en store y estado de embedding.
+
+`document_family` separa el uso conceptual del documento:
+
+- `business_knowledge`: como opera el negocio. Servicios, precios, reglas, politicas, procesos, FAQs, horarios, sucursales, objeciones, criterios de venta e instrucciones del duenho.
+- `conversation_memory`: que ha pasado con este cliente, caso o conversacion. Mensajes relevantes, pendientes, decisiones, documentos, objeciones, datos capturados, estado del proceso y resumen operativo.
+- `system_knowledge`: conocimiento global o de solution templates.
+- `legacy`: documentos anteriores sin clasificacion explicita.
+
+`knowledge_sources` registra fuentes administrables de business/system knowledge. La memoria conversacional no debe crear `knowledge_sources`.
+
+`organization_id`, `account_id` y `bot_id` en `knowledge_sources` y `memory_documents` permiten retrieval por el modelo SaaS nuevo sin depender solo de `tenant`.
 
 ### Agents
 

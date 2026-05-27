@@ -36,9 +36,13 @@ export class memory_document_service {
         content: parsed.content,
         metadata: {
           ...parsed.metadata_json,
+          document_family: parsed.document_family,
           scope: parsed.scope,
           document_type: parsed.document_type,
+          organization_id: parsed.organization_id ?? null,
+          account_id: parsed.account_id ?? null,
           tenant_id: parsed.tenant_id ?? null,
+          bot_id: parsed.bot_id ?? null,
         },
       });
       const stored_document = await mark_memory_document_stored(this.pool, {

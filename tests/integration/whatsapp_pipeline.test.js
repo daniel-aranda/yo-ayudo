@@ -112,7 +112,7 @@ describe("WhatsApp inbound pipeline", () => {
     await simulate(pool, client, "compré 12 kg pastor por 1680 con Juan");
 
     const purchases = await pool.query("SELECT * FROM op_purchases");
-    const memory_documents = await pool.query("SELECT * FROM memory_documents WHERE document_type = 'message'");
+    const memory_documents = await pool.query("SELECT * FROM memory_documents WHERE document_type = 'conversation_message'");
     const agent_runs = await pool.query("SELECT * FROM agent_runs WHERE run_type = 'route'");
 
     expect(purchases.rowCount).toBe(1);
@@ -129,7 +129,7 @@ describe("WhatsApp inbound pipeline", () => {
     });
 
     const purchases = await pool.query("SELECT * FROM op_purchases");
-    const memory_documents = await pool.query("SELECT * FROM memory_documents WHERE document_type = 'message'");
+    const memory_documents = await pool.query("SELECT * FROM memory_documents WHERE document_type = 'conversation_message'");
 
     expect(purchases.rowCount).toBe(1);
     expect(memory_documents.rowCount).toBe(1);

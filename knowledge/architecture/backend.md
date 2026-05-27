@@ -78,10 +78,19 @@ Ubicación: `src/ai`
 Ubicación: `src/memory`
 
 - `memory_document_service.js`: crea documentos normalizados, hash, store y embedding.
+- `conversation_memory_service.js`: registra y recupera memoria conversacional con `document_family = conversation_memory`.
 - `local_memory_store.js`: escribe documentos en `.storage/memory`.
 - `s3_memory_store.js`: adapter preparado para S3 sin ser requerido localmente.
 - `memory_retrieval_service.js`: retrieval local/mock con ranking simple.
 - `mock_embedding_provider.js`: embedding determinístico para pruebas/desarrollo.
+
+### Knowledge
+
+Ubicación: `src/knowledge`
+
+- `business_knowledge_service.js`: registra `knowledge_sources`, crea documentos de negocio y recupera knowledge relevante por organization/account/bot.
+
+Business knowledge responde como opera el negocio. Conversation memory responde que ha pasado en una conversacion/contacto/caso. Ambos reutilizan `memory_document_service` y `memory_retrieval_service`, pero no comparten contrato de servicio ni `document_family`.
 
 ### Agents
 
@@ -89,7 +98,10 @@ Ubicación: `src/agents`
 
 - `agent_router.js`: decide subagente y registra `agent_runs`.
 - `agent_registry.js`: mapea `agent_key` a handler delgado.
+- `agent_context_builder.js`: arma contexto separado para mensaje, bot definition, business knowledge y conversation memory.
 - `subagents/*`: wrappers que delegan a handlers operativos existentes.
+
+El router sigue siendo deterministico, pero registra `business_knowledge` y `conversation_memory` por separado en `agent_runs.retrieved_context_json`.
 
 ### Processing Events
 
@@ -111,6 +123,19 @@ Ubicación: `src/inspector`
 
 El inspector lee datos existentes y no decide lógica de negocio.
 
+### Bots
+
+Ubicación: `src/bots`
+
+- `bot_repository.js`: crea, obtiene y lista bots por account.
+- `custom_bot_service.js`: valida `definition_json` y crea bots custom.
+- `bot_definition_schemas.js`: contrato Zod para definiciones custom.
+
+Tipos:
+
+- `system`: bot predefinido o legacy. Puede usar `bot_profile_id` y flujo operativo existente.
+- `custom`: bot de un account con `definition_json` validado. En esta fase la definicion se carga y se pasa al contexto, pero no cambia el routing deterministico.
+
 ## Flujo Inbound
 
 1. `POST /webhooks/whatsapp`.
@@ -123,13 +148,14 @@ El inspector lee datos existentes y no decide lógica de negocio.
 8. Parsear y validar con Zod.
 9. Guardar `parsing_results`.
 10. Si hay baja confianza o datos faltantes, crear `review_items`.
-11. Ejecutar `agent_router` si `AGENT_ROUTER_ENABLED=true`.
-12. Ejecutar subagente elegido, que delega a handlers operativos.
-13. Crear `memory_documents` si `MEMORY_INGESTION_ENABLED=true` y el mensaje vale la pena.
-14. Generar respuesta.
-15. Enviar por WhatsApp si hay credenciales.
-16. Guardar mensaje outbound.
-17. Registrar eventos tecnicos en `processing_events` para inspeccion.
+11. Recuperar `business_knowledge` y `conversation_memory` como bloques separados para el router.
+12. Ejecutar `agent_router` si `AGENT_ROUTER_ENABLED=true`.
+13. Ejecutar subagente elegido, que delega a handlers operativos.
+14. Crear conversation memory si `MEMORY_INGESTION_ENABLED=true` y el mensaje vale la pena.
+15. Generar respuesta.
+16. Enviar por WhatsApp si hay credenciales.
+17. Guardar mensaje outbound.
+18. Registrar eventos tecnicos en `processing_events` para inspeccion.
 
 ## Reglas De Diseño
 

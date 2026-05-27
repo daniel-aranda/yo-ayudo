@@ -22,4 +22,20 @@ describe("whatsapp_identity_resolver", () => {
 
     await pool.end();
   });
+
+  it("resolves custom bot definition assigned to another WhatsApp number", async () => {
+    const pool = await create_test_pool();
+
+    const identity = await resolve_whatsapp_identity_by_phone_number_id(
+      pool,
+      "demo-dental-phone-number-id",
+    );
+
+    expect(identity.bot.bot_type).toBe("custom");
+    expect(identity.bot.name).toBe("Bot Ventas Clínica Dental");
+    expect(identity.bot.definition_json.goal).toContain("Capturar prospectos dentales");
+    expect(identity.bot.definition_json.supported_intents).toContain("dental_emergency");
+
+    await pool.end();
+  });
 });

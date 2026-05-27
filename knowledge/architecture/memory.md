@@ -8,31 +8,60 @@ El memory store guarda documentos normalizados para consulta contextual. En loca
 
 El vector index es una abstracción. Hoy el embedding es mock y determinístico; no hay dependencia obligatoria con AWS, pgvector, OpenSearch ni Bedrock Knowledge Base.
 
+## Document Families
+
+- `business_knowledge`: como opera el negocio. Se gestiona mediante `business_knowledge_service`.
+- `conversation_memory`: que ha pasado con este cliente/caso/conversacion. Se gestiona mediante `conversation_memory_service`.
+- `system_knowledge`: conocimiento global o de solution templates.
+- `legacy`: documentos previos sin clasificacion explicita.
+
+Business knowledge y conversation memory pueden vivir en `memory_documents`, pero no comparten contrato de servicio ni retrieval request.
+
 ## Scopes
 
 - `global`
 - `solution_template`
+- `organization`
+- `account`
+- `bot`
 - `tenant`
 - `branch`
 - `contact`
 - `conversation`
 - `operational_day`
 
-Los scopes evitan mezclar conocimiento global, conocimiento de solución, conocimiento de cliente y memoria conversacional.
+Los scopes evitan mezclar conocimiento global, conocimiento de solución, conocimiento de negocio y memoria conversacional.
 
 ## Document Types
 
 - `message`
+- `conversation_message`
 - `conversation_summary`
+- `customer_fact`
+- `case_state`
+- `pending_action`
+- `handoff_note`
+- `captured_field`
+- `customer_objection`
 - `daily_summary`
 - `client_knowledge`
+- `business_service`
+- `business_price`
+- `business_policy`
+- `business_process`
+- `business_faq`
+- `business_rule`
+- `business_document`
+- `business_hours`
+- `sales_criteria`
+- `owner_instruction`
 - `solution_knowledge`
 - `global_knowledge`
 - `operational_fact`
 - `router_decision`
 - `agent_observation`
 
-Todo documento debe tener `scope`, `document_type`, `source_table`, `source_id`, `version` y `metadata_json` cuando aplique.
+Todo documento nuevo debe tener `document_family`, `scope`, `document_type`, `source_table`, `source_id`, `version` y `metadata_json` cuando aplique.
 
 ## Ingesta
 
@@ -42,7 +71,7 @@ Se ignoran mensajes vacíos, saludos simples, confirmaciones como `ok`, `gracias
 
 Se aceptan mensajes inbound con intención operacional: compras, ventas, inventario, inicio de día, cierre, notas y report requests.
 
-La ingesta ocurre después de guardar `parsing_results` y después de ejecutar el handler operativo. Si falla el memory store o embedding, el webhook sigue funcionando y el documento queda como `failed`.
+La ingesta de conversacion ocurre mediante `conversation_memory_service` después de guardar `parsing_results` y después de ejecutar el handler operativo. Si falla el memory store o embedding, el webhook sigue funcionando y el documento queda como `failed`.
 
 ## Store Local Vs S3
 
@@ -64,7 +93,7 @@ El adapter S3 está preparado, pero no es requerido para desarrollo local.
 
 ## Retrieval
 
-`memory_retrieval_service` busca en `memory_documents`, filtra por tenant/scope/type y rankea de forma simple:
+`memory_retrieval_service` busca en `memory_documents`, filtra por `document_family`, organization/account/tenant/bot/scope/type y rankea de forma simple:
 
 - match de palabras del query
 - prioridad de `document_type`
@@ -72,7 +101,7 @@ El adapter S3 está preparado, pero no es requerido para desarrollo local.
 - metadata de intent
 - recencia por query SQL
 
-La regla crítica: no exponer memoria de otro tenant.
+La regla crítica: no exponer knowledge o memoria de otro account/tenant/conversation.
 
 ## Futuro
 

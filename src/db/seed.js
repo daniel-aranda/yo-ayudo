@@ -3,6 +3,7 @@ import { config } from "../app/config.js";
 import { upsert_account as upsert_account_record } from "../accounts/account_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { upsert_bot as upsert_bot_record } from "../bots/bot_repository.js";
+import { custom_bot_service } from "../bots/custom_bot_service.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
@@ -203,7 +204,9 @@ async function upsert_bot(pool, input) {
     name: "Margen Sabroso Bot",
     slug: "margen-sabroso-bot",
     channel: "whatsapp",
+    bot_type: "system",
     status: "active",
+    description: "Bot operativo demo basado en bot_profile legacy.",
     settings_json: {},
   });
 
@@ -250,10 +253,116 @@ async function upsert_whatsapp_number(pool, input) {
     account_id: input.account_id,
     tenant_id: input.tenant_id,
     branch_id: input.branch_id,
-    phone_number_id: config.whatsapp_phone_number_id,
-    display_phone_number: "+525555999999",
-    status: "active",
+    phone_number_id: input.phone_number_id ?? config.whatsapp_phone_number_id,
+    display_phone_number: input.display_phone_number ?? "+525555999999",
+    status: input.status ?? "active",
   });
+}
+
+function dental_sales_bot_definition() {
+  return {
+    name: "Bot Ventas Clínica Dental",
+    description: "Atiende ventas de una clínica dental, detecta urgencias y escala casos sensibles.",
+    goal:
+      "Capturar prospectos dentales, entender el tratamiento de interes, detectar urgencias, explicar siguientes pasos y escalar a humano cuando aplique.",
+    supported_intents: [
+      "sales_inquiry",
+      "dental_emergency",
+      "price_question",
+      "appointment_request",
+      "financing_question",
+      "human_help",
+    ],
+    required_fields: [
+      {
+        key: "patient_name",
+        label: "Nombre del paciente",
+        description: "Nombre de la persona que solicita atención.",
+        required: true,
+      },
+      {
+        key: "phone",
+        label: "Teléfono",
+        description: "Teléfono de contacto para seguimiento.",
+        required: true,
+      },
+      {
+        key: "treatment_interest",
+        label: "Tratamiento de interés",
+        description: "Tratamiento o problema dental que quiere resolver.",
+        required: true,
+      },
+      {
+        key: "preferred_branch",
+        label: "Sucursal preferida",
+        description: "Sucursal o zona preferida por el paciente.",
+        required: false,
+      },
+    ],
+    agent_definitions: [
+      {
+        key: "dental_sales_agent",
+        name: "Agente de ventas dentales",
+        role: "Califica prospectos, responde dudas iniciales y propone siguiente paso.",
+        allowed_intents: ["sales_inquiry", "price_question", "appointment_request"],
+        tools: [],
+      },
+      {
+        key: "human_handoff_agent",
+        name: "Escalamiento humano",
+        role: "Canaliza conversaciones delicadas o comerciales complejas a una persona.",
+        allowed_intents: ["dental_emergency", "financing_question", "human_help"],
+        tools: [],
+      },
+    ],
+    routing_config: {
+      default_agent_key: "dental_sales_agent",
+      intent_routes: [
+        { intent: "sales_inquiry", agent_key: "dental_sales_agent", priority: 10 },
+        { intent: "price_question", agent_key: "dental_sales_agent", priority: 20 },
+        { intent: "appointment_request", agent_key: "dental_sales_agent", priority: 30 },
+        { intent: "dental_emergency", agent_key: "human_handoff_agent", priority: 5 },
+        { intent: "financing_question", agent_key: "human_handoff_agent", priority: 5 },
+      ],
+    },
+    handoff_policy: {
+      enabled: true,
+      triggers: [
+        "El paciente pregunta por financiamiento.",
+        "El paciente describe dolor fuerte, sangrado, golpe o infección.",
+        "El paciente pide hablar con una persona.",
+      ],
+      message: "Te canalizo con una persona de la clínica para darte seguimiento.",
+    },
+    knowledge_requirements: [
+      {
+        key: "services_and_prices",
+        description: "Lista de tratamientos, precios aproximados y condiciones.",
+        required: true,
+      },
+      {
+        key: "branches_and_hours",
+        description: "Sucursales, horarios y zonas de atención.",
+        required: true,
+      },
+      {
+        key: "sales_policies",
+        description: "Reglas para promociones, anticipos, citas y financiamiento.",
+        required: false,
+      },
+    ],
+    response_style: {
+      tone: "amable, claro y profesional",
+      language: "es-MX",
+      max_length: 650,
+      formatting: "mensajes cortos de WhatsApp",
+    },
+    constraints: [
+      "No diagnosticar condiciones médicas.",
+      "No prometer precios finales sin evaluación.",
+      "Escalar urgencias y financiamiento a humano.",
+    ],
+  };
 }
 
 async function upsert_business_settings(pool, tenant_id, branch_id) {
@@ -557,10 +666,14 @@ async function upsert_knowledge_source(pool, input) {
   const inserted = await pool.query(
     `
       INSERT INTO knowledge_sources (
+        organization_id,
+        account_id,
+        bot_id,
         tenant_id,
         branch_id,
         solution_template_id,
         bot_profile_id,
+        source_family,
         scope,
         source_type,
         name,
@@ -569,14 +682,18 @@ async function upsert_knowledge_source(pool, input) {
         metadata_json,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'active')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, 'active')
       RETURNING id
     `,
     [
+      input.organization_id ?? null,
+      input.account_id ?? null,
+      input.bot_id ?? null,
       input.tenant_id ?? null,
       input.branch_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
+      input.source_family ?? "business_knowledge",
       input.scope,
       input.source_type,
       input.name,
@@ -594,23 +711,31 @@ async function seed_knowledge_documents(pool, input) {
   const knowledge_documents = [
     {
       scope: "global",
+      document_family: "system_knowledge",
       document_type: "global_knowledge",
+      source_family: "system_knowledge",
       name: "YoAyudo global knowledge",
       content:
         "YoAyudo convierte WhatsApp en un sistema operativo de negocio. El bot debe capturar datos operativos, ejecutar procesos simples, generar reportes y escalar a humano cuando haya incertidumbre.",
     },
     {
       scope: "solution_template",
+      document_family: "system_knowledge",
       document_type: "solution_knowledge",
+      source_family: "system_knowledge",
       name: "taqueria_control knowledge",
       solution_template_id: input.solution_template_id,
       content:
         "La solución taqueria_control captura ventas, compras, inventario, caja, sobrantes, faltantes, merma y notas del día. Debe pedir datos consistentes, no perfectos.",
     },
     {
-      scope: "tenant",
+      scope: "account",
+      document_family: "business_knowledge",
       document_type: "client_knowledge",
+      source_family: "business_knowledge",
       name: "demo tenant knowledge",
+      organization_id: input.organization_id,
+      account_id: input.account_id,
       tenant_id: input.tenant_id,
       branch_id: input.branch_id,
       bot_id: input.bot_id,
@@ -622,10 +747,14 @@ async function seed_knowledge_documents(pool, input) {
 
   for (const document of knowledge_documents) {
     const knowledge_source_id = await upsert_knowledge_source(pool, {
+      organization_id: document.organization_id,
+      account_id: document.account_id,
+      bot_id: document.bot_id,
       tenant_id: document.tenant_id,
       branch_id: document.branch_id,
       solution_template_id: document.solution_template_id,
       bot_profile_id: document.bot_profile_id,
+      source_family: document.source_family,
       scope: document.scope,
       source_type: "seed_config",
       name: document.name,
@@ -633,11 +762,14 @@ async function seed_knowledge_documents(pool, input) {
     });
 
     await service.create_document({
+      organization_id: document.organization_id ?? null,
+      account_id: document.account_id ?? null,
       tenant_id: document.tenant_id ?? null,
       branch_id: document.branch_id ?? null,
       bot_id: document.bot_id ?? null,
       solution_template_id: document.solution_template_id ?? null,
       bot_profile_id: document.bot_profile_id ?? null,
+      document_family: document.document_family,
       scope: document.scope,
       document_type: document.document_type,
       title: document.name,
@@ -646,6 +778,7 @@ async function seed_knowledge_documents(pool, input) {
       source_id: knowledge_source_id,
       metadata_json: {
         source: "seed_config",
+        document_family: document.document_family,
         scope: document.scope,
       },
       visibility: "private",
@@ -679,6 +812,30 @@ export async function seed_development_data(pool) {
     bot_id,
     metadata_json: { source: "seed" },
   });
+  const custom_bot = await new custom_bot_service({ pool }).create_custom_bot({
+    account_id,
+    name: "Bot Ventas Clínica Dental",
+    slug: "bot-ventas-clinica-dental",
+    status: "active",
+    definition_json: dental_sales_bot_definition(),
+    settings_json: { source: "seed" },
+  });
+  const custom_whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
+    organization_id,
+    account_id,
+    tenant_id,
+    branch_id,
+    phone_number_id: "demo-dental-phone-number-id",
+    display_phone_number: "+525555888888",
+    status: "active",
+  });
+  await assign_bot_to_whatsapp_phone_number(pool, {
+    organization_id,
+    account_id,
+    whatsapp_phone_number_id: custom_whatsapp_phone_number.id,
+    bot_id: custom_bot.id,
+    metadata_json: { source: "seed", purpose: "custom_bot_demo" },
+  });
 
   await upsert_contact(pool, tenant_id, branch_id);
   await upsert_business_settings(pool, tenant_id, branch_id);
@@ -710,6 +867,8 @@ export async function seed_development_data(pool) {
   await seed_knowledge_documents(pool, {
     tenant_id,
     branch_id,
+    organization_id,
+    account_id,
     solution_template_id,
     bot_profile_id,
     bot_id,

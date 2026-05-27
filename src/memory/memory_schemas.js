@@ -3,6 +3,9 @@ import { z } from "zod";
 export const memory_scope_schema = z.enum([
   "global",
   "solution_template",
+  "organization",
+  "account",
+  "bot",
   "tenant",
   "branch",
   "contact",
@@ -10,11 +13,35 @@ export const memory_scope_schema = z.enum([
   "operational_day",
 ]);
 
+export const memory_document_family_schema = z.enum([
+  "business_knowledge",
+  "conversation_memory",
+  "system_knowledge",
+  "legacy",
+]);
+
 export const memory_document_type_schema = z.enum([
   "message",
+  "conversation_message",
   "conversation_summary",
+  "customer_fact",
+  "case_state",
+  "pending_action",
+  "handoff_note",
+  "captured_field",
+  "customer_objection",
   "daily_summary",
   "client_knowledge",
+  "business_service",
+  "business_price",
+  "business_policy",
+  "business_process",
+  "business_faq",
+  "business_rule",
+  "business_document",
+  "business_hours",
+  "sales_criteria",
+  "owner_instruction",
   "solution_knowledge",
   "global_knowledge",
   "operational_fact",
@@ -25,6 +52,8 @@ export const memory_document_type_schema = z.enum([
 const nullable_uuid_schema = z.string().uuid().nullable().optional();
 
 export const memory_document_input_schema = z.object({
+  organization_id: nullable_uuid_schema,
+  account_id: nullable_uuid_schema,
   tenant_id: nullable_uuid_schema,
   branch_id: nullable_uuid_schema,
   contact_id: nullable_uuid_schema,
@@ -34,6 +63,7 @@ export const memory_document_input_schema = z.object({
   business_day_id: nullable_uuid_schema,
   solution_template_id: nullable_uuid_schema,
   bot_profile_id: nullable_uuid_schema,
+  document_family: memory_document_family_schema.default("legacy"),
   scope: memory_scope_schema,
   document_type: memory_document_type_schema,
   title: z.string().nullable().optional(),
@@ -53,12 +83,15 @@ export const memory_store_document_schema = z.object({
 });
 
 export const retrieve_context_schema = z.object({
+  organization_id: z.string().uuid().nullable().optional(),
+  account_id: z.string().uuid().nullable().optional(),
   tenant_id: z.string().uuid().nullable().optional(),
   branch_id: z.string().uuid().nullable().optional(),
   contact_id: z.string().uuid().nullable().optional(),
   conversation_id: z.string().uuid().nullable().optional(),
   bot_id: z.string().uuid().nullable().optional(),
   solution_template_id: z.string().uuid().nullable().optional(),
+  document_family: memory_document_family_schema.nullable().optional(),
   query: z.string().default(""),
   scopes: z.array(memory_scope_schema).default([]),
   document_types: z.array(memory_document_type_schema).default([]),
