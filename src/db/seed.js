@@ -1,5 +1,9 @@
 import pg from "pg";
 import { config } from "../app/config.js";
+import { upsert_account as upsert_account_record } from "../accounts/account_repository.js";
+import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
+import { upsert_bot as upsert_bot_record } from "../bots/bot_repository.js";
+import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { memory_document_service } from "../memory/memory_document_service.js";
@@ -178,76 +182,50 @@ async function upsert_organization(pool) {
   return result.rows[0].id;
 }
 
-async function upsert_account(pool, organization_id) {
-  const result = await pool.query(
-    `
-      INSERT INTO accounts (organization_id, name, slug, status)
-      VALUES ($1, 'Demo Account', 'demo-account', 'active')
-      ON CONFLICT (organization_id, slug)
-      DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, updated_at = now()
-      RETURNING id
-    `,
-    [organization_id],
-  );
+async function upsert_account(pool, organization_id, tenant_id) {
+  const account = await upsert_account_record(pool, {
+    organization_id,
+    tenant_id,
+    name: "Demo Account",
+    slug: "demo-account",
+    status: "active",
+  });
 
-  return result.rows[0].id;
+  return account.id;
 }
 
 async function upsert_bot(pool, input) {
-  const result = await pool.query(
-    `
-      INSERT INTO bots (
-        organization_id,
-        account_id,
-        tenant_id,
-        bot_profile_id,
-        name,
-        slug,
-        channel,
-        status,
-        settings_json
-      )
-      VALUES ($1, $2, $3, $4, 'Margen Sabroso Bot', 'margen-sabroso-bot', 'whatsapp', 'active', '{}'::jsonb)
-      ON CONFLICT (account_id, slug)
-      DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
-        bot_profile_id = EXCLUDED.bot_profile_id,
-        name = EXCLUDED.name,
-        channel = EXCLUDED.channel,
-        status = EXCLUDED.status,
-        updated_at = now()
-      RETURNING id
-    `,
-    [
-      input.organization_id,
-      input.account_id,
-      input.tenant_id,
-      input.bot_profile_id,
-    ],
-  );
+  const bot = await upsert_bot_record(pool, {
+    organization_id: input.organization_id,
+    account_id: input.account_id,
+    tenant_id: input.tenant_id,
+    bot_profile_id: input.bot_profile_id,
+    name: "Margen Sabroso Bot",
+    slug: "margen-sabroso-bot",
+    channel: "whatsapp",
+    status: "active",
+    settings_json: {},
+  });
 
   await pool.query("UPDATE conversations SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
-    result.rows[0].id,
+    bot.id,
     input.tenant_id,
   ]);
-  await pool.query("UPDATE messages SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
-    result.rows[0].id,
-    input.tenant_id,
-  ]);
+  await pool.query("UPDATE messages SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [bot.id, input.tenant_id]);
   await pool.query("UPDATE agent_runs SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
-    result.rows[0].id,
+    bot.id,
     input.tenant_id,
   ]);
   await pool.query("UPDATE memory_documents SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
-    result.rows[0].id,
+    bot.id,
     input.tenant_id,
   ]);
   await pool.query("UPDATE review_items SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
-    result.rows[0].id,
+    bot.id,
     input.tenant_id,
   ]);
 
-  return result.rows[0].id;
+  return bot.id;
 }
 
 async function upsert_contact(pool, tenant_id, branch_id) {
@@ -266,21 +244,16 @@ async function upsert_contact(pool, tenant_id, branch_id) {
   );
 }
 
-async function upsert_whatsapp_number(pool, tenant_id, branch_id) {
-  await pool.query(
-    `
-      INSERT INTO whatsapp_phone_numbers (tenant_id, branch_id, phone_number_id, display_phone_number, status)
-      VALUES ($1, $2, $3, '+525555999999', 'active')
-      ON CONFLICT (phone_number_id)
-      DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
-        branch_id = EXCLUDED.branch_id,
-        display_phone_number = EXCLUDED.display_phone_number,
-        status = EXCLUDED.status,
-        updated_at = now()
-    `,
-    [tenant_id, branch_id, config.whatsapp_phone_number_id],
-  );
+async function upsert_whatsapp_number(pool, input) {
+  return upsert_whatsapp_phone_number(pool, {
+    organization_id: input.organization_id,
+    account_id: input.account_id,
+    tenant_id: input.tenant_id,
+    branch_id: input.branch_id,
+    phone_number_id: config.whatsapp_phone_number_id,
+    display_phone_number: "+525555999999",
+    status: "active",
+  });
 }
 
 async function upsert_business_settings(pool, tenant_id, branch_id) {
@@ -686,16 +659,28 @@ export async function seed_development_data(pool) {
   const branch_id = await get_or_create_branch(pool, tenant_id);
   const bot_profile_id = await upsert_bot_profile(pool, tenant_id, branch_id, solution_template_id);
   const organization_id = await upsert_organization(pool);
-  const account_id = await upsert_account(pool, organization_id);
+  const account_id = await upsert_account(pool, organization_id, tenant_id);
   const bot_id = await upsert_bot(pool, {
     organization_id,
     account_id,
     tenant_id,
     bot_profile_id,
   });
+  const whatsapp_phone_number = await upsert_whatsapp_number(pool, {
+    organization_id,
+    account_id,
+    tenant_id,
+    branch_id,
+  });
+  await assign_bot_to_whatsapp_phone_number(pool, {
+    organization_id,
+    account_id,
+    whatsapp_phone_number_id: whatsapp_phone_number.id,
+    bot_id,
+    metadata_json: { source: "seed" },
+  });
 
   await upsert_contact(pool, tenant_id, branch_id);
-  await upsert_whatsapp_number(pool, tenant_id, branch_id);
   await upsert_business_settings(pool, tenant_id, branch_id);
 
   await insert_named_rows(pool, "catalog_items", tenant_id, branch_id, [

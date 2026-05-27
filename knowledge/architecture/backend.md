@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-El backend recibe mensajes de WhatsApp, resuelve tenant/sucursal/bot profile, guarda raw payloads, clasifica intención, valida datos parseados, enruta a un subagente delgado, ejecuta handlers operativos, genera memoria normalizada y responde de forma corta.
+El backend recibe mensajes de WhatsApp, resuelve numero/account/organization/bot asignado y conserva compatibilidad con tenant/sucursal/bot profile. Despues guarda raw payloads, clasifica intención, valida datos parseados, enruta a un subagente delgado, ejecuta handlers operativos, genera memoria normalizada y responde de forma corta.
 
 ## Capas
 
@@ -54,6 +54,15 @@ Ubicación: `src/channels/whatsapp`
 - webhook routes
 - parsing de payload WhatsApp
 - cliente WhatsApp
+- resolver de identidad por `phone_number_id`
+
+El resolver nuevo prioriza `phone_number_bot_assignments`:
+
+```text
+phone_number_id -> whatsapp_phone_numbers -> active assignment -> bot -> account -> organization -> tenant
+```
+
+Si un numero todavia no tiene assignment activo, el resolver conserva fallback legacy por `tenant`, `branch`, `bot_profile` y `bot` para no romper datos existentes.
 
 ### AI
 
@@ -105,7 +114,7 @@ El inspector lee datos existentes y no decide lógica de negocio.
 ## Flujo Inbound
 
 1. `POST /webhooks/whatsapp`.
-2. Resolver `tenant`, `branch`, `bot_profile`, `organization`, `account` y `bot` desde `phone_number_id`.
+2. Resolver `whatsapp_phone_number`, assignment activo, `bot`, `account`, `organization`, `tenant`, `branch` y `bot_profile` desde `phone_number_id`.
 3. Upsert de `contact`.
 4. Upsert de `conversation` con `bot_id`.
 5. Guardar `message` inbound con `raw_payload_json` y `bot_id`.

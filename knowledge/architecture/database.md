@@ -19,6 +19,10 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `bots` conecta organization/account con tenant, bot profile y canal.
 
+`accounts.tenant_id` mantiene la compatibilidad explicita entre el modelo SaaS vendible y el runtime legacy basado en tenants.
+
+`phone_number_bot_assignments` asigna un bot activo a un numero de WhatsApp. En fase 1 la regla de producto es un bot activo por numero; las asignaciones inactivas conservan historial.
+
 ### Core Multi-Tenant
 
 - `tenants`
@@ -26,6 +30,7 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 - `users`
 - `contacts`
 - `whatsapp_phone_numbers`
+- `phone_number_bot_assignments`
 
 ### Conversaciones Y Mensajes
 

@@ -10,128 +10,9 @@ import { dispatch_operation } from "./operation_dispatcher.js";
 import { build_reply } from "./response_builder.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { extract_media_metadata, extract_text_body } from "../channels/whatsapp/whatsapp_message_parser.js";
+import { resolve_whatsapp_identity_by_phone_number_id } from "../channels/whatsapp/whatsapp_identity_resolver.js";
 import { safe_ingest_message_to_memory } from "../memory/memory_ingestion_service.js";
 import { record_context_event, safe_record_processing_event } from "../processing_events/processing_event_service.js";
-
-async function resolve_tenant_by_phone_number_id(pool, phone_number_id) {
-  const result = await pool.query(
-    `
-      SELECT
-        tenants.*,
-        branches.id AS branch_id,
-        branches.name AS branch_name,
-        branches.address AS branch_address,
-        branches.phone AS branch_phone,
-        branches.timezone AS branch_timezone,
-        branches.status AS branch_status,
-        branches.created_at AS branch_created_at,
-        branches.updated_at AS branch_updated_at,
-        bot_profiles.id AS bot_profile_id,
-        bot_profiles.name AS bot_profile_name,
-        bot_profiles.timezone AS bot_profile_timezone,
-        bot_profiles.solution_template_id AS bot_profile_solution_template_id,
-        solution_templates.id AS solution_template_id,
-        solution_templates.key AS solution_template_key,
-        bots.id AS bot_id,
-        bots.name AS bot_name,
-        bots.slug AS bot_slug,
-        bots.channel AS bot_channel,
-        bots.status AS bot_status,
-        bots.organization_id,
-        bots.account_id,
-        organizations.name AS organization_name,
-        organizations.slug AS organization_slug,
-        accounts.name AS account_name,
-        accounts.slug AS account_slug
-      FROM whatsapp_phone_numbers
-      JOIN tenants ON tenants.id = whatsapp_phone_numbers.tenant_id
-      LEFT JOIN branches ON branches.id = whatsapp_phone_numbers.branch_id
-      LEFT JOIN bot_profiles ON bot_profiles.tenant_id = tenants.id
-        AND (bot_profiles.branch_id = branches.id OR bot_profiles.branch_id IS NULL)
-        AND bot_profiles.status = 'active'
-      LEFT JOIN solution_templates ON solution_templates.id = bot_profiles.solution_template_id
-      LEFT JOIN bots ON bots.tenant_id = tenants.id
-        AND (bots.bot_profile_id = bot_profiles.id OR bots.bot_profile_id IS NULL)
-        AND bots.status = 'active'
-      LEFT JOIN organizations ON organizations.id = bots.organization_id
-      LEFT JOIN accounts ON accounts.id = bots.account_id
-      WHERE whatsapp_phone_numbers.phone_number_id = $1
-        AND whatsapp_phone_numbers.status = 'active'
-      ORDER BY bot_profiles.branch_id NULLS LAST
-      LIMIT 1
-    `,
-    [phone_number_id],
-  );
-  const row = result.rows[0];
-
-  if (!row) {
-    throw new Error(`No tenant configured for WhatsApp phone_number_id ${phone_number_id}`);
-  }
-
-  return {
-    tenant: {
-      id: row.id,
-      name: row.name,
-      slug: row.slug,
-      status: row.status,
-      timezone: row.timezone,
-    },
-    branch: row.branch_id
-      ? {
-          id: row.branch_id,
-          tenant_id: row.id,
-          name: row.branch_name,
-          address: row.branch_address,
-          phone: row.branch_phone,
-          timezone: row.branch_timezone,
-          status: row.branch_status,
-        }
-      : null,
-    bot_profile: row.bot_profile_id
-      ? {
-          id: row.bot_profile_id,
-          name: row.bot_profile_name,
-          timezone: row.bot_profile_timezone,
-          solution_template_id: row.bot_profile_solution_template_id,
-          solution_template_key: row.solution_template_key,
-        }
-      : null,
-    solution_template: row.solution_template_id
-      ? {
-          id: row.solution_template_id,
-          key: row.solution_template_key,
-        }
-      : null,
-    organization: row.organization_id
-      ? {
-          id: row.organization_id,
-          name: row.organization_name,
-          slug: row.organization_slug,
-        }
-      : null,
-    account: row.account_id
-      ? {
-          id: row.account_id,
-          organization_id: row.organization_id,
-          name: row.account_name,
-          slug: row.account_slug,
-        }
-      : null,
-    bot: row.bot_id
-      ? {
-          id: row.bot_id,
-          organization_id: row.organization_id,
-          account_id: row.account_id,
-          tenant_id: row.id,
-          bot_profile_id: row.bot_profile_id,
-          name: row.bot_name,
-          slug: row.bot_slug,
-          channel: row.bot_channel,
-          status: row.bot_status,
-        }
-      : null,
-  };
-}
 
 async function upsert_contact(pool, input) {
   const result = await pool.query(
@@ -380,7 +261,7 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
 
 async function process_inbound_message(dependencies, input) {
   const phone_number_id = input.value.metadata?.phone_number_id ?? config.whatsapp_phone_number_id;
-  const resolution = await resolve_tenant_by_phone_number_id(dependencies.pool, phone_number_id);
+  const resolution = await resolve_whatsapp_identity_by_phone_number_id(dependencies.pool, phone_number_id);
   const contact_profile = input.value.contacts?.find((contact) => contact.wa_id === input.inbound_message.from);
   const contact = await upsert_contact(dependencies.pool, {
     tenant_id: resolution.tenant.id,
@@ -423,7 +304,11 @@ async function process_inbound_message(dependencies, input) {
     event_stage: "webhook",
     title: "Webhook received",
     summary: "Inbound WhatsApp webhook message received.",
-    details_json: { phone_number_id },
+    details_json: {
+      phone_number_id,
+      whatsapp_phone_number_id: resolution.whatsapp_phone_number?.id ?? null,
+      phone_number_bot_assignment_id: resolution.phone_number_bot_assignment?.id ?? null,
+    },
     source_table: "messages",
     source_id: stored_message.id,
   });

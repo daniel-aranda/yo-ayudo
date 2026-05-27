@@ -1,6 +1,8 @@
 import { rmSync as rm_sync } from "node:fs";
 import { afterEach as after_each, beforeEach as before_each, describe, expect, it } from "vitest";
 import { mock_provider } from "../../src/ai/mock_provider.js";
+import { assign_bot_to_whatsapp_phone_number } from "../../src/bots/bot_assignment_repository.js";
+import { upsert_bot } from "../../src/bots/bot_repository.js";
 import { create_simulated_whatsapp_payload } from "../../src/channels/whatsapp/whatsapp_message_parser.js";
 import { handle_whatsapp_webhook_payload } from "../../src/engine/message_processor.js";
 import { local_memory_store } from "../../src/memory/local_memory_store.js";
@@ -37,6 +39,7 @@ async function simulate(pool, client, text, options = {}) {
     create_simulated_whatsapp_payload({
       from: "5215550000000",
       text,
+      phone_number_id: options.phone_number_id,
     }),
     {
       pool,
@@ -171,5 +174,56 @@ describe("WhatsApp inbound pipeline", () => {
     expect(messages.rows[0].tenant_name).toBe("Margen Sabroso");
     expect(ai_calls.rowCount).toBeGreaterThanOrEqual(3);
     expect(ai_calls.rows.some((row) => row.provider === "mock")).toBe(true);
+  });
+
+  it("stores conversation and message with the bot actively assigned to the WhatsApp number", async () => {
+    const context = await pool.query(`
+      SELECT
+        organizations.id AS organization_id,
+        accounts.id AS account_id,
+        tenants.id AS tenant_id,
+        bot_profiles.id AS bot_profile_id,
+        whatsapp_phone_numbers.id AS whatsapp_phone_number_id,
+        whatsapp_phone_numbers.phone_number_id
+      FROM organizations
+      JOIN accounts ON accounts.organization_id = organizations.id
+      JOIN tenants ON tenants.id = accounts.tenant_id
+      JOIN bot_profiles ON bot_profiles.tenant_id = tenants.id
+      JOIN whatsapp_phone_numbers ON whatsapp_phone_numbers.account_id = accounts.id
+      LIMIT 1
+    `);
+    const row = context.rows[0];
+    const assigned_bot = await upsert_bot(pool, {
+      organization_id: row.organization_id,
+      account_id: row.account_id,
+      tenant_id: row.tenant_id,
+      bot_profile_id: row.bot_profile_id,
+      name: "Assigned Sales Bot",
+      slug: "assigned-sales-bot",
+      channel: "whatsapp",
+      status: "active",
+      settings_json: { test: true },
+    });
+    await assign_bot_to_whatsapp_phone_number(pool, {
+      organization_id: row.organization_id,
+      account_id: row.account_id,
+      whatsapp_phone_number_id: row.whatsapp_phone_number_id,
+      bot_id: assigned_bot.id,
+      metadata_json: { source: "test" },
+    });
+
+    await simulate(pool, client, "vendimos 3200 hasta ahorita", {
+      phone_number_id: row.phone_number_id,
+    });
+
+    const conversation = await pool.query("SELECT * FROM conversations LIMIT 1");
+    const message = await pool.query("SELECT * FROM messages WHERE direction = 'inbound' LIMIT 1");
+    const events = await pool.query("SELECT * FROM processing_events WHERE event_type = 'webhook_received' LIMIT 1");
+
+    expect(conversation.rows[0].bot_id).toBe(assigned_bot.id);
+    expect(message.rows[0].bot_id).toBe(assigned_bot.id);
+    expect(events.rows[0].bot_id).toBe(assigned_bot.id);
+    expect(events.rows[0].account_id).toBe(row.account_id);
+    expect(events.rows[0].details_json.phone_number_bot_assignment_id).toBeTruthy();
   });
 });

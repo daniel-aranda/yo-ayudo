@@ -132,7 +132,12 @@ export async function get_bot_view(pool, bot_id) {
       LEFT JOIN bot_profiles ON bot_profiles.id = bots.bot_profile_id
       JOIN accounts ON accounts.id = bots.account_id
       JOIN organizations ON organizations.id = bots.organization_id
-      LEFT JOIN whatsapp_phone_numbers ON whatsapp_phone_numbers.tenant_id = bots.tenant_id
+      LEFT JOIN phone_number_bot_assignments
+        ON phone_number_bot_assignments.bot_id = bots.id
+       AND phone_number_bot_assignments.status = 'active'
+       AND phone_number_bot_assignments.active_key = 'active'
+      LEFT JOIN whatsapp_phone_numbers
+        ON whatsapp_phone_numbers.id = phone_number_bot_assignments.whatsapp_phone_number_id
       WHERE bots.id = $1
       LIMIT 1
     `,
