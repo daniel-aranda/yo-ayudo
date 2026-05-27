@@ -1,0 +1,32 @@
+extends ../layout
+
+block content
+  section.page-header
+    h1= organization ? organization.name : "Organization no encontrada"
+    p Conversation Inspector
+
+  if organization
+    div.two-column
+      section.panel
+        h2 Accounts
+        if accounts.length
+          ul.clean-list
+            each account in accounts
+              li
+                a(href=`/inspector/accounts/${account.id}`)= account.name
+                span.meta= ` · ${account.status}`
+        else
+          div.empty Sin accounts.
+
+      section.panel
+        h2 Bots
+        if bots.length
+          ul.clean-list
+            each bot in bots
+              li
+                a(href=`/inspector/bots/${bot.id}`)= bot.name
+                span.meta= ` · ${bot.channel} · ${bot.status}`
+        else
+          div.empty Sin bots.
+  else
+    div.empty No se encontró la organization.

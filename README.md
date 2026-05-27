@@ -36,6 +36,7 @@ Servidor local:
 
 - Health: `http://localhost:3000/health`
 - Dashboard: `http://localhost:3000/dashboard`
+- Conversation Inspector: `http://localhost:3000/inspector`
 - Review: `http://localhost:3000/review`
 
 Verificación rápida:
@@ -67,6 +68,7 @@ MEMORY_STORE_PROVIDER=local
 EMBEDDING_PROVIDER=mock
 AGENT_ROUTER_ENABLED=true
 MEMORY_INGESTION_ENABLED=true
+INSPECTOR_ENABLED=true
 ```
 
 Si no configuras `WHATSAPP_ACCESS_TOKEN`, el envío real a Meta se omite y queda registrado como outbound skipped.
@@ -136,6 +138,8 @@ El engine procesa mensajes y despacha operaciones genéricas:
 - `src/channels/whatsapp`: webhook, parsing de payload y cliente WhatsApp.
 - `src/ai`: gateway de modelo, mock provider y stub Bedrock.
 - `src/dashboard`: rutas y queries del dashboard.
+- `src/inspector`: Conversation Inspector, trace builder y vistas internas de conversación.
+- `src/processing_events`: timeline tecnica del pipeline.
 - `src/review`: review queue.
 
 La solución demo se modela como:
@@ -150,4 +154,4 @@ La solución demo se modela como:
 npm test
 ```
 
-Las pruebas de integración usan `pg-mem`, aplican migraciones y corren el seed demo sin requerir PostgreSQL local. Cubren raw payload, resolución de tenant desde `phone_number_id`, `mock_provider`, operaciones diarias, memoria local, router, reportes y review queue.
+Las pruebas de integración usan `pg-mem`, aplican migraciones y corren el seed demo sin requerir PostgreSQL local. Cubren raw payload, resolución de tenant desde `phone_number_id`, `mock_provider`, operaciones diarias, memoria local, router, reportes, review queue y Conversation Inspector.

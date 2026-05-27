@@ -1,0 +1,101 @@
+extends ../layout
+
+block content
+  section.page-header
+    h1= bot ? bot.name : "Bot no encontrado"
+    if bot
+      p= `${bot.organization_name} · ${bot.account_name} · ${bot.tenant_name}`
+
+  if bot
+    div.metrics
+      article.metric
+        span.label Conversaciones
+        strong= stats.conversations_count
+      article.metric
+        span.label Senders
+        strong= stats.senders_count
+      article.metric
+        span.label Mensajes 24h
+        strong= stats.messages_24h
+      article.metric
+        span.label Review
+        strong= stats.pending_review_count
+
+    div.two-column
+      section.panel
+        h2 Bot
+        dl.compact
+          div
+            dt Canal
+            dd= bot.channel
+          div
+            dt Estado
+            dd= bot.status
+          div
+            dt WhatsApp
+            dd= bot.display_phone_number || bot.phone_number_id || "sin número"
+          div
+            dt Bot profile
+            dd= bot.bot_profile_name || "sin profile"
+
+      section.panel
+        h2 Señales recientes
+        dl.compact
+          div
+            dt Agent runs
+            dd= stats.agent_runs_count
+          div
+            dt Memory docs
+            dd= stats.memory_docs_count
+
+    section.panel
+      h2 Conversaciones recientes
+      a.button(href=`/inspector/bots/${bot.id}/conversations`) Ver todas
+      if conversations.length
+        table
+          thead
+            tr
+              th Sender
+              th Último mensaje
+              th Intent
+              th Agent
+              th Review
+              th Actividad
+          tbody
+            each conversation in conversations
+              tr
+                td
+                  a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
+                  div.meta= conversation.whatsapp_phone
+                td= conversation.last_message || "-"
+                td= conversation.last_intent || "-"
+                td= conversation.last_agent || "-"
+                td= conversation.pending_review_count
+                td= conversation.last_activity || "-"
+      else
+        div.empty Sin conversaciones.
+
+    div.two-column
+      section.panel
+        h2 Agent runs recientes
+        if agent_runs.length
+          ul.clean-list
+            each run in agent_runs
+              li
+                a(href=run.message_id ? `/inspector/messages/${run.message_id}` : "#")= `${run.agent_key} · ${run.run_type}`
+                span.meta= ` · ${run.status}`
+        else
+          div.empty Sin agent runs.
+
+      section.panel
+        h2 Memory docs recientes
+        if memory_documents.length
+          ul.clean-list
+            each document in memory_documents
+              li
+                a(href=document.message_id ? `/inspector/messages/${document.message_id}` : "#")= document.title || document.document_type
+                span.meta= ` · ${document.status} · ${document.embedding_status}`
+        else
+          div.empty Sin memory docs.
+  else
+    div.empty No se encontró el bot.

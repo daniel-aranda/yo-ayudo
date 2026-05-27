@@ -82,13 +82,33 @@ Ubicación: `src/agents`
 - `agent_registry.js`: mapea `agent_key` a handler delgado.
 - `subagents/*`: wrappers que delegan a handlers operativos existentes.
 
+### Processing Events
+
+Ubicación: `src/processing_events`
+
+- `processing_event_repository.js`: inserta eventos tecnicos del pipeline.
+- `processing_event_service.js`: helper seguro para registrar eventos sin romper el flujo principal.
+
+Estos eventos alimentan el Conversation Inspector.
+
+### Inspector
+
+Ubicación: `src/inspector`
+
+- `inspector_routes.js`: rutas internas server-rendered.
+- `inspector_repository.js`: queries para organizations, accounts, bots y conversaciones.
+- `trace_builder.js`: arma el trace completo de un mensaje.
+- `inspector_presenter.js`: helpers compactos para UI.
+
+El inspector lee datos existentes y no decide lógica de negocio.
+
 ## Flujo Inbound
 
 1. `POST /webhooks/whatsapp`.
-2. Resolver `tenant`, `branch` y `bot_profile` desde `phone_number_id`.
+2. Resolver `tenant`, `branch`, `bot_profile`, `organization`, `account` y `bot` desde `phone_number_id`.
 3. Upsert de `contact`.
-4. Upsert de `conversation`.
-5. Guardar `message` inbound con `raw_payload_json`.
+4. Upsert de `conversation` con `bot_id`.
+5. Guardar `message` inbound con `raw_payload_json` y `bot_id`.
 6. Normalizar texto con provider.
 7. Clasificar intención.
 8. Parsear y validar con Zod.
@@ -100,6 +120,7 @@ Ubicación: `src/agents`
 14. Generar respuesta.
 15. Enviar por WhatsApp si hay credenciales.
 16. Guardar mensaje outbound.
+17. Registrar eventos tecnicos en `processing_events` para inspeccion.
 
 ## Reglas De Diseño
 

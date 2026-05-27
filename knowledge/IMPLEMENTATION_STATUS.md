@@ -33,6 +33,10 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - AI Gateway con interfaz documentada y `mock_provider`.
 - Memory layer con `memory_documents`, `knowledge_sources`, store local, S3 stub, embedding mock y retrieval local.
 - Agent router determinístico con `agent_profiles`, `agent_routing_rules` y `agent_runs`.
+- Conversation Inspector interno con organizations, accounts, bots, conversaciones, message trace y timeline tecnica.
+- `processing_events` para registrar hitos del pipeline sin depender solo de JSON crudo.
+- `bot_id` en conversaciones, mensajes, agent runs, memory docs y review items.
+- `reply_to_message_id` en mensajes outbound generados como respuesta.
 - Intents genericos:
   - `day_start`
   - `sales_update`
@@ -58,6 +62,7 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - Tests unitarios de reglas operativas.
 - Tests de integracion del pipeline inbound con DB en memoria.
 - Tests unitarios de memory ingestion, local store, document service, retrieval y router.
+- Tests de integracion del Conversation Inspector, trace builder y rutas server-rendered.
 
 ## Stubs, Placeholders O Parcial
 
@@ -69,6 +74,8 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - `solution_templates`, `bot_profiles` y `bot_intents` estan modelados en DB, pero no tienen UI ni repositorios runtime dedicados.
 - `s3_memory_store` y `bedrock_embedding_provider` existen como adapters/stubs; local no requiere AWS.
 - `agent_router` es deterministico; no hay agentes LLM autónomos.
+- Conversation Inspector usa auth interna minima por env; no reemplaza auth productiva.
+- Processing events cubren puntos clave del pipeline, no cada operacion interna posible.
 - `POST /review/:review_item_id/resolve` marca resolucion, pero no re-ejecuta handlers ni corrige datos operativos.
 - Parser mock es intencionalmente basico; no soporta bien multiples compras en un solo mensaje ni todas las variantes de lenguaje natural.
 
@@ -83,6 +90,14 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - `GET /dashboard/tenants/:tenant_id/branches/:branch_id/days/:date`
 - `GET /review`
 - `POST /review/:review_item_id/resolve`
+- `GET /inspector`
+- `GET /inspector/organizations`
+- `GET /inspector/organizations/:organization_id`
+- `GET /inspector/accounts/:account_id`
+- `GET /inspector/bots/:bot_id`
+- `GET /inspector/bots/:bot_id/conversations`
+- `GET /inspector/conversations/:conversation_id`
+- `GET /inspector/messages/:message_id`
 - `POST /dev/seed`
 - `POST /dev/simulate-whatsapp-message`
 - `GET /public/*` para assets estaticos
@@ -120,16 +135,32 @@ Convencion activa: todos los identificadores propios del proyecto usan `snake_ca
 - `agent_routing_rules`
 - `agent_runs`
 
+## Tablas En Migracion 0003
+
+- `organizations`
+- `accounts`
+- `bots`
+- `processing_events`
+
+La migracion tambien agrega:
+
+- `bot_id` a `conversations`
+- `bot_id` a `messages`
+- `reply_to_message_id` a `messages`
+- `bot_id` a `agent_runs`
+- `bot_id` a `memory_documents`
+- `bot_id` a `review_items`
+
 Ademas, el runner crea `schema_migrations`.
 
 ## Comandos Verificados
 
 - `npm install`: OK. No genero `package-lock.json`.
-- `npm test`: OK. 7 archivos, 15 tests.
+- `npm test`: OK. 8 archivos, 21 tests.
 - `npm run db:up`: OK. Levanta `yoayudo_postgres`.
 - `npm run db:down`: OK.
 - `npm run db:reset`: OK. Recrea volumen local.
-- `npm run db:migrate`: OK. Aplica `0001_initial.sql` y `0002_memory_agents.sql`.
+- `npm run db:migrate`: OK. Aplica `0001_initial.sql`, `0002_memory_agents.sql` y `0003_conversation_inspector.sql`.
 - `npm run db:seed`: OK. Crea demo, agent profiles/rules y knowledge documents.
 - `npm run start`: OK. Levanta sin compilar.
 - `npm run dev`: OK. Corre doctor y levanta sin compilar.
@@ -151,8 +182,11 @@ Con PostgreSQL local levantado, migrado y sembrado:
 8. Se crea `memory_documents` para mensajes útiles.
 9. `local_memory_store` escribe documentos en `.storage/memory`.
 10. Se registra outbound corto en `messages`.
-11. El cierre genera reporte diario.
-12. El dashboard de dia renderiza operacion y reporte.
+11. Se vincula outbound con inbound por `reply_to_message_id`.
+12. Se crean `processing_events` para inspeccion.
+13. El cierre genera reporte diario.
+14. El dashboard de dia renderiza operacion y reporte.
+15. `/inspector` muestra bots/conversaciones y `/inspector/messages/:message_id` muestra parsing, router, agente, memoria, AI calls, escrituras operativas, review y respuesta.
 
 Mensajes verificados:
 
@@ -169,6 +203,7 @@ Verificacion de DB despues del flujo:
 - `op_daily_reports`: 1 fila.
 - `agent_runs`: contiene decisiones de routing.
 - `memory_documents`: contiene mensajes útiles y knowledge seed.
+- `processing_events`: contiene timeline tecnica por mensaje.
 - Metodos de pago del cierre: efectivo 3000, tarjeta 4000, transferencia 1500.
 - Dashboard de dia: 200 y muestra reporte/metodos de pago.
 
@@ -189,6 +224,7 @@ Verificacion de DB despues del flujo:
 - Agentes autónomos con tool calling complejo.
 - Multi-item purchase robusto.
 - Tests HTTP con `supertest` para todos los endpoints principales.
+- Filtros avanzados del inspector por intent/agente/fecha; hay ruta base y estructura, pero no UI completa de filtros.
 
 ## Riesgos Tecnicos Actuales
 
@@ -197,25 +233,27 @@ Verificacion de DB despues del flujo:
 - `pg-mem` acelera tests, pero puede diferir de PostgreSQL real en detalles SQL.
 - `npm audit` reporta 5 vulnerabilidades moderadas en dev dependencies de Vitest/Vite; `npm audit --omit=dev` esta limpio.
 - El dashboard no tiene auth real; solo debe usarse en modo local/dev.
+- El inspector es interno y su auth por token es minima; no debe exponerse publicamente.
+- Las listas del inspector usan queries simples por conversacion para mantener claridad; si crece el volumen, requeriran paginacion y optimizacion.
 - Review resolve guarda resolucion, pero todavia no actualiza hechos operativos.
 - Retrieval local es ranking heurístico, no semántico real.
 - `agent_routing_rules` cubre routing determinístico inicial, no condiciones avanzadas.
 
 ## Bugs O Deuda Priorizada
 
-1. Agregar tests funcionales HTTP con `supertest` para `/health`, webhook verification, dev simulate, dashboard y review.
+1. Completar tests funcionales HTTP para `/health`, webhook verification, dev simulate, dashboard y review.
 2. Definir idempotencia de memory ingestion y webhook por `external_message_id` bajo retries reales.
 3. Mejorar parser de montos por metodo de pago y compras con mas fixtures reales.
 4. Implementar re-procesamiento controlado al resolver review items.
-5. Separar pruebas con PostgreSQL real para migraciones y constraints criticos.
+5. Agregar paginacion/filtros reales al Conversation Inspector antes de operar con volumen.
 
 ## Siguientes 5 Cambios Recomendados
 
-1. Crear suite funcional de endpoints con `supertest` y asserts de DB.
-2. Agregar fixtures de mensajes reales para parser mock, memory ingestion y router.
+1. Completar suite funcional de endpoints restantes con `supertest` y asserts de DB.
+2. Agregar fixtures de mensajes reales para parser mock, memory ingestion, router e inspector.
 3. Implementar idempotencia del webhook por `external_message_id`.
 4. Endurecer review queue para aplicar correcciones operativas.
-5. Agregar auth minima del dashboard antes de cualquier piloto fuera de local.
+5. Agregar auth real para dashboard e inspector antes de cualquier piloto fuera de local.
 
 ## Busquedas De Limpieza
 

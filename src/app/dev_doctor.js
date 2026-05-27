@@ -17,6 +17,8 @@ const doctor_env_schema = z.object({
   vector_index_provider: z.enum(["mock"]),
   agent_router_enabled: z.boolean(),
   memory_ingestion_enabled: z.boolean(),
+  inspector_enabled: z.boolean(),
+  inspector_internal_token: z.string(),
   whatsapp_verify_token: z.string().min(1),
   whatsapp_phone_number_id: z.string().min(1),
 });

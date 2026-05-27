@@ -1,0 +1,197 @@
+extends ../layout
+
+block content
+  section.page-header
+    h1 Message Trace
+    p= `${message.bot_name || "sin bot"} · ${message.contact_name || message.whatsapp_phone} · ${message.direction}`
+
+  div.inspector-layout
+    section.inspector-main
+      article.trace-section
+        h2 Message
+        dl.compact
+          div
+            dt ID
+            dd= message.id
+          div
+            dt External
+            dd= message.external_message_id || "-"
+          div
+            dt Channel
+            dd= message.channel
+          div
+            dt Direction
+            dd= message.direction
+          div
+            dt Type
+            dd= message.message_type
+          div
+            dt Created
+            dd= message.created_at
+          div
+            dt Text
+            dd= message.text_body || "(sin texto)"
+        details.json-details
+          summary Raw payload
+          pre= json(message.raw_payload_json)
+
+      article.trace-section
+        h2 Parsing
+        if parsing_results.length
+          each parsing in parsing_results
+            div.trace-card
+              strong= parsing.intent
+              p= `Parser ${parsing.parser_name} · confidence ${parsing.confidence} · review ${parsing.needs_review}`
+              details.json-details
+                summary Extracted JSON
+                pre= json(parsing.extracted_json)
+              details.json-details
+                summary Validation errors
+                pre= json(parsing.validation_errors_json)
+        else
+          div.empty No parsing result found for this message.
+
+      article.trace-section
+        h2 Guardrails
+        if guardrail_events.length
+          each event in guardrail_events
+            div.trace-card
+              strong= event.title || event.event_type
+              p= event.summary || event.status
+        else
+          div.empty No guardrail event recorded.
+
+      article.trace-section
+        h2 Router
+        if router_runs.length
+          each run in router_runs
+            div.trace-card
+              strong= run.agent_key
+              p= `${run.status} · retrieved ${(run.retrieved_context_json || []).length}`
+              if run.error_message
+                p.trace-badge-error= run.error_message
+              details.json-details
+                summary Input
+                pre= json(run.input_json)
+              details.json-details
+                summary Output
+                pre= json(run.output_json)
+        else
+          div.empty No agent routed. Reason: no route run found.
+
+      article.trace-section
+        h2 Agent runs
+        if agent_runs.length
+          each run in agent_runs
+            div.trace-card
+              strong= `${run.agent_key} · ${run.run_type}`
+              p= `${run.status} · ${run.created_at} -> ${run.completed_at || "-"}`
+              if run.error_message
+                p.trace-badge-error= run.error_message
+              details.json-details
+                summary Context
+                pre= json(run.retrieved_context_json)
+        else
+          div.empty No non-route agent runs recorded.
+
+      article.trace-section
+        h2 Operational Writes
+        if operational_writes.length
+          each write in operational_writes
+            div.trace-card
+              strong= write.type
+              pre= json(write.data)
+        else
+          div.empty No operational write found for this message.
+
+    aside.inspector-sidebar
+      section.inspector-panel
+        h2 Compact summary
+        dl.compact
+          div
+            dt Intent
+            dd= compact_trace_summary.intent || "-"
+          div
+            dt Agent
+            dd= compact_trace_summary.selected_agent || "-"
+          div
+            dt Memory
+            dd= compact_trace_summary.memory_status || "-"
+          div
+            dt Embedding
+            dd= compact_trace_summary.embedding_status || "-"
+          div
+            dt Review
+            dd= compact_trace_summary.review_status || (compact_trace_summary.needs_review ? "yes" : "no")
+
+      section.inspector-panel
+        h2 Memory
+        if memory_documents.length
+          each document in memory_documents
+            div.trace-card
+              strong= document.title || document.document_type
+              p= `${document.scope} · ${document.status} · ${document.embedding_status}`
+              p.meta= document.local_path || document.s3_key || "sin ubicación"
+              p= `hash ${document.content_hash}`
+              details.json-details
+                summary Metadata
+                pre= json(document.metadata_json)
+              details.json-details
+                summary Content preview
+                pre= document.content
+        else
+          div.empty No memory document found.
+
+      section.inspector-panel
+        h2 AI Calls
+        if ai_calls.length
+          each call in ai_calls
+            div.trace-card
+              strong= `${call.provider} · ${call.function_name}`
+              p= `${call.status} · ${call.latency_ms || 0}ms`
+              if call.error_message
+                p.trace-badge-error= call.error_message
+              details.json-details
+                summary Input
+                pre= json(call.input_json)
+              details.json-details
+                summary Output
+                pre= json(call.output_json)
+        else
+          div.empty No AI calls found.
+
+      section.inspector-panel
+        h2 Review items
+        if review_items.length
+          each item in review_items
+            div.trace-card
+              strong= item.reason
+              p= item.status
+              details.json-details
+                summary Extracted
+                pre= json(item.extracted_json)
+        else
+          div.empty No review item.
+
+      section.inspector-panel
+        h2 Response
+        if outbound_responses.length
+          each response_message in outbound_responses
+            div.trace-card
+              strong= response_message.created_at
+              p= response_message.text_body
+        else
+          div.empty No outbound response linked.
+
+      section.inspector-panel
+        h2 Processing events
+        if processing_events.length
+          ul.clean-list
+            each event in processing_events
+              li
+                strong= event.event_stage
+                span= ` · ${event.event_type} · ${event.status}`
+                if event.summary
+                  div.meta= event.summary
+        else
+          div.empty No processing events.

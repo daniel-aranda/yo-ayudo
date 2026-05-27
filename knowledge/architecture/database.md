@@ -8,11 +8,16 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 ### Soluciones Y Bots
 
+- `organizations`
+- `accounts`
+- `bots`
 - `solution_templates`
 - `bot_profiles`
 - `bot_intents`
 
 `solution_templates.key = "taqueria_control"` es el template operativo del demo. No existe como clase runtime.
+
+`bots` conecta organization/account con tenant, bot profile y canal.
 
 ### Core Multi-Tenant
 
@@ -29,10 +34,17 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `messages.raw_payload_json` conserva el payload original y se guarda antes de parsear.
 
+`conversations.bot_id` y `messages.bot_id` permiten inspeccionar datos por bot sin inferencias ambiguas.
+
+`messages.reply_to_message_id` vincula respuestas outbound con el inbound que las produjo.
+
 ### Parsing Y Observabilidad
 
 - `ai_calls`
 - `parsing_results`
+- `processing_events`
+
+`processing_events` guarda una timeline tecnica compacta por mensaje y alimenta el Conversation Inspector.
 
 ### Review
 

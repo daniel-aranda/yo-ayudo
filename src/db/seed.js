@@ -164,6 +164,92 @@ async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_
   return bot_profile_id;
 }
 
+async function upsert_organization(pool) {
+  const result = await pool.query(
+    `
+      INSERT INTO organizations (name, slug, status)
+      VALUES ('YoAyudo Demo', 'yoayudo-demo', 'active')
+      ON CONFLICT (slug)
+      DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, updated_at = now()
+      RETURNING id
+    `,
+  );
+
+  return result.rows[0].id;
+}
+
+async function upsert_account(pool, organization_id) {
+  const result = await pool.query(
+    `
+      INSERT INTO accounts (organization_id, name, slug, status)
+      VALUES ($1, 'Demo Account', 'demo-account', 'active')
+      ON CONFLICT (organization_id, slug)
+      DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, updated_at = now()
+      RETURNING id
+    `,
+    [organization_id],
+  );
+
+  return result.rows[0].id;
+}
+
+async function upsert_bot(pool, input) {
+  const result = await pool.query(
+    `
+      INSERT INTO bots (
+        organization_id,
+        account_id,
+        tenant_id,
+        bot_profile_id,
+        name,
+        slug,
+        channel,
+        status,
+        settings_json
+      )
+      VALUES ($1, $2, $3, $4, 'Margen Sabroso Bot', 'margen-sabroso-bot', 'whatsapp', 'active', '{}'::jsonb)
+      ON CONFLICT (account_id, slug)
+      DO UPDATE SET
+        tenant_id = EXCLUDED.tenant_id,
+        bot_profile_id = EXCLUDED.bot_profile_id,
+        name = EXCLUDED.name,
+        channel = EXCLUDED.channel,
+        status = EXCLUDED.status,
+        updated_at = now()
+      RETURNING id
+    `,
+    [
+      input.organization_id,
+      input.account_id,
+      input.tenant_id,
+      input.bot_profile_id,
+    ],
+  );
+
+  await pool.query("UPDATE conversations SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+    result.rows[0].id,
+    input.tenant_id,
+  ]);
+  await pool.query("UPDATE messages SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+    result.rows[0].id,
+    input.tenant_id,
+  ]);
+  await pool.query("UPDATE agent_runs SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+    result.rows[0].id,
+    input.tenant_id,
+  ]);
+  await pool.query("UPDATE memory_documents SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+    result.rows[0].id,
+    input.tenant_id,
+  ]);
+  await pool.query("UPDATE review_items SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+    result.rows[0].id,
+    input.tenant_id,
+  ]);
+
+  return result.rows[0].id;
+}
+
 async function upsert_contact(pool, tenant_id, branch_id) {
   await pool.query(
     `
@@ -554,6 +640,7 @@ async function seed_knowledge_documents(pool, input) {
       name: "demo tenant knowledge",
       tenant_id: input.tenant_id,
       branch_id: input.branch_id,
+      bot_id: input.bot_id,
       bot_profile_id: input.bot_profile_id,
       content:
         "El cliente demo prefiere respuestas cortas, claras y enfocadas en registrar operación. No quiere conversación larga.",
@@ -575,6 +662,7 @@ async function seed_knowledge_documents(pool, input) {
     await service.create_document({
       tenant_id: document.tenant_id ?? null,
       branch_id: document.branch_id ?? null,
+      bot_id: document.bot_id ?? null,
       solution_template_id: document.solution_template_id ?? null,
       bot_profile_id: document.bot_profile_id ?? null,
       scope: document.scope,
@@ -597,6 +685,14 @@ export async function seed_development_data(pool) {
   const tenant_id = await upsert_tenant(pool);
   const branch_id = await get_or_create_branch(pool, tenant_id);
   const bot_profile_id = await upsert_bot_profile(pool, tenant_id, branch_id, solution_template_id);
+  const organization_id = await upsert_organization(pool);
+  const account_id = await upsert_account(pool, organization_id);
+  const bot_id = await upsert_bot(pool, {
+    organization_id,
+    account_id,
+    tenant_id,
+    bot_profile_id,
+  });
 
   await upsert_contact(pool, tenant_id, branch_id);
   await upsert_whatsapp_number(pool, tenant_id, branch_id);
@@ -631,10 +727,11 @@ export async function seed_development_data(pool) {
     branch_id,
     solution_template_id,
     bot_profile_id,
+    bot_id,
   });
 
-  logger.info({ tenant_id, branch_id }, "development seed complete");
-  return { tenant_id, branch_id, solution_template_id, bot_profile_id };
+  logger.info({ tenant_id, branch_id, bot_id }, "development seed complete");
+  return { tenant_id, branch_id, solution_template_id, bot_profile_id, organization_id, account_id, bot_id };
 }
 
 if (is_entrypoint(import.meta.url)) {

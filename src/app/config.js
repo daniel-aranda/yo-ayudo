@@ -33,6 +33,11 @@ const env_schema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
+  INSPECTOR_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  INSPECTOR_INTERNAL_TOKEN: z.string().default(""),
   LOG_LEVEL: z.string().default("info"),
 });
 
@@ -59,5 +64,7 @@ export const config = {
   vector_index_name: parsed_env.VECTOR_INDEX_NAME,
   agent_router_enabled: parsed_env.AGENT_ROUTER_ENABLED,
   memory_ingestion_enabled: parsed_env.MEMORY_INGESTION_ENABLED,
+  inspector_enabled: parsed_env.INSPECTOR_ENABLED,
+  inspector_internal_token: parsed_env.INSPECTOR_INTERNAL_TOKEN,
   log_level: parsed_env.LOG_LEVEL,
 };

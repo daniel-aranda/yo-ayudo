@@ -11,6 +11,7 @@ import { build_reply } from "./response_builder.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { extract_media_metadata, extract_text_body } from "../channels/whatsapp/whatsapp_message_parser.js";
 import { safe_ingest_message_to_memory } from "../memory/memory_ingestion_service.js";
+import { record_context_event, safe_record_processing_event } from "../processing_events/processing_event_service.js";
 
 async function resolve_tenant_by_phone_number_id(pool, phone_number_id) {
   const result = await pool.query(
@@ -30,7 +31,18 @@ async function resolve_tenant_by_phone_number_id(pool, phone_number_id) {
         bot_profiles.timezone AS bot_profile_timezone,
         bot_profiles.solution_template_id AS bot_profile_solution_template_id,
         solution_templates.id AS solution_template_id,
-        solution_templates.key AS solution_template_key
+        solution_templates.key AS solution_template_key,
+        bots.id AS bot_id,
+        bots.name AS bot_name,
+        bots.slug AS bot_slug,
+        bots.channel AS bot_channel,
+        bots.status AS bot_status,
+        bots.organization_id,
+        bots.account_id,
+        organizations.name AS organization_name,
+        organizations.slug AS organization_slug,
+        accounts.name AS account_name,
+        accounts.slug AS account_slug
       FROM whatsapp_phone_numbers
       JOIN tenants ON tenants.id = whatsapp_phone_numbers.tenant_id
       LEFT JOIN branches ON branches.id = whatsapp_phone_numbers.branch_id
@@ -38,6 +50,11 @@ async function resolve_tenant_by_phone_number_id(pool, phone_number_id) {
         AND (bot_profiles.branch_id = branches.id OR bot_profiles.branch_id IS NULL)
         AND bot_profiles.status = 'active'
       LEFT JOIN solution_templates ON solution_templates.id = bot_profiles.solution_template_id
+      LEFT JOIN bots ON bots.tenant_id = tenants.id
+        AND (bots.bot_profile_id = bot_profiles.id OR bots.bot_profile_id IS NULL)
+        AND bots.status = 'active'
+      LEFT JOIN organizations ON organizations.id = bots.organization_id
+      LEFT JOIN accounts ON accounts.id = bots.account_id
       WHERE whatsapp_phone_numbers.phone_number_id = $1
         AND whatsapp_phone_numbers.status = 'active'
       ORDER BY bot_profiles.branch_id NULLS LAST
@@ -85,6 +102,34 @@ async function resolve_tenant_by_phone_number_id(pool, phone_number_id) {
           key: row.solution_template_key,
         }
       : null,
+    organization: row.organization_id
+      ? {
+          id: row.organization_id,
+          name: row.organization_name,
+          slug: row.organization_slug,
+        }
+      : null,
+    account: row.account_id
+      ? {
+          id: row.account_id,
+          organization_id: row.organization_id,
+          name: row.account_name,
+          slug: row.account_slug,
+        }
+      : null,
+    bot: row.bot_id
+      ? {
+          id: row.bot_id,
+          organization_id: row.organization_id,
+          account_id: row.account_id,
+          tenant_id: row.id,
+          bot_profile_id: row.bot_profile_id,
+          name: row.bot_name,
+          slug: row.bot_slug,
+          channel: row.bot_channel,
+          status: row.bot_status,
+        }
+      : null,
   };
 }
 
@@ -109,18 +154,24 @@ async function upsert_contact(pool, input) {
 async function upsert_conversation(pool, input) {
   const result = await pool.query(
     `
-      INSERT INTO conversations (tenant_id, branch_id, contact_id, channel, status, last_message_at)
-      VALUES ($1, $2, $3, 'whatsapp', 'open', now())
+      INSERT INTO conversations (tenant_id, branch_id, bot_id, contact_id, channel, status, last_message_at)
+      VALUES ($1, $2, $4, $3, 'whatsapp', 'open', now())
       ON CONFLICT (tenant_id, contact_id, channel)
       DO UPDATE SET
         branch_id = COALESCE(EXCLUDED.branch_id, conversations.branch_id),
+        bot_id = COALESCE($4, conversations.bot_id),
         status = 'open',
         last_message_at = now(),
         updated_at = now()
       RETURNING *
     `,
-    [input.tenant_id, input.branch_id, input.contact_id],
+    [input.tenant_id, input.branch_id, input.contact_id, input.bot_id],
   );
+
+  if (input.bot_id && !result.rows[0].bot_id) {
+    await pool.query("UPDATE conversations SET bot_id = $2 WHERE id = $1", [result.rows[0].id, input.bot_id]);
+    result.rows[0].bot_id = input.bot_id;
+  }
 
   return result.rows[0];
 }
@@ -132,6 +183,7 @@ async function store_inbound_message(pool, input) {
       INSERT INTO messages (
         tenant_id,
         branch_id,
+        bot_id,
         conversation_id,
         contact_id,
         channel,
@@ -144,12 +196,13 @@ async function store_inbound_message(pool, input) {
         media_mime_type,
         processing_status
       )
-      VALUES ($1, $2, $3, $4, 'whatsapp', 'inbound', $5, $6, $7::jsonb, $8, $9, $10, 'stored')
+      VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', $6, $7, $8::jsonb, $9, $10, $11, 'stored')
       RETURNING *
     `,
     [
       input.tenant_id,
       input.branch_id,
+      input.bot_id,
       input.conversation_id,
       input.contact_id,
       input.inbound_message.id ?? null,
@@ -201,16 +254,18 @@ async function create_review_item(pool, input) {
       INSERT INTO review_items (
         tenant_id,
         branch_id,
+        bot_id,
         message_id,
         reason,
         raw_text,
         extracted_json
       )
-      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
     `,
     [
       input.tenant_id,
       input.branch_id,
+      input.bot_id ?? null,
       input.message_id,
       input.reason,
       input.raw_text,
@@ -244,33 +299,40 @@ async function update_message_parsing(pool, message_id, parsed, processing_statu
 }
 
 async function store_outbound_message(pool, input) {
-  await pool.query(
+  const result = await pool.query(
     `
       INSERT INTO messages (
         tenant_id,
         branch_id,
+        bot_id,
         conversation_id,
         contact_id,
         channel,
         direction,
         external_message_id,
+        reply_to_message_id,
         message_type,
         raw_payload_json,
         text_body,
         processing_status
       )
-      VALUES ($1, $2, $3, $4, 'whatsapp', 'outbound', $5, 'text', $6::jsonb, $7, 'sent')
+      VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, $7, 'text', $8::jsonb, $9, 'sent')
+      RETURNING *
     `,
     [
       input.tenant_id,
       input.branch_id,
+      input.bot_id ?? null,
       input.conversation_id,
       input.contact_id,
       input.external_message_id ?? null,
+      input.reply_to_message_id ?? null,
       JSON.stringify(input.raw_payload),
       input.text_body,
     ],
   );
+
+  return result.rows[0];
 }
 
 async function route_and_dispatch_operation(dependencies, processing_context, parsed) {
@@ -289,6 +351,7 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
       contact_id: processing_context.contact.id,
       conversation_id: processing_context.conversation.id,
       message_id: processing_context.message.id,
+      bot_id: processing_context.bot?.id ?? null,
       bot_profile_id: processing_context.bot_profile?.id ?? null,
       solution_template_id: processing_context.bot_profile?.solution_template_id ?? null,
       parsed_intent: parsed.intent,
@@ -328,11 +391,13 @@ async function process_inbound_message(dependencies, input) {
   const conversation = await upsert_conversation(dependencies.pool, {
     tenant_id: resolution.tenant.id,
     branch_id: resolution.branch?.id ?? null,
+    bot_id: resolution.bot?.id ?? null,
     contact_id: contact.id,
   });
   const stored_message = await store_inbound_message(dependencies.pool, {
     tenant_id: resolution.tenant.id,
     branch_id: resolution.branch?.id ?? null,
+    bot_id: resolution.bot?.id ?? null,
     conversation_id: conversation.id,
     contact_id: contact.id,
     inbound_message: input.inbound_message,
@@ -341,6 +406,35 @@ async function process_inbound_message(dependencies, input) {
       contact: contact_profile ?? null,
       message: input.inbound_message,
     },
+  });
+  const event_identity = {
+    organization_id: resolution.organization?.id ?? null,
+    account_id: resolution.account?.id ?? null,
+    bot_id: resolution.bot?.id ?? null,
+    tenant_id: resolution.tenant.id,
+    branch_id: resolution.branch?.id ?? null,
+    conversation_id: conversation.id,
+    message_id: stored_message.id,
+  };
+
+  await safe_record_processing_event(dependencies.pool, {
+    ...event_identity,
+    event_type: "webhook_received",
+    event_stage: "webhook",
+    title: "Webhook received",
+    summary: "Inbound WhatsApp webhook message received.",
+    details_json: { phone_number_id },
+    source_table: "messages",
+    source_id: stored_message.id,
+  });
+  await safe_record_processing_event(dependencies.pool, {
+    ...event_identity,
+    event_type: "message_saved",
+    event_stage: "message_store",
+    title: "Message saved",
+    summary: "Inbound message and raw payload saved.",
+    source_table: "messages",
+    source_id: stored_message.id,
   });
   const observed_provider = new observed_model_provider(dependencies.provider, {
     pool: dependencies.pool,
@@ -364,6 +458,9 @@ async function process_inbound_message(dependencies, input) {
     branch: resolution.branch,
     bot_profile: resolution.bot_profile,
     solution_template: resolution.solution_template,
+    organization: resolution.organization,
+    account: resolution.account,
+    bot: resolution.bot,
     contact,
     conversation,
     message: stored_message,
@@ -377,15 +474,40 @@ async function process_inbound_message(dependencies, input) {
     message_id: stored_message.id,
     parsed,
   });
+  await record_context_event(dependencies.pool, processing_context, {
+    event_type: "parsing_completed",
+    event_stage: "parsing",
+    title: "Parsing completed",
+    summary: `Intent ${parsed.intent} with confidence ${parsed.confidence}.`,
+    details_json: {
+      intent: parsed.intent,
+      confidence: parsed.confidence,
+      needs_review: parsed.needs_review,
+      validation_errors: parsed.validation_errors,
+    },
+    source_table: "parsing_results",
+    source_id: stored_message.id,
+  });
 
   if (parsed.needs_review) {
     await create_review_item(dependencies.pool, {
       tenant_id: resolution.tenant.id,
       branch_id: resolution.branch?.id ?? null,
+      bot_id: resolution.bot?.id ?? null,
       message_id: stored_message.id,
       reason: parsed.validation_errors[0]?.message?.toString() ?? "low_confidence_or_missing_data",
       raw_text: stored_message.text_body ?? "",
       extracted_json: parsed.data,
+    });
+    await record_context_event(dependencies.pool, processing_context, {
+      event_type: "review_item_created",
+      event_stage: "review",
+      status: "warning",
+      title: "Review item created",
+      summary: "Message needs human review.",
+      details_json: { intent: parsed.intent, missing_fields: parsed.missing_fields },
+      source_table: "review_items",
+      source_id: stored_message.id,
     });
   }
 
@@ -394,15 +516,67 @@ async function process_inbound_message(dependencies, input) {
     processing_context,
     parsed,
   );
+  if (routing_result) {
+    await record_context_event(dependencies.pool, processing_context, {
+      event_type: "router_selected_agent",
+      event_stage: "routing",
+      title: "Router selected agent",
+      summary: `${routing_result.agent_key}: ${routing_result.reason}`,
+      details_json: routing_result,
+      source_table: "agent_runs",
+      source_id: stored_message.id,
+    });
+  }
+  await record_context_event(dependencies.pool, processing_context, {
+    event_type: "agent_completed",
+    event_stage: "agent",
+    title: "Agent completed",
+    summary: routing_result?.agent_key ?? "direct dispatcher",
+    details_json: {
+      handled: handle_result.handled,
+      report_id: handle_result.report_id,
+      metadata: handle_result.metadata,
+    },
+    source_table: "messages",
+    source_id: stored_message.id,
+  });
+  await record_context_event(dependencies.pool, processing_context, {
+    event_type: "operation_saved",
+    event_stage: "operation_write",
+    title: "Operation handler completed",
+    summary: handle_result.handled ? "Operational write completed or no-op handled." : "No operational write.",
+    details_json: handle_result,
+    source_table: "messages",
+    source_id: stored_message.id,
+  });
 
   if (config.memory_ingestion_enabled) {
-    await safe_ingest_message_to_memory({
+    const memory_document = await safe_ingest_message_to_memory({
       context: processing_context,
       parsed,
       handle_result,
       store: dependencies.memory_store,
       embedding: dependencies.embedding_gateway,
     });
+
+    if (memory_document) {
+      await record_context_event(dependencies.pool, processing_context, {
+        event_type: "memory_document_created",
+        event_stage: "memory_ingestion",
+        title: "Memory document created",
+        summary: `${memory_document.document_type} ${memory_document.status}`,
+        details_json: {
+          memory_document_id: memory_document.id,
+          status: memory_document.status,
+          embedding_status: memory_document.embedding_status,
+          local_path: memory_document.local_path,
+          s3_bucket: memory_document.s3_bucket,
+          s3_key: memory_document.s3_key,
+        },
+        source_table: "memory_documents",
+        source_id: memory_document.id,
+      });
+    }
   }
 
   const processing_status = parsed.needs_review ? "needs_review" : handle_result.handled ? "handled" : "unhandled";
@@ -418,17 +592,31 @@ async function process_inbound_message(dependencies, input) {
       to: input.inbound_message.from,
       body: reply_text,
     });
-    await store_outbound_message(dependencies.pool, {
+    const outbound_message = await store_outbound_message(dependencies.pool, {
       tenant_id: resolution.tenant.id,
       branch_id: resolution.branch?.id ?? null,
+      bot_id: resolution.bot?.id ?? null,
       conversation_id: conversation.id,
       contact_id: contact.id,
       external_message_id: send_result.external_message_id,
+      reply_to_message_id: stored_message.id,
       text_body: reply_text,
       raw_payload: {
         request: { to: input.inbound_message.from, body: reply_text },
         response: send_result.raw_response,
       },
+    });
+    await record_context_event(dependencies.pool, processing_context, {
+      event_type: "outbound_message_created",
+      event_stage: "outbound_send",
+      title: "Outbound response created",
+      summary: reply_text,
+      details_json: {
+        sent: send_result.sent,
+        outbound_message_id: outbound_message.id,
+      },
+      source_table: "messages",
+      source_id: outbound_message.id,
     });
     logger.info({ message_id: stored_message.id, sent: send_result.sent }, "outbound message sent");
   }

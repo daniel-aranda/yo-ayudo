@@ -1,0 +1,43 @@
+extends ../layout
+
+block content
+  section.page-header
+    h1 Conversations
+    p Senders y conversaciones del bot.
+
+  section.panel
+    form(method="get").filters
+      label(for="search") Search
+      input#search(name="search", value="")
+      button(type="submit") Filtrar
+
+  section.panel
+    if conversations.length
+      table
+        thead
+          tr
+            th Sender
+            th Phone
+            th Last message
+            th Last intent
+            th Last agent
+            th Messages
+            th Review
+            th Last activity
+            th Status
+        tbody
+          each conversation in conversations
+            tr
+              td
+                a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
+              td= conversation.whatsapp_phone
+              td= conversation.last_message || "-"
+              td= conversation.last_intent || "-"
+              td= conversation.last_agent || "-"
+              td= conversation.messages_count
+              td= conversation.pending_review_count
+              td= conversation.last_activity || "-"
+              td
+                span.status= conversation.status
+    else
+      div.empty Sin conversaciones.

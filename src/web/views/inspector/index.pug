@@ -1,0 +1,86 @@
+extends ../layout
+
+block content
+  section.page-header
+    h1 Conversation Inspector
+    p Herramienta interna para seguir mensajes, routing, memoria, agentes y operación.
+
+  div.grid
+    section.panel
+      h2 Organizations
+      if organizations.length
+        ul.clean-list
+          each organization in organizations
+            li
+              a(href=`/inspector/organizations/${organization.id}`)= organization.name
+              span.meta= ` · ${organization.status}`
+      else
+        div.empty Sin organizations.
+
+    section.panel
+      h2 Bots
+      if bots.length
+        ul.clean-list
+          each bot in bots
+            li
+              a(href=`/inspector/bots/${bot.id}`)= bot.name
+              span.meta= ` · ${bot.tenant_name} · ${bot.channel}`
+      else
+        div.empty Sin bots.
+
+    section.panel
+      h2 Review pendiente
+      if review_items.length
+        ul.clean-list
+          each item in review_items
+            li
+              a(href=`/inspector/messages/${item.message_id}`)= item.reason
+              span.meta= ` · ${item.text_body || "sin texto"}`
+      else
+        div.empty Sin pendientes.
+
+  section.panel
+    h2 Conversaciones recientes
+    if conversations.length
+      table
+        thead
+          tr
+            th Sender
+            th Bot
+            th Mensajes
+            th Última actividad
+            th Estado
+        tbody
+          each conversation in conversations
+            tr
+              td
+                a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
+                div.meta= conversation.whatsapp_phone
+              td= conversation.bot_name || "sin bot"
+              td= conversation.messages_count
+              td= conversation.last_activity || "sin actividad"
+              td
+                span.status= conversation.status
+    else
+      div.empty Sin conversaciones.
+
+  section.panel
+    h2 Mensajes con error o review
+    if error_messages.length
+      table
+        thead
+          tr
+            th Mensaje
+            th Intent
+            th Estado
+            th Fecha
+        tbody
+          each message in error_messages
+            tr
+              td
+                a(href=`/inspector/messages/${message.id}`)= message.text_body || message.id
+              td= message.parsed_intent || "-"
+              td= message.processing_status
+              td= message.created_at
+    else
+      div.empty Sin errores recientes.

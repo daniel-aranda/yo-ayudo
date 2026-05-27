@@ -1,0 +1,61 @@
+extends ../layout
+
+block content
+  section.page-header
+    h1 Conversation Inspector
+    if conversation
+      p= `${conversation.bot_name || "sin bot"} · ${conversation.tenant_name} · ${conversation.display_name || conversation.whatsapp_phone} · ${conversation.status}`
+
+  if conversation
+    div.inspector-layout
+      section.inspector-main
+        h2 Timeline
+        if messages.length
+          each item in messages
+            - const message = item.message
+            - const trace = item.compact_trace_summary
+            article(class=`message-bubble ${message_alignment(message.direction)}`)
+              div.message-meta
+                strong= message.direction
+                span= ` · ${message.created_at}`
+              p= message.text_body || "(sin texto)"
+              div.trace-badges
+                if trace.intent
+                  span.trace-badge= trace.intent
+                if trace.confidence
+                  span.trace-badge= `conf ${trace.confidence}`
+                if trace.selected_agent
+                  span.trace-badge= trace.selected_agent
+                if trace.memory_status
+                  span.trace-badge= `memory ${trace.memory_status}`
+                if trace.embedding_status
+                  span.trace-badge= `embedding ${trace.embedding_status}`
+                if trace.needs_review || trace.review_status
+                  span.trace-badge.trace-badge-warning review
+                if trace.has_error
+                  span.trace-badge.trace-badge-error error
+              a(href=`/inspector/messages/${message.id}`) Ver trace completo
+        else
+          div.empty Sin mensajes.
+
+      aside.inspector-sidebar
+        section.inspector-panel
+          h2 Contexto
+          dl.compact
+            div
+              dt Bot
+              dd= conversation.bot_name || "sin bot"
+            div
+              dt Account
+              dd= conversation.account_name || "-"
+            div
+              dt Org
+              dd= conversation.organization_name || "-"
+            div
+              dt Phone
+              dd= conversation.whatsapp_phone
+            div
+              dt Status
+              dd= conversation.status
+  else
+    div.empty No se encontró la conversación.

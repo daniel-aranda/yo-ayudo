@@ -7,6 +7,7 @@ export async function upsert_memory_document(pool, input) {
         contact_id,
         conversation_id,
         message_id,
+        bot_id,
         business_day_id,
         solution_template_id,
         bot_profile_id,
@@ -24,9 +25,9 @@ export async function upsert_memory_document(pool, input) {
         version
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12, $13, $14, $15, $16,
-        $17::jsonb, $18, 'pending', $19
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10, $11, $12, $13, $14, $15, $16, $17,
+        $18::jsonb, $19, 'pending', $20
       )
       ON CONFLICT (source_table, source_id, document_type, version)
       DO UPDATE SET
@@ -35,6 +36,7 @@ export async function upsert_memory_document(pool, input) {
         contact_id = EXCLUDED.contact_id,
         conversation_id = EXCLUDED.conversation_id,
         message_id = EXCLUDED.message_id,
+        bot_id = EXCLUDED.bot_id,
         business_day_id = EXCLUDED.business_day_id,
         solution_template_id = EXCLUDED.solution_template_id,
         bot_profile_id = EXCLUDED.bot_profile_id,
@@ -57,6 +59,7 @@ export async function upsert_memory_document(pool, input) {
       input.contact_id ?? null,
       input.conversation_id ?? null,
       input.message_id ?? null,
+      input.bot_id ?? null,
       input.business_day_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,

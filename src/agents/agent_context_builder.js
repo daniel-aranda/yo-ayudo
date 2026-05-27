@@ -11,6 +11,7 @@ export function retrieval_request_for_message(input) {
     branch_id: input.branch_id,
     contact_id: input.contact_id,
     conversation_id: input.conversation_id,
+    bot_id: input.bot_id,
     solution_template_id: input.solution_template_id,
     query: context_query_for_intent(input),
     scopes: ["global", "solution_template", "tenant", "conversation", "operational_day"],

@@ -7,6 +7,7 @@ export async function create_agent_run(pool, input) {
         contact_id,
         conversation_id,
         message_id,
+        bot_id,
         agent_profile_id,
         agent_key,
         run_type,
@@ -18,8 +19,8 @@ export async function create_agent_run(pool, input) {
         completed_at
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8,
-        $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, $15
       )
       RETURNING *
     `,
@@ -29,6 +30,7 @@ export async function create_agent_run(pool, input) {
       input.contact_id ?? null,
       input.conversation_id ?? null,
       input.message_id ?? null,
+      input.bot_id ?? null,
       input.agent_profile_id ?? null,
       input.agent_key,
       input.run_type,

@@ -78,6 +78,10 @@ export class memory_retrieval_service {
       add_filter(filters, values, "(conversation_id = ? OR conversation_id IS NULL)", input.conversation_id);
     }
 
+    if (input.bot_id) {
+      add_filter(filters, values, "(bot_id = ? OR bot_id IS NULL)", input.bot_id);
+    }
+
     if (input.solution_template_id) {
       add_filter(
         filters,

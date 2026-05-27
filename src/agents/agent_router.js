@@ -62,6 +62,7 @@ export class agent_router {
       contact_id: input.contact_id,
       conversation_id: input.conversation_id,
       message_id: input.message_id,
+      bot_id: input.bot_id,
       agent_profile_id: routing_rule?.agent_profile_id ?? null,
       agent_key,
       run_type: "route",
