@@ -161,6 +161,19 @@ Ubicación: `src/bot_engine`
 
 El código es motor genérico. Los bots y templates viven como configuración en DB. No hay clases ni branches por `recepcionista_ai`, `factura_facil` u otros nombres comerciales.
 
+Flujo conceptual del Bot Engine:
+
+1. Cargar bot configurable.
+2. Cargar conversación.
+3. Cargar business knowledge.
+4. Cargar conversation memory.
+5. Cargar acciones habilitadas.
+6. Compilar prompt.
+7. Pedir respuesta o acción al modelo.
+8. Validar acción contra registry, permisos del bot, input y riesgo.
+9. Ejecutar, pedir confirmación o bloquear.
+10. Registrar audit log y guardrail events.
+
 ### Commercial Diagnostics
 
 Ubicación: `src/commercial`
@@ -239,8 +252,10 @@ Ubicación: `src/voice`
 
 - No crear carpetas por cliente.
 - No crear clases por marca.
-- Soluciones como `taqueria_control` viven en `solution_templates`.
-- Configuración de bot vive en `bot_profiles` y `bot_intents`.
-- Las reglas críticas viven en JavaScript y tests, no en prompts.
+- `solution_templates`, `bot_profiles` y `bot_intents` son compatibilidad/demo legacy.
+- Configuracion nueva de bot vive en `bots` y `bot_templates`.
+- Acciones ejecutables viven en codigo y se auditan.
+- Templates comerciales viven en DB/configuracion, no en runtime.
+- Guardrails registran riesgos y capacidades faltantes.
 - Postgres conserva la verdad operacional; memory store conserva documentos normalizados.
 - Fallas de memoria/embedding no deben romper el webhook.

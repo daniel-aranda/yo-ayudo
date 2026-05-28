@@ -1,38 +1,64 @@
-# Guía Para Agentes
+# Guia Para Agentes
 
-Este proyecto construye el engine de YoAyudo para bots operativos de WhatsApp.
+Este repo construye YoAyudo como Bot Engine configurable para negocios.
 
-La frase guía del producto:
+La frase guia:
 
-> Tu negocio ya vive en WhatsApp. Nosotros lo convertimos en sistema.
+```text
+El codigo es el motor.
+Los bots son configuracion.
+Las acciones son capacidades.
+Los guardrails son el radar de seguridad y roadmap.
+```
 
-## Prioridades
+## Lectura Obligatoria
 
-1. WhatsApp captura operación.
-2. PostgreSQL guarda la verdad.
-3. AI interpreta lenguaje, no decide hechos críticos.
-4. El backend valida, persiste y calcula con reglas determinísticas.
-5. Los clientes viven en DB, seed o configuración.
-6. El código maneja operaciones genéricas, no marcas de clientes.
-7. Memory/knowledge se guarda como documentos con scope, source, version y metadata.
+Antes de cambiar arquitectura, runtime de bots, acciones, memoria o persistencia, lee:
 
-## Cómo Trabajar En Este Repo
+1. `knowledge/architecture/bot_engine.md`
+2. `knowledge/architecture/actions.md`
+3. `knowledge/architecture/guardrails.md`
+4. `knowledge/architecture/database.md`
+5. `knowledge/architecture/memory.md`
 
-- Lee primero `knowledge/architecture/backend.md` y `knowledge/architecture/database.md` antes de cambiar flujo inbound, parsing o persistencia.
-- Para cambios de UI, lee `knowledge/architecture/frontend.md`.
-- Para pruebas, sigue `knowledge/agents/testing.md`.
-- Para memoria y router, lee `knowledge/architecture/memory.md` y `knowledge/architecture/agents.md`.
-- No agregues ni versiones `package-lock.json`; este repo usa `.npmrc` con `package-lock=false`.
-- No construyas flow builder visual, SPA pesada, billing completo ni integraciones cloud avanzadas hasta que el roadmap lo pida.
+Tambien utiles:
 
-## Límites De Diseño
+- `knowledge/architecture/backend.md`
+- `knowledge/architecture/agents.md` para entender routing legacy/transicional.
+- `knowledge/agents/testing.md` para pruebas.
 
-- El engine puede saber que existe un `bot_profile` o `solution_template`, pero no debe tener clases de cliente.
-- Los templates de solución viven en DB/configuración.
-- Outputs de AI o del `mock_provider` siempre pasan por validación antes de persistirse como datos operativos.
-- Raw payloads entrantes y salientes se guardan para trazabilidad.
-- No vectorizar basura: saludos, confirmaciones y outbounds automáticos no deben entrar a memoria.
-- Los tests deben proteger comportamiento valioso, no mocks decorativos.
+## Reglas Duras
+
+- No crear clases por bot comercial.
+- No meter `if/else` por template.
+- No hardcodear `recepcionista_ai`, `factura_facil`, `seguimiento_ventas`, `agenda_facil`, `documentos_facil` o `cobranza_suave` en runtime.
+- Templates viven en DB/configuracion.
+- Bots viven en DB/configuracion.
+- Actions si pueden y deben vivir en codigo.
+- Si una capacidad modifica el mundo, debe ser Action.
+- Si una accion no existe, no esta habilitada, no tiene proveedor o no puede ejecutarse, registrar guardrail event.
+- No fingir ejecuciones de AI.
+- No duplicar reglas de negocio dentro de subagentes.
+
+## Prioridades Tecnicas
+
+1. PostgreSQL guarda la verdad.
+2. WhatsApp es un canal, no el centro del dominio.
+3. AI interpreta lenguaje, pero el backend valida y audita.
+4. Business knowledge y conversation memory se mantienen separados.
+5. Bot Engine compila prompts desde configuracion y contexto.
+6. Action Executor valida permisos, riesgo e input antes de ejecutar.
+7. Guardrails protegen al negocio y muestran roadmap.
+
+## Estado Del Runtime
+
+Existe una capa `src/agents` con `agent_router`, `agent_runs` y subagentes. Es real, pero transicional. Sirve para routing actual y compatibilidad.
+
+Para nuevas features, preferir:
+
+```text
+Bot Engine + Actions + Prompt Compiler + Guardrails
+```
 
 ## Comandos Base
 
@@ -45,19 +71,4 @@ npm run db:seed
 npm run dev
 ```
 
-## Estado Del MVP
-
-El MVP inicial ya incluye:
-
-- Express + JavaScript ES Modules.
-- PostgreSQL + migración inicial.
-- Seed demo con `solution_template.key = "taqueria_control"` y tenant demo `Margen Sabroso`.
-- Webhook WhatsApp.
-- AI Gateway con `mock_provider`.
-- Memory layer local/mock.
-- Agent router determinístico con subagentes delgados.
-- Módulos operativos genéricos.
-- Dashboard server-rendered.
-- Review queue.
-- Endpoint dev para simular mensajes.
-- Tests unitarios de reglas y funcionales del pipeline inbound.
+No agregar ni versionar `package-lock.json`; este repo usa `.npmrc` con `package-lock=false`.

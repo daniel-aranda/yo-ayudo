@@ -1,0 +1,112 @@
+# Actions
+
+## Objetivo
+
+Una Action es una capacidad ejecutable del Bot Engine. Vive en codigo porque representa algo que el sistema sabe validar, auditar y ejecutar o bloquear.
+
+## Que Es Una Action
+
+Una accion puede:
+
+- crear o actualizar datos.
+- mandar o preparar comunicacion.
+- crear tareas o recordatorios.
+- registrar solicitudes internas.
+- extraer datos de archivos mediante un proveedor.
+- pedir confirmacion humana.
+- preparar capacidades futuras mediante stubs seguros.
+
+## Que No Debe Ser Una Action
+
+No todo texto o razonamiento debe ser accion.
+
+- Redactar una respuesta simple puede vivir en prompt.
+- Razonar sobre una pregunta puede vivir en prompt.
+- Elegir tono o estructura del mensaje puede vivir en prompt.
+- Un caso comercial como `factura_facil` o `recepcionista_ai` no es una accion; es configuracion de bot/template.
+
+## Cuando Crear Una Action
+
+Crear una accion cuando la capacidad:
+
+- modifica datos.
+- crea trabajo para humanos.
+- llama a un proveedor.
+- manda informacion fuera del chat.
+- toca documentos, archivos, pagos, facturacion o llamadas.
+- necesita permisos, auditoria o confirmacion.
+
+Regla corta:
+
+- Si modifica el mundo, debe ser accion.
+- Si solo razona o redacta, puede ser prompt.
+- Si el engine no puede hacerlo, debe registrar guardrail event.
+
+## Contrato Minimo
+
+Cada accion debe declarar:
+
+- `action_id`
+- `nombre`
+- `descripcion`
+- `categoria`
+- `input_schema`
+- `output_schema`
+- `nivel_riesgo`
+- `permisos_requeridos`
+- `handler`
+- `version`
+
+En runtime tambien puede declarar si esta habilitada globalmente. El bot ademas debe tener la accion en sus acciones habilitadas.
+
+## Niveles De Riesgo
+
+### automatico
+
+Puede ejecutarse sin humano si el bot tiene permiso y el input valida.
+
+Ejemplos: guardar nota, crear tarea simple, generar resumen.
+
+### requiere_confirmacion
+
+Debe crear `pending_confirmation` antes de ejecutar si no hay confirmacion humana.
+
+Ejemplos: enviar email, registrar pago, crear solicitud de facturacion, extraer datos sensibles.
+
+### solo_humano
+
+El bot no ejecuta. Solo sugiere o escala.
+
+Ejemplos: llamadas sensibles, acciones legales, operaciones sin proveedor o de alto riesgo.
+
+## Action Audit Logs
+
+`action_audit_logs` registra:
+
+- `action_id`
+- status
+- input
+- output
+- error
+- actor type
+- confirmacion requerida
+- quien confirmo
+- timestamp
+
+El audit log responde: que intento hacer el engine y que paso.
+
+## Guardrail Events
+
+Cuando una accion no existe, no esta habilitada, no tiene proveedor o falla validacion de riesgo, tambien se registra `bot_guardrail_events`.
+
+El guardrail responde: por que el engine no pudo o no debio hacerlo.
+
+## Acciones Stub O Futuras
+
+Una accion futura puede existir como metadata y stub seguro si:
+
+- el producto la quiere ofrecer despues.
+- necesitamos que el engine detecte la intencion.
+- queremos registrar demanda real como capability gap.
+
+El stub no debe fingir ejecucion. Debe devolver `not_implemented`, `pending_provider`, `blocked` o `pending_confirmation` segun aplique.
