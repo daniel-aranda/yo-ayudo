@@ -67,7 +67,9 @@ block content
           each run in router_runs
             div.trace-card
               strong= run.agent_key
-              p= `${run.status} · retrieved ${(run.retrieved_context_json || []).length}`
+              - const retrievedContext = run.retrieved_context_json || {}
+              - const retrievedCount = Array.isArray(retrievedContext) ? retrievedContext.length : ((retrievedContext.business_knowledge || []).length + (retrievedContext.conversation_memory || []).length)
+              p= `${run.status} · retrieved ${retrievedCount}`
               if run.error_message
                 p.trace-badge-error= run.error_message
               details.json-details

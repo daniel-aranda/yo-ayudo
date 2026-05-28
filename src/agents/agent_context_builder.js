@@ -75,21 +75,22 @@ export function build_agent_context(input, retrieved_context) {
       parsed_intent: input.parsed_intent ?? "unknown",
       parsed_json: input.parsed_json ?? {},
     },
-    organization: {
+    organization: input.organization ?? {
       id: input.organization_id ?? null,
     },
-    account: {
+    account: input.account ?? {
       id: input.account_id ?? null,
     },
-    bot: {
+    bot: input.bot ?? {
       id: input.bot_id ?? null,
       type: input.bot_type ?? null,
     },
     bot_definition: input.bot_definition ?? {},
-    contact: {
+    selected_agent: input.selected_agent ?? null,
+    contact: input.contact ?? {
       id: input.contact_id ?? null,
     },
-    conversation: {
+    conversation: input.conversation ?? {
       id: input.conversation_id ?? null,
     },
     conversation_memory: retrieved_context.conversation_memory ?? [],

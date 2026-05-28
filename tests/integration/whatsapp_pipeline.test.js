@@ -121,6 +121,11 @@ describe("WhatsApp inbound pipeline", () => {
     expect(memory_documents.rows[0].embedding_status).toBe("completed");
     expect(agent_runs.rowCount).toBe(1);
     expect(agent_runs.rows[0].agent_key).toBe("purchases_agent");
+    expect(agent_runs.rows[0].selected_agent_id).toBe("purchases_agent");
+    expect(Number(agent_runs.rows[0].routing_confidence)).toBeGreaterThan(0);
+    expect(agent_runs.rows[0].routing_candidates_json.length).toBeGreaterThan(0);
+    expect(agent_runs.rows[0].retrieved_context_json.business_knowledge).toBeDefined();
+    expect(agent_runs.rows[0].retrieved_context_json.conversation_memory).toBeDefined();
   });
 
   it("keeps processing operations when memory store fails", async () => {

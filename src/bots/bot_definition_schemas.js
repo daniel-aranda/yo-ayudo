@@ -15,12 +15,31 @@ export const required_field_schema = z.object({
   required: z.boolean().default(true),
 });
 
+export const response_style_schema = z.object({
+  tone: z.string().default("claro y profesional"),
+  language: z.string().default("es-MX"),
+  max_length: z.number().int().positive().max(2000).default(700),
+  formatting: z.string().default("mensajes cortos de WhatsApp"),
+});
+
 export const agent_definition_schema = z.object({
-  key: key_schema,
+  id: key_schema.optional(),
+  key: key_schema.optional(),
   name: z.string().min(1),
-  role: z.string().min(1),
+  type: z.string().default("custom"),
+  description: z.string().default(""),
+  role: z.string().min(1).default("Atiende conversaciones asignadas por el router."),
+  responsibilities: z.array(z.string().min(1)).default([]),
+  supported_intents: z.array(key_schema).default([]),
+  required_fields: z.array(required_field_schema).default([]),
+  knowledge_scopes: z.array(key_schema).default([]),
+  handoff_rules: z.array(z.string().min(1)).default([]),
+  response_style: response_style_schema.optional(),
+  constraints: z.array(z.string().min(1)).default([]),
   allowed_intents: z.array(key_schema).default([]),
   tools: z.array(key_schema).default([]),
+}).refine((agent) => agent.id || agent.key, {
+  message: "Agent definition requires id or key.",
 });
 
 export const intent_route_schema = z.object({
@@ -44,13 +63,6 @@ export const knowledge_requirement_schema = z.object({
   key: key_schema,
   description: z.string().min(1),
   required: z.boolean().default(false),
-});
-
-export const response_style_schema = z.object({
-  tone: z.string().default("claro y profesional"),
-  language: z.string().default("es-MX"),
-  max_length: z.number().int().positive().max(2000).default(700),
-  formatting: z.string().default("mensajes cortos de WhatsApp"),
 });
 
 export const custom_bot_definition_schema = z.object({

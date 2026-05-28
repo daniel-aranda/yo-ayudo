@@ -100,6 +100,19 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `agent_runs` registra decisiones de routing y futuras ejecuciones de subagentes.
 
+Desde Fase 4, `agent_runs` tambien guarda trazabilidad estructurada de routing:
+
+- `selected_agent_id`: subagente seleccionado. Puede venir de `agent_profiles` o de `bot.definition_json.agent_definitions`.
+- `selected_agent_name`: nombre visible del subagente seleccionado.
+- `selected_agent_type`: `system`, `custom`, `fallback` u otro tipo declarativo.
+- `routing_reason`: explicacion corta de la decision.
+- `routing_confidence`: confianza heuristica normalizada.
+- `routing_candidates_json`: candidatos evaluados con score, origen y señales.
+- `used_context_summary_json`: resumen sin prompts gigantes de business knowledge y conversation memory usadas.
+- `handoff_recommended` y `handoff_reason`: soporte basico de escalamiento humano.
+
+El `agent_key` existente sigue representando el handler ejecutable. Esto mantiene compatibilidad: un subagente custom como `ventas` puede quedar seleccionado en `selected_agent_id`, mientras `agent_key` apunta a `sales_agent` para ejecutar el handler actual.
+
 ## Business Day
 
 `op_business_days` tiene una fila por tenant/sucursal/día.

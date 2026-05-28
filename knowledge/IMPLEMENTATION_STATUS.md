@@ -280,7 +280,7 @@ Verificacion de DB despues del flujo:
 - UI de knowledge management.
 - UI de alta de organization/account/numero/bot.
 - Builder de custom bots con lenguaje humano.
-- Routing inteligente usando `definition_json`.
+- Router LLM real; Fase 4 ya usa `definition_json`, subagentes declarativos, business knowledge y conversation memory con estrategia heuristica.
 - Agentes autónomos con tool calling complejo.
 - Multi-item purchase robusto.
 - Tests HTTP con `supertest` para todos los endpoints principales.
@@ -297,7 +297,8 @@ Verificacion de DB despues del flujo:
 - Las listas del inspector usan queries simples por conversacion para mantener claridad; si crece el volumen, requeriran paginacion y optimizacion.
 - Review resolve guarda resolucion, pero todavia no actualiza hechos operativos.
 - Retrieval local es ranking heurístico, no semántico real.
-- `agent_routing_rules` cubre routing determinístico inicial, no condiciones avanzadas.
+- `agent_routing_rules` queda como fallback legacy; el router nuevo prioriza `bot.definition_json` pero sigue siendo heuristico, no semantico/LLM.
+- Las conversaciones siguen identificadas por tenant/contact/channel; antes de operar muchos numeros por cuenta conviene aislar por numero o bot para evitar mezcla entre bots.
 
 ## Bugs O Deuda Priorizada
 
@@ -314,6 +315,22 @@ Verificacion de DB despues del flujo:
 3. Implementar idempotencia del webhook por `external_message_id`.
 4. Endurecer review queue para aplicar correcciones operativas.
 5. Agregar auth real para dashboard e inspector antes de cualquier piloto fuera de local.
+
+## Fase 4 - Router Multi-Agent
+
+Estado: implementada.
+
+Cambios principales:
+
+- `agent_router` construye un `agent_context` con mensaje, organization, account, bot, `bot_definition`, contact, conversation, `business_knowledge`, `conversation_memory`, estado operacional y canal.
+- `heuristic_agent_routing_strategy` decide sin LLM usando `routing_config`, `agent_definitions`, intencion parseada, knowledge recuperado, memoria recuperada, campos requeridos pendientes y `handoff_policy`.
+- `agent_registry` soporta agentes de sistema, agentes declarativos de `definition_json`, fallback y handoff humano sin crear clases por bot custom.
+- `agent_runs` guarda columnas de trazabilidad: `selected_agent_id`, `selected_agent_name`, `selected_agent_type`, `routing_reason`, `routing_confidence`, `routing_candidates_json`, `used_context_summary_json`, `handoff_recommended` y `handoff_reason`.
+- El handler ejecutable sigue siendo un agente de sistema; el subagente custom seleccionado queda registrado como decision declarativa.
+
+Verificacion:
+
+- `npm test`: OK, 13 archivos y 34 tests.
 
 ## Busquedas De Limpieza
 

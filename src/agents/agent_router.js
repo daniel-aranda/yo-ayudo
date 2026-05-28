@@ -1,12 +1,12 @@
 import { business_knowledge_service as default_business_knowledge_service } from "../knowledge/business_knowledge_service.js";
 import { conversation_memory_service as default_conversation_memory_service } from "../memory/conversation_memory_service.js";
 import { create_agent_run } from "./agent_run_repository.js";
-import { default_agent_by_intent } from "./agent_registry.js";
 import {
   build_agent_context,
   business_knowledge_request_for_message,
   conversation_memory_request_for_message,
 } from "./agent_context_builder.js";
+import { heuristic_agent_routing_strategy } from "./heuristic_agent_routing_strategy.js";
 
 async function find_routing_rule(pool, input) {
   const result = await pool.query(
@@ -43,10 +43,12 @@ export class agent_router {
     pool,
     business_knowledge_service = new default_business_knowledge_service({ pool }),
     conversation_memory_service = new default_conversation_memory_service({ pool }),
+    routing_strategy = new heuristic_agent_routing_strategy(),
   }) {
     this.pool = pool;
     this.business_knowledge_service = business_knowledge_service;
     this.conversation_memory_service = conversation_memory_service;
+    this.routing_strategy = routing_strategy;
   }
 
   async route_message(input) {
@@ -64,20 +66,43 @@ export class agent_router {
     };
     const agent_context = build_agent_context(input, retrieved_context);
     const routing_rule = await find_routing_rule(this.pool, input);
-    const agent_key =
-      routing_rule?.agent_key ?? default_agent_by_intent[input.parsed_intent] ?? "unknown_agent";
-    const reason = routing_rule
-      ? `intent ${input.parsed_intent} matched routing rule`
-      : `intent ${input.parsed_intent} matched default routing`;
-    const output = {
-      agent_key,
-      confidence: routing_rule ? 0.95 : 0.85,
-      reason,
-      context_used: {
-        business_knowledge_count: retrieved_context.business_knowledge.length,
-        conversation_memory_count: retrieved_context.conversation_memory.length,
+    const decision = this.routing_strategy.decide({
+      agent_context,
+      legacy_routing_rule: routing_rule,
+    });
+    const used_context_summary = {
+      business_knowledge_count: retrieved_context.business_knowledge.length,
+      conversation_memory_count: retrieved_context.conversation_memory.length,
+      business_knowledge: retrieved_context.business_knowledge.map((document) => ({
+        id: document.id,
+        scope: document.scope,
+        document_type: document.document_type,
+        score: document.score,
+      })),
+      conversation_memory: retrieved_context.conversation_memory.map((document) => ({
+        id: document.id,
+        scope: document.scope,
+        document_type: document.document_type,
+        score: document.score,
+      })),
+    };
+    const stored_agent_context = {
+      ...agent_context,
+      business_knowledge: {
+        count: retrieved_context.business_knowledge.length,
       },
+      conversation_memory: {
+        count: retrieved_context.conversation_memory.length,
+      },
+    };
+    const output = {
+      ...decision,
+      context_used: used_context_summary,
+    };
+    const runtime_output = {
+      ...output,
       retrieved_context,
+      agent_context,
     };
 
     await create_agent_run(this.pool, {
@@ -88,18 +113,27 @@ export class agent_router {
       message_id: input.message_id,
       bot_id: input.bot_id,
       agent_profile_id: routing_rule?.agent_profile_id ?? null,
-      agent_key,
+      agent_key: decision.agent_key,
       run_type: "route",
       input_json: {
         ...input,
-        agent_context,
+        agent_context: stored_agent_context,
       },
       retrieved_context_json: retrieved_context,
       output_json: output,
+      selected_agent_id: decision.selected_agent_id,
+      selected_agent_name: decision.selected_agent_name,
+      selected_agent_type: decision.selected_agent_type,
+      routing_reason: decision.reason,
+      routing_confidence: decision.confidence,
+      routing_candidates_json: decision.candidates,
+      used_context_summary_json: used_context_summary,
+      handoff_recommended: decision.handoff_recommended,
+      handoff_reason: decision.handoff_reason,
       status: "completed",
       completed_at: new Date().toISOString(),
     });
 
-    return output;
+    return runtime_output;
   }
 }

@@ -97,11 +97,24 @@ Business knowledge responde como opera el negocio. Conversation memory responde 
 Ubicación: `src/agents`
 
 - `agent_router.js`: decide subagente y registra `agent_runs`.
-- `agent_registry.js`: mapea `agent_key` a handler delgado.
+- `agent_registry.js`: registra agentes de sistema, fallback, handoff y mapea el handler ejecutable para agentes declarativos.
 - `agent_context_builder.js`: arma contexto separado para mensaje, bot definition, business knowledge y conversation memory.
+- `heuristic_agent_routing_strategy.js`: estrategia deterministica extensible para elegir subagente sin router LLM.
+- `routing_schemas.js`: contrato Zod de candidatos y decision de routing.
 - `subagents/*`: wrappers que delegan a handlers operativos existentes.
 
-El router sigue siendo deterministico, pero registra `business_knowledge` y `conversation_memory` por separado en `agent_runs.retrieved_context_json`.
+El router sigue siendo deterministico, pero ya no es solo `intent -> agente`. La decision usa:
+
+- `bot.definition_json.supported_intents`
+- `bot.definition_json.agent_definitions`
+- `bot.definition_json.routing_config`
+- `bot.definition_json.handoff_policy`
+- intencion parseada y texto actual
+- `business_knowledge` recuperado
+- `conversation_memory` recuperada
+- fallback legacy de `agent_routing_rules`
+
+El resultado de routing incluye `selected_agent_id`, `selected_agent_name`, `selected_agent_type`, `confidence`, `reason`, `candidates`, `handoff_recommended`, `handoff_reason` y `used_signals`. `agent_runs.retrieved_context_json` conserva `business_knowledge` y `conversation_memory` por separado.
 
 ### Processing Events
 
@@ -134,7 +147,7 @@ Ubicación: `src/bots`
 Tipos:
 
 - `system`: bot predefinido o legacy. Puede usar `bot_profile_id` y flujo operativo existente.
-- `custom`: bot de un account con `definition_json` validado. En esta fase la definicion se carga y se pasa al contexto, pero no cambia el routing deterministico.
+- `custom`: bot de un account con `definition_json` validado. Sus `agent_definitions` describen subagentes declarativos; el router los puede seleccionar sin crear clases por bot.
 
 ## Flujo Inbound
 
@@ -150,12 +163,13 @@ Tipos:
 10. Si hay baja confianza o datos faltantes, crear `review_items`.
 11. Recuperar `business_knowledge` y `conversation_memory` como bloques separados para el router.
 12. Ejecutar `agent_router` si `AGENT_ROUTER_ENABLED=true`.
-13. Ejecutar subagente elegido, que delega a handlers operativos.
-14. Crear conversation memory si `MEMORY_INGESTION_ENABLED=true` y el mensaje vale la pena.
-15. Generar respuesta.
-16. Enviar por WhatsApp si hay credenciales.
-17. Guardar mensaje outbound.
-18. Registrar eventos tecnicos en `processing_events` para inspeccion.
+13. Elegir subagente declarativo o de sistema y guardar decision/candidatos en `agent_runs`.
+14. Ejecutar el handler de sistema asociado al subagente elegido.
+15. Crear conversation memory si `MEMORY_INGESTION_ENABLED=true` y el mensaje vale la pena.
+16. Generar respuesta.
+17. Enviar por WhatsApp si hay credenciales.
+18. Guardar mensaje outbound.
+19. Registrar eventos tecnicos en `processing_events` para inspeccion.
 
 ## Reglas De Diseño
 

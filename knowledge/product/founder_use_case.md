@@ -64,3 +64,29 @@ La definicion del bot no es knowledge del negocio ni memoria conversacional.
 - `conversation_memory`: que ha pasado con este cliente o conversacion. Mensajes relevantes, datos capturados, pendientes, objeciones, decisiones y estado.
 
 Esta separacion permite vender custom bots sin hardcodear clientes y prepara el camino para S3, Bedrock Knowledge Bases, embeddings y retrieval semantico sin obligarlos en el MVP.
+
+## Regla De Producto Fase 4
+
+Un bot custom puede definir subagentes en `definition_json.agent_definitions`.
+
+Ejemplos de subagentes:
+
+- `ventas`
+- `soporte`
+- `documentos`
+- `seguimiento`
+- `intake`
+- `handoff_humano`
+
+El router usa la definicion del bot, `routing_config`, `handoff_policy`, intencion detectada, business knowledge y conversation memory para elegir un subagente. No usa todavia un router LLM; la estrategia actual es heuristica y trazable.
+
+La decision queda en `agent_runs` con:
+
+- agente seleccionado
+- candidatos evaluados
+- razon
+- confianza
+- señales usadas
+- si se recomienda handoff
+
+Esto habilita vender bots custom configurables sin crear codigo por cliente. Lo pendiente es el builder desde lenguaje natural, router LLM real, Bedrock Knowledge Bases real, S3 productivo y vector DB externa.

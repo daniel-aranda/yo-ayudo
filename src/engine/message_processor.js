@@ -237,6 +237,11 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
       bot_id: processing_context.bot?.id ?? null,
       bot_type: processing_context.bot?.bot_type ?? null,
       bot_definition: processing_context.bot?.definition_json ?? {},
+      organization: processing_context.organization,
+      account: processing_context.account,
+      bot: processing_context.bot,
+      contact: processing_context.contact,
+      conversation: processing_context.conversation,
       channel: processing_context.message.channel ?? "whatsapp",
       bot_profile_id: processing_context.bot_profile?.id ?? null,
       solution_template_id: processing_context.bot_profile?.solution_template_id ?? null,
@@ -245,10 +250,24 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
       text_body: processing_context.message.text_body ?? "",
     });
     const agent_handler = handler_for_agent(routing_result.agent_key);
+    const agent_execution_context = {
+      ...processing_context,
+      selected_agent: {
+        id: routing_result.selected_agent_id,
+        name: routing_result.selected_agent_name,
+        type: routing_result.selected_agent_type,
+        executable_agent_key: routing_result.agent_key,
+        handoff_recommended: routing_result.handoff_recommended,
+        handoff_reason: routing_result.handoff_reason,
+      },
+      business_knowledge: routing_result.retrieved_context?.business_knowledge ?? [],
+      conversation_memory: routing_result.retrieved_context?.conversation_memory ?? [],
+      agent_context: routing_result.agent_context,
+    };
 
     return {
       routing_result,
-      handle_result: await agent_handler(processing_context, parsed),
+      handle_result: await agent_handler(agent_execution_context, parsed),
     };
   } catch (error) {
     logger.error({ err: error, message_id: processing_context.message.id }, "agent routing failed");
