@@ -149,6 +149,40 @@ Tipos:
 - `system`: bot predefinido o legacy. Puede usar `bot_profile_id` y flujo operativo existente.
 - `custom`: bot de un account con `definition_json` validado. Sus `agent_definitions` describen subagentes declarativos; el router los puede seleccionar sin crear clases por bot.
 
+### Commercial Platform
+
+Ubicación: `src/commercial`
+
+- `agent_package_catalog.js`: catálogo versionado de paquetes comerciales vendibles.
+- `bot_from_package_service.js`: crea un bot custom desde un paquete, con acciones habilitadas, campos sugeridos, reglas de escalamiento y `definition_json` base.
+- `discovery_interview_catalog.js`: entrevista versionada para diagnóstico AI.
+- `diagnostico_ai_service.js`: crea, actualiza y genera propuesta preliminar para diagnósticos AI.
+- `commercial_routes.js`: endpoints internos JSON para paquetes, diagnósticos, acciones y creación de bots desde paquete.
+
+Los paquetes son oferta comercial, no clases runtime por cliente. El paquete define qué problema se vende y qué acciones/knowledge/campos se recomiendan.
+
+### Actions
+
+Ubicación: `src/actions`
+
+- `action_registry.js`: catálogo de acciones con metadata, schemas, permisos, nivel de riesgo y defaults.
+- `action_execution_service.js`: ejecutor seguro inicial; respeta confirmación y registra auditoría.
+- `action_audit_repository.js`: persiste `action_audit_logs`.
+
+Niveles de riesgo:
+
+- `automatico`: puede ejecutarse sin humano.
+- `requiere_confirmacion`: genera `pending_confirmation` si no hay confirmación.
+- `solo_humano`: el bot solo sugiere; no ejecuta.
+
+OCR y voz están modelados como capacidades. `extraer_datos_de_imagen` tiene contrato para fotos, screenshots, PDFs, tickets, constancias y comprobantes. Las acciones de voz existen como metadata y stubs; no hay proveedor real todavía.
+
+### Voice
+
+Ubicación: `src/voice`
+
+- `proveedor_voz_stub.js`: contrato inicial para iniciar, programar, conectar y consultar llamadas. Devuelve `pending_provider`.
+
 ## Flujo Inbound
 
 1. `POST /webhooks/whatsapp`.
@@ -170,6 +204,23 @@ Tipos:
 17. Enviar por WhatsApp si hay credenciales.
 18. Guardar mensaje outbound.
 19. Registrar eventos tecnicos en `processing_events` para inspeccion.
+
+## Rutas Internas Comerciales
+
+- `GET /internal/agent-packages`
+- `GET /internal/agent-packages/:paquete_id`
+- `GET /internal/actions`
+- `GET /internal/actions/:action_id`
+- `POST /internal/action-executions`
+- `GET /internal/action-audit-logs`
+- `GET /internal/discovery-interview`
+- `POST /internal/bots/from-package`
+- `POST /internal/diagnosticos-ai`
+- `GET /internal/diagnosticos-ai`
+- `GET /internal/diagnosticos-ai/:diagnostico_id`
+- `PATCH /internal/diagnosticos-ai/:diagnostico_id`
+- `POST /internal/diagnosticos-ai/:diagnostico_id/status`
+- `POST /internal/diagnosticos-ai/:diagnostico_id/propuesta-preliminar`
 
 ## Reglas De Diseño
 

@@ -15,12 +15,17 @@ export async function upsert_bot(pool, input) {
         settings_json,
         definition_json,
         definition_version,
-        created_by_user_id
+        created_by_user_id,
+        paquete_id,
+        enabled_actions_json,
+        reglas_escalamiento_json,
+        campos_requeridos_json
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, COALESCE($7, 'whatsapp'),
         COALESCE($8, 'system'), COALESCE($9, 'active'), $10,
-        $11::jsonb, $12::jsonb, COALESCE($13, 1), $14
+        $11::jsonb, $12::jsonb, COALESCE($13, 1), $14,
+        $15, $16::jsonb, $17::jsonb, $18::jsonb
       )
       ON CONFLICT (account_id, slug)
       DO UPDATE SET
@@ -35,6 +40,10 @@ export async function upsert_bot(pool, input) {
         definition_json = EXCLUDED.definition_json,
         definition_version = EXCLUDED.definition_version,
         created_by_user_id = COALESCE(EXCLUDED.created_by_user_id, bots.created_by_user_id),
+        paquete_id = EXCLUDED.paquete_id,
+        enabled_actions_json = EXCLUDED.enabled_actions_json,
+        reglas_escalamiento_json = EXCLUDED.reglas_escalamiento_json,
+        campos_requeridos_json = EXCLUDED.campos_requeridos_json,
         updated_at = now()
       RETURNING *
     `,
@@ -53,6 +62,10 @@ export async function upsert_bot(pool, input) {
       JSON.stringify(input.definition_json ?? {}),
       input.definition_version ?? 1,
       input.created_by_user_id ?? null,
+      input.paquete_id ?? null,
+      JSON.stringify(input.enabled_actions_json ?? []),
+      JSON.stringify(input.reglas_escalamiento_json ?? []),
+      JSON.stringify(input.campos_requeridos_json ?? []),
     ],
   );
 

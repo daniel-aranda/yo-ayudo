@@ -6,6 +6,7 @@ import { logger } from "../shared/logger.js";
 import { format_money } from "../shared/money.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { register_dashboard_routes } from "../dashboard/dashboard_routes.js";
+import { register_commercial_routes } from "../commercial/commercial_routes.js";
 import { register_dev_routes } from "../dev/dev_routes.js";
 import { register_inspector_routes } from "../inspector/inspector_routes.js";
 import { register_review_routes } from "../review/review_routes.js";
@@ -32,6 +33,7 @@ export function create_app() {
 
   register_whatsapp_routes(router);
   register_dashboard_routes(router);
+  register_commercial_routes(router);
   register_inspector_routes(router);
   register_review_routes(router);
   register_dev_routes(router);

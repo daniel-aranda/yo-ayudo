@@ -26,6 +26,13 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `bots.definition_json` guarda la definicion estructurada inicial del bot custom. En fase 2 no ejecuta routing inteligente todavia; queda disponible para runtime, router y trazabilidad futura.
 
+Desde Fase 5, un bot creado desde paquete comercial puede guardar:
+
+- `paquete_id`: paquete comercial de origen.
+- `enabled_actions_json`: acciones habilitadas inicialmente.
+- `reglas_escalamiento_json`: reglas base de escalamiento.
+- `campos_requeridos_json`: campos sugeridos/requeridos para operar el paquete.
+
 `accounts.tenant_id` mantiene la compatibilidad explicita entre el modelo SaaS vendible y el runtime legacy basado en tenants.
 
 `phone_number_bot_assignments` asigna un bot activo a un numero de WhatsApp. En fase 1 la regla de producto es un bot activo por numero; las asignaciones inactivas conservan historial.
@@ -112,6 +119,36 @@ Desde Fase 4, `agent_runs` tambien guarda trazabilidad estructurada de routing:
 - `handoff_recommended` y `handoff_reason`: soporte basico de escalamiento humano.
 
 El `agent_key` existente sigue representando el handler ejecutable. Esto mantiene compatibilidad: un subagente custom como `ventas` puede quedar seleccionado en `selected_agent_id`, mientras `agent_key` apunta a `sales_agent` para ejecutar el handler actual.
+
+### Commercial
+
+- `diagnosticos_ai`
+- `action_audit_logs`
+
+`diagnosticos_ai` guarda diagnósticos vendidos a prospectos o clientes:
+
+- negocio, giro y contacto.
+- vendedor.
+- precio del diagnóstico, moneda, pago y si es acreditable.
+- status comercial.
+- respuestas de entrevista.
+- problemas detectados.
+- oportunidades AI.
+- paquete y acciones recomendadas.
+- precio mensual sugerido.
+- propuesta preliminar estructurada.
+
+`action_audit_logs` registra intentos de ejecución o sugerencia de acciones:
+
+- `action_id`
+- `status`
+- input/output/error
+- `actor_type`
+- si requiere confirmación
+- quién confirmó y cuándo
+- metadata compacta
+
+Las acciones futuras de voz y OCR real no escriben proveedores externos todavía; quedan como contratos y auditoría.
 
 ## Business Day
 

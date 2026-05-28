@@ -282,6 +282,10 @@ Verificacion de DB despues del flujo:
 - Builder de custom bots con lenguaje humano.
 - Router LLM real; Fase 4 ya usa `definition_json`, subagentes declarativos, business knowledge y conversation memory con estrategia heuristica.
 - Agentes autónomos con tool calling complejo.
+- OCR real; Fase 5 solo deja contrato de `extraer_datos_de_imagen`.
+- Voz/Twilio real; Fase 5 solo deja acciones y proveedor stub.
+- Generación PDF de propuesta comercial.
+- UI comercial avanzada para vendedores.
 - Multi-item purchase robusto.
 - Tests HTTP con `supertest` para todos los endpoints principales.
 - Filtros avanzados del inspector por intent/agente/fecha; hay ruta base y estructura, pero no UI completa de filtros.
@@ -299,6 +303,8 @@ Verificacion de DB despues del flujo:
 - Retrieval local es ranking heurístico, no semántico real.
 - `agent_routing_rules` queda como fallback legacy; el router nuevo prioriza `bot.definition_json` pero sigue siendo heuristico, no semantico/LLM.
 - Las conversaciones siguen identificadas por tenant/contact/channel; antes de operar muchos numeros por cuenta conviene aislar por numero o bot para evitar mezcla entre bots.
+- Las rutas internas comerciales usan protección mínima por token en producción; antes de ventas reales necesitan auth/roles.
+- Los handlers de acciones son stubs seguros; todavía no ejecutan tareas reales fuera del audit log.
 
 ## Bugs O Deuda Priorizada
 
@@ -331,6 +337,37 @@ Cambios principales:
 Verificacion:
 
 - `npm test`: OK, 13 archivos y 34 tests.
+
+## Fase 5 - Plataforma Comercial De Paquetes Y Acciones
+
+Estado: implementada base inicial.
+
+Cambios principales:
+
+- Catálogo versionado de paquetes comerciales en `agent_package_catalog`.
+- Action registry con acciones base, acciones de OCR y acciones futuras de voz.
+- Reglas de riesgo: `automatico`, `requiere_confirmacion`, `solo_humano`.
+- `action_execution_service` respeta confirmación y registra `action_audit_logs`.
+- `diagnosticos_ai` guarda diagnósticos comerciales, entrevista, oportunidades, paquete recomendado y propuesta preliminar.
+- Entrevista de descubrimiento versionada en `discovery_interview_catalog`.
+- `bot_from_package_service` crea un bot custom desde paquete con acciones, reglas y campos iniciales.
+- Rutas internas JSON para paquetes, acciones, auditoría, diagnósticos, entrevista y creación de bot desde paquete.
+- `proveedor_voz_stub` prepara contrato futuro de voz sin Twilio real.
+
+Paquetes creados:
+
+- `recepcionista_ai`
+- `seguimiento_ventas`
+- `agenda_facil`
+- `factura_facil`
+- `documentos_facil`
+- `cobranza_suave`
+- `reporte_diario`
+- `llamadas_y_conexion` deshabilitado por default
+
+Verificacion:
+
+- `npm test -- tests/integration/commercial_platform.test.js`: OK, 4 tests.
 
 ## Busquedas De Limpieza
 
