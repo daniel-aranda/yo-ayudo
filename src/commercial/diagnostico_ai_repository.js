@@ -19,6 +19,7 @@ export async function create_diagnostico_ai(pool, input) {
         respuestas_entrevista,
         problemas_detectados,
         oportunidades_ai,
+        bots_recomendados,
         paquete_recomendado,
         acciones_recomendadas,
         precio_mensual_sugerido,
@@ -27,7 +28,7 @@ export async function create_diagnostico_ai(pool, input) {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9,
         COALESCE($10, 400), COALESCE($11, 'MXN'), COALESCE($12, false), COALESCE($13, true),
-        COALESCE($14, 'nuevo'), $15::jsonb, $16::jsonb, $17::jsonb, $18, $19::jsonb, $20, $21::jsonb
+        COALESCE($14, 'nuevo'), $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20::jsonb, $21, $22::jsonb
       )
       RETURNING *
     `,
@@ -49,6 +50,7 @@ export async function create_diagnostico_ai(pool, input) {
       JSON.stringify(input.respuestas_entrevista ?? {}),
       JSON.stringify(input.problemas_detectados ?? []),
       JSON.stringify(input.oportunidades_ai ?? []),
+      JSON.stringify(input.bots_recomendados ?? []),
       input.paquete_recomendado ?? null,
       JSON.stringify(input.acciones_recomendadas ?? []),
       input.precio_mensual_sugerido ?? null,
@@ -135,10 +137,11 @@ export async function update_diagnostico_ai(pool, diagnostico_id, patch) {
         respuestas_entrevista = $15::jsonb,
         problemas_detectados = $16::jsonb,
         oportunidades_ai = $17::jsonb,
-        paquete_recomendado = $18,
-        acciones_recomendadas = $19::jsonb,
-        precio_mensual_sugerido = $20,
-        propuesta_resumen = $21::jsonb,
+        bots_recomendados = $18::jsonb,
+        paquete_recomendado = $19,
+        acciones_recomendadas = $20::jsonb,
+        precio_mensual_sugerido = $21,
+        propuesta_resumen = $22::jsonb,
         updated_at = now()
       WHERE diagnostico_id = $1
       RETURNING *
@@ -161,6 +164,7 @@ export async function update_diagnostico_ai(pool, diagnostico_id, patch) {
       JSON.stringify(next.respuestas_entrevista ?? {}),
       JSON.stringify(next.problemas_detectados ?? []),
       JSON.stringify(next.oportunidades_ai ?? []),
+      JSON.stringify(next.bots_recomendados ?? []),
       next.paquete_recomendado ?? null,
       JSON.stringify(next.acciones_recomendadas ?? []),
       next.precio_mensual_sugerido ?? null,

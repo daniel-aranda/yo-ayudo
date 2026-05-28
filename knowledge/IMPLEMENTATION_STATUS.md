@@ -338,23 +338,25 @@ Verificacion:
 
 - `npm test`: OK, 13 archivos y 34 tests.
 
-## Fase 5 - Plataforma Comercial De Paquetes Y Acciones
+## Fase 5 - Bot Engine Configurable Y Acciones
 
-Estado: implementada base inicial.
+Estado: corregida hacia Bot Engine genérico.
 
 Cambios principales:
 
-- Catálogo versionado de paquetes comerciales en `agent_package_catalog`.
-- Action registry con acciones base, acciones de OCR y acciones futuras de voz.
+- `bot_templates` en DB para ejemplos editables; no hay clases ni lógica hardcodeada por template.
+- `bot_configuration_service` crea y actualiza bots configurables desde prompts, reglas, knowledge ids y acciones.
+- `prompt_compiler` compila prompt final desde bot config, knowledge, memoria y acciones disponibles.
+- Action registry en código con acciones base, OCR y acciones futuras de voz.
 - Reglas de riesgo: `automatico`, `requiere_confirmacion`, `solo_humano`.
-- `action_execution_service` respeta confirmación y registra `action_audit_logs`.
-- `diagnosticos_ai` guarda diagnósticos comerciales, entrevista, oportunidades, paquete recomendado y propuesta preliminar.
-- Entrevista de descubrimiento versionada en `discovery_interview_catalog`.
-- `bot_from_package_service` crea un bot custom desde paquete con acciones, reglas y campos iniciales.
-- Rutas internas JSON para paquetes, acciones, auditoría, diagnósticos, entrevista y creación de bot desde paquete.
+- `action_execution_service` valida registry, input schema, acciones habilitadas por bot, riesgo y registra `action_audit_logs`.
+- `bot_guardrail_events` registra capability gaps y bloqueos.
+- `diagnosticos_ai` guarda diagnósticos comerciales, entrevista, oportunidades, bots recomendados y propuesta preliminar.
+- Entrevista de descubrimiento versionada en `discovery_questions`.
+- Rutas internas JSON para templates, bots configurables, acciones, auditoría, guardrails, diagnósticos, entrevista y compilación de prompt.
 - `proveedor_voz_stub` prepara contrato futuro de voz sin Twilio real.
 
-Paquetes creados:
+Templates seed editables:
 
 - `recepcionista_ai`
 - `seguimiento_ventas`
@@ -362,12 +364,11 @@ Paquetes creados:
 - `factura_facil`
 - `documentos_facil`
 - `cobranza_suave`
-- `reporte_diario`
-- `llamadas_y_conexion` deshabilitado por default
 
 Verificacion:
 
 - `npm test -- tests/integration/commercial_platform.test.js`: OK, 4 tests.
+- `npm test`: OK, 14 archivos y 38 tests.
 
 ## Busquedas De Limpieza
 

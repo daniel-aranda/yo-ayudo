@@ -15,47 +15,6 @@ const status_validos = new Set([
   "reembolsado",
 ]);
 
-function inferir_paquete(respuestas = {}, oportunidades = []) {
-  const texto = JSON.stringify({ respuestas, oportunidades }).toLowerCase();
-
-  if (texto.includes("factura") || texto.includes("fiscal")) {
-    return "factura_facil";
-  }
-
-  if (texto.includes("documento") || texto.includes("pdf") || texto.includes("captura")) {
-    return "documentos_facil";
-  }
-
-  if (texto.includes("cita") || texto.includes("agenda")) {
-    return "agenda_facil";
-  }
-
-  if (texto.includes("cobranza") || texto.includes("pago")) {
-    return "cobranza_suave";
-  }
-
-  if (texto.includes("seguimiento") || texto.includes("prospecto") || texto.includes("venta")) {
-    return "seguimiento_ventas";
-  }
-
-  return "recepcionista_ai";
-}
-
-function precio_sugerido(paquete_id) {
-  const precios = {
-    recepcionista_ai: 1500,
-    seguimiento_ventas: 2500,
-    agenda_facil: 2500,
-    factura_facil: 3000,
-    documentos_facil: 3500,
-    cobranza_suave: 3500,
-    reporte_diario: 1500,
-    llamadas_y_conexion: 4000,
-  };
-
-  return precios[paquete_id] ?? 2000;
-}
-
 export class diagnostico_ai_service {
   constructor({ pool }) {
     this.pool = pool;
@@ -96,19 +55,21 @@ export class diagnostico_ai_service {
       return null;
     }
 
-    const paquete_id = diagnostico.paquete_recomendado || inferir_paquete(
-      diagnostico.respuestas_entrevista,
-      diagnostico.oportunidades_ai,
-    );
-    const precio = diagnostico.precio_mensual_sugerido ?? precio_sugerido(paquete_id);
+    const bots_recomendados = diagnostico.bots_recomendados?.length
+      ? diagnostico.bots_recomendados
+      : diagnostico.paquete_recomendado
+        ? [diagnostico.paquete_recomendado]
+        : [];
+    const precio = diagnostico.precio_mensual_sugerido ?? 2000;
     const propuesta_resumen = {
       negocio_nombre: diagnostico.negocio_nombre,
       giro: diagnostico.giro,
-      paquete_recomendado: paquete_id,
+      bots_recomendados,
       precio_mensual_sugerido: precio,
       diagnostico_acreditable: diagnostico.acreditable,
       resumen:
-        `Propuesta preliminar para ${diagnostico.negocio_nombre}: iniciar con ${paquete_id} ` +
+        `Propuesta preliminar para ${diagnostico.negocio_nombre}: iniciar con bot configurable ` +
+        `${bots_recomendados[0] ?? "por definir"} ` +
         `por MXN ${precio} mensuales, acreditando diagnóstico si aplica.`,
       siguientes_pasos: [
         "Validar knowledge base mínima.",
@@ -118,7 +79,8 @@ export class diagnostico_ai_service {
     };
 
     return update_diagnostico_ai(this.pool, diagnostico_id, {
-      paquete_recomendado: paquete_id,
+      bots_recomendados,
+      paquete_recomendado: bots_recomendados[0] ?? null,
       precio_mensual_sugerido: precio,
       propuesta_resumen,
       status: "propuesta_lista",

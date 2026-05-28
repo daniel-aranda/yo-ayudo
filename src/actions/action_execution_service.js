@@ -1,5 +1,50 @@
 import { create_action_audit_log } from "./action_audit_repository.js";
 import { get_action } from "./action_registry.js";
+import { get_bot_by_id } from "../bots/bot_repository.js";
+import { create_bot_guardrail_event } from "../bot_engine/bot_guardrail_event_repository.js";
+
+function schema_type_matches(schema, value) {
+  if (!schema?.type) {
+    return true;
+  }
+
+  if (schema.type === "array") {
+    return Array.isArray(value);
+  }
+
+  if (schema.type === "object") {
+    return value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  return typeof value === schema.type;
+}
+
+function validate_input_schema(schema, input) {
+  const errors = [];
+  const value = input ?? {};
+
+  if (!schema_type_matches(schema, value)) {
+    return [`Input debe ser ${schema.type}.`];
+  }
+
+  for (const required_key of schema.required ?? []) {
+    if (value[required_key] === undefined || value[required_key] === null || value[required_key] === "") {
+      errors.push(`Falta campo requerido: ${required_key}`);
+    }
+  }
+
+  for (const [key, property_schema] of Object.entries(schema.properties ?? {})) {
+    if (value[key] !== undefined && value[key] !== null && !schema_type_matches(property_schema, value[key])) {
+      errors.push(`Campo ${key} debe ser ${property_schema.type}.`);
+    }
+  }
+
+  return errors;
+}
+
+function enabled_actions_for_bot(bot) {
+  return new Set(bot?.acciones_habilitadas_json ?? bot?.enabled_actions_json ?? []);
+}
 
 function pending_confirmation_result(action, input) {
   return {
@@ -16,7 +61,7 @@ function pending_confirmation_result(action, input) {
 
 function human_only_result(action) {
   return {
-    status: "solo_humano",
+    status: "blocked",
     action_id: action.action_id,
     confirmation_required: true,
     output: {
@@ -59,6 +104,11 @@ export class action_execution_service {
 
     if (!action) {
       const output = { message: `Acción desconocida: ${input.action_id}` };
+      await this.create_guardrail(input, {
+        tipo: "accion_no_disponible",
+        descripcion: output.message,
+        severidad: "media",
+      });
       const audit_log = await create_action_audit_log(this.pool, {
         ...input,
         status: "unknown_action",
@@ -71,14 +121,66 @@ export class action_execution_service {
       return { status: "unknown_action", action_id: input.action_id, output, audit_log };
     }
 
+    if (action.habilitada === false) {
+      return this.block_with_guardrail(input, action, {
+        tipo: "accion_no_disponible",
+        status: "blocked",
+        descripcion: `La acción ${action.action_id} está deshabilitada en el registry.`,
+        severidad: "alta",
+      });
+    }
+
+    const bot = input.bot_id ? await get_bot_by_id(this.pool, input.bot_id) : null;
+
+    if (bot && !enabled_actions_for_bot(bot).has(action.action_id)) {
+      return this.block_with_guardrail(input, action, {
+        tipo: "accion_no_habilitada",
+        status: "blocked",
+        descripcion: `El bot no tiene habilitada la acción ${action.action_id}.`,
+        severidad: "media",
+      });
+    }
+
+    const schema_errors = validate_input_schema(action.input_schema, input.input_json ?? {});
+
+    if (schema_errors.length) {
+      return this.block_with_guardrail(input, action, {
+        tipo: "input_invalido",
+        status: "failed",
+        descripcion: schema_errors.join("; "),
+        severidad: "media",
+      });
+    }
+
     let result;
 
     if (action.nivel_riesgo === "solo_humano") {
+      await this.create_guardrail(input, {
+        tipo: "riesgo_bloqueado",
+        action_id: action.action_id,
+        descripcion: `La acción ${action.action_id} está marcada como solo_humano.`,
+        severidad: "alta",
+      });
       result = human_only_result(action);
     } else if (action.nivel_riesgo === "requiere_confirmacion" && !input.confirmed_by) {
+      await this.create_guardrail(input, {
+        tipo: "requiere_confirmacion",
+        action_id: action.action_id,
+        descripcion: `La acción ${action.action_id} requiere confirmación humana.`,
+        severidad: "media",
+      });
       result = pending_confirmation_result(action, input.input_json ?? {});
     } else {
       result = stub_result(action);
+
+      if (result.status === "pending_provider") {
+        await this.create_guardrail(input, {
+          tipo: "proveedor_no_configurado",
+          action_id: action.action_id,
+          descripcion: `La acción ${action.action_id} requiere un proveedor no configurado.`,
+          severidad: "media",
+        });
+      }
     }
 
     const audit_log = await create_action_audit_log(this.pool, {
@@ -103,5 +205,54 @@ export class action_execution_service {
     });
 
     return { ...result, audit_log };
+  }
+
+  async block_with_guardrail(input, action, event) {
+    await this.create_guardrail(input, {
+      ...event,
+      action_id: action?.action_id ?? input.action_id,
+    });
+    const output = { message: event.descripcion };
+    const audit_log = await create_action_audit_log(this.pool, {
+      organization_id: input.organization_id,
+      account_id: input.account_id,
+      bot_id: input.bot_id,
+      conversation_id: input.conversation_id,
+      message_id: input.message_id,
+      action_id: action?.action_id ?? input.action_id,
+      status: event.status,
+      input_json: input.input_json ?? {},
+      output_json: output,
+      error: event.descripcion,
+      actor_type: input.actor_type ?? "system",
+      actor_id: input.actor_id ?? null,
+      confirmation_required: false,
+      metadata_json: {
+        guardrail_tipo: event.tipo,
+      },
+    });
+
+    return {
+      status: event.status,
+      action_id: action?.action_id ?? input.action_id,
+      output,
+      audit_log,
+    };
+  }
+
+  async create_guardrail(input, event) {
+    return create_bot_guardrail_event(this.pool, {
+      organization_id: input.organization_id,
+      account_id: input.account_id,
+      bot_id: input.bot_id,
+      conversation_id: input.conversation_id,
+      tipo: event.tipo,
+      action_id: event.action_id ?? input.action_id ?? null,
+      accion_sugerida: input.accion_sugerida ?? null,
+      descripcion: event.descripcion,
+      prompt_fragment: input.prompt_fragment ?? null,
+      input_intentado: input.input_json ?? {},
+      severidad: event.severidad ?? "media",
+    });
   }
 }

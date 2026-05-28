@@ -149,24 +149,31 @@ Tipos:
 - `system`: bot predefinido o legacy. Puede usar `bot_profile_id` y flujo operativo existente.
 - `custom`: bot de un account con `definition_json` validado. Sus `agent_definitions` describen subagentes declarativos; el router los puede seleccionar sin crear clases por bot.
 
-### Commercial Platform
+### Bot Engine
+
+Ubicación: `src/bot_engine`
+
+- `bot_configuration_service.js`: crea/lista/actualiza bots configurables desde input directo o `bot_templates`.
+- `bot_template_repository.js`: lee templates editables desde DB.
+- `prompt_compiler.js`: compila prompt final desde bot config, knowledge, memoria y acciones disponibles.
+- `bot_guardrail_event_repository.js`: registra capability gaps y bloqueos de guardrail.
+- `discovery_question_repository.js`: lee entrevista de descubrimiento versionada desde DB.
+
+El código es motor genérico. Los bots y templates viven como configuración en DB. No hay clases ni branches por `recepcionista_ai`, `factura_facil` u otros nombres comerciales.
+
+### Commercial Diagnostics
 
 Ubicación: `src/commercial`
 
-- `agent_package_catalog.js`: catálogo versionado de paquetes comerciales vendibles.
-- `bot_from_package_service.js`: crea un bot custom desde un paquete, con acciones habilitadas, campos sugeridos, reglas de escalamiento y `definition_json` base.
-- `discovery_interview_catalog.js`: entrevista versionada para diagnóstico AI.
 - `diagnostico_ai_service.js`: crea, actualiza y genera propuesta preliminar para diagnósticos AI.
-- `commercial_routes.js`: endpoints internos JSON para paquetes, diagnósticos, acciones y creación de bots desde paquete.
-
-Los paquetes son oferta comercial, no clases runtime por cliente. El paquete define qué problema se vende y qué acciones/knowledge/campos se recomiendan.
+- `commercial_routes.js`: endpoints internos JSON para bots configurables, templates, diagnósticos, acciones, auditoría, entrevista, prompt compile y guardrail events.
 
 ### Actions
 
 Ubicación: `src/actions`
 
 - `action_registry.js`: catálogo de acciones con metadata, schemas, permisos, nivel de riesgo y defaults.
-- `action_execution_service.js`: ejecutor seguro inicial; respeta confirmación y registra auditoría.
+- `action_execution_service.js`: ejecutor genérico; valida registry, schema, acciones habilitadas por bot, riesgo y registra auditoría/guardrails.
 - `action_audit_repository.js`: persiste `action_audit_logs`.
 
 Niveles de riesgo:
@@ -207,14 +214,20 @@ Ubicación: `src/voice`
 
 ## Rutas Internas Comerciales
 
-- `GET /internal/agent-packages`
-- `GET /internal/agent-packages/:paquete_id`
 - `GET /internal/actions`
 - `GET /internal/actions/:action_id`
 - `POST /internal/action-executions`
 - `GET /internal/action-audit-logs`
+- `GET /internal/guardrail-events`
 - `GET /internal/discovery-interview`
-- `POST /internal/bots/from-package`
+- `GET /internal/bot-templates`
+- `GET /internal/bot-templates/:template_id`
+- `GET /internal/bots`
+- `POST /internal/bots`
+- `GET /internal/bots/:bot_id`
+- `PATCH /internal/bots/:bot_id`
+- `POST /internal/bots/:bot_id/actions/:action_id`
+- `POST /internal/bots/:bot_id/compile-prompt`
 - `POST /internal/diagnosticos-ai`
 - `GET /internal/diagnosticos-ai`
 - `GET /internal/diagnosticos-ai/:diagnostico_id`

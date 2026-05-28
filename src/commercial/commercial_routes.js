@@ -3,10 +3,12 @@ import { pool } from "../db/client.js";
 import { action_execution_service } from "../actions/action_execution_service.js";
 import { list_action_audit_logs } from "../actions/action_audit_repository.js";
 import { get_action, list_actions } from "../actions/action_registry.js";
-import { bot_from_package_service } from "./bot_from_package_service.js";
-import { get_agent_package, list_agent_packages } from "./agent_package_catalog.js";
+import { bot_configuration_service } from "../bot_engine/bot_configuration_service.js";
+import { get_bot_template, list_bot_templates } from "../bot_engine/bot_template_repository.js";
+import { list_bot_guardrail_events } from "../bot_engine/bot_guardrail_event_repository.js";
+import { prompt_compiler } from "../bot_engine/prompt_compiler.js";
+import { get_discovery_interview_from_db } from "../bot_engine/discovery_question_repository.js";
 import { diagnostico_ai_service } from "./diagnostico_ai_service.js";
-import { get_discovery_interview } from "./discovery_interview_catalog.js";
 
 function internal_auth(request, response, next) {
   if (
@@ -28,25 +30,36 @@ function route_value(value) {
 export function register_commercial_routes(router, dependencies = {}) {
   const route_pool = dependencies.pool ?? pool;
   const diagnosticos = new diagnostico_ai_service({ pool: route_pool });
-  const bot_service = new bot_from_package_service({ pool: route_pool });
+  const bot_service = new bot_configuration_service({ pool: route_pool });
   const actions = new action_execution_service({ pool: route_pool });
+  const compiler = new prompt_compiler({ pool: route_pool });
 
-  router.get("/internal/agent-packages", internal_auth, (request, response) => {
-    response.json({
-      ok: true,
-      packages: list_agent_packages({ include_disabled: request.query.include_disabled === "true" }),
-    });
+  router.get("/internal/bot-templates", internal_auth, async (request, response, next) => {
+    try {
+      response.json({
+        ok: true,
+        templates: await list_bot_templates(route_pool, {
+          include_disabled: request.query.include_disabled === "true",
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
-  router.get("/internal/agent-packages/:paquete_id", internal_auth, (request, response) => {
-    const paquete = get_agent_package(route_value(request.params.paquete_id));
+  router.get("/internal/bot-templates/:template_id", internal_auth, async (request, response, next) => {
+    try {
+      const template = await get_bot_template(route_pool, route_value(request.params.template_id));
 
-    if (!paquete) {
-      response.status(404).json({ ok: false, error: "package_not_found" });
-      return;
+      if (!template) {
+        response.status(404).json({ ok: false, error: "template_not_found" });
+        return;
+      }
+
+      response.json({ ok: true, template });
+    } catch (error) {
+      next(error);
     }
-
-    response.json({ ok: true, package: paquete });
   });
 
   router.get("/internal/actions", internal_auth, (_request, response) => {
@@ -66,7 +79,7 @@ export function register_commercial_routes(router, dependencies = {}) {
 
   router.post("/internal/action-executions", internal_auth, async (request, response, next) => {
     try {
-      const result = await actions.execute_action(request.body ?? {});
+      const result = await actions.execute_action({ ...(request.body ?? {}), actor_type: request.body?.actor_type ?? "system" });
       response.json({ ok: true, result });
     } catch (error) {
       next(error);
@@ -88,14 +101,116 @@ export function register_commercial_routes(router, dependencies = {}) {
     }
   });
 
-  router.get("/internal/discovery-interview", internal_auth, (_request, response) => {
-    response.json({ ok: true, interview: get_discovery_interview() });
+  router.get("/internal/guardrail-events", internal_auth, async (request, response, next) => {
+    try {
+      const events = await list_bot_guardrail_events(route_pool, {
+        organization_id: request.query.organization_id,
+        account_id: request.query.account_id,
+        bot_id: request.query.bot_id,
+        tipo: request.query.tipo,
+        status: request.query.status,
+        limit: request.query.limit ? Number(request.query.limit) : 100,
+      });
+      response.json({ ok: true, events });
+    } catch (error) {
+      next(error);
+    }
   });
 
-  router.post("/internal/bots/from-package", internal_auth, async (request, response, next) => {
+  router.get("/internal/discovery-interview", internal_auth, async (_request, response, next) => {
     try {
-      const result = await bot_service.create_bot_from_package(request.body ?? {});
+      response.json({ ok: true, interview: await get_discovery_interview_from_db(route_pool) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/internal/bots", internal_auth, async (request, response, next) => {
+    try {
+      const bots = await bot_service.list_bots({
+        account_id: request.query.account_id,
+        limit: request.query.limit ? Number(request.query.limit) : 100,
+      });
+      response.json({ ok: true, bots });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/internal/bots", internal_auth, async (request, response, next) => {
+    try {
+      const result = await bot_service.create_configurable_bot(request.body ?? {});
       response.status(201).json({ ok: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/internal/bots/:bot_id", internal_auth, async (request, response, next) => {
+    try {
+      const bot = await bot_service.get_bot(route_value(request.params.bot_id));
+
+      if (!bot) {
+        response.status(404).json({ ok: false, error: "bot_not_found" });
+        return;
+      }
+
+      response.json({ ok: true, bot });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/internal/bots/:bot_id", internal_auth, async (request, response, next) => {
+    try {
+      const bot = await bot_service.update_configurable_bot(route_value(request.params.bot_id), request.body ?? {});
+
+      if (!bot) {
+        response.status(404).json({ ok: false, error: "bot_not_found" });
+        return;
+      }
+
+      response.json({ ok: true, bot });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/internal/bots/:bot_id/actions/:action_id", internal_auth, async (request, response, next) => {
+    try {
+      const bot = await bot_service.set_action_enabled(
+        route_value(request.params.bot_id),
+        route_value(request.params.action_id),
+        request.body.enabled !== false,
+      );
+
+      if (!bot) {
+        response.status(404).json({ ok: false, error: "bot_not_found" });
+        return;
+      }
+
+      response.json({ ok: true, bot });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/internal/bots/:bot_id/compile-prompt", internal_auth, async (request, response, next) => {
+    try {
+      const bot = await bot_service.get_bot(route_value(request.params.bot_id));
+
+      if (!bot) {
+        response.status(404).json({ ok: false, error: "bot_not_found" });
+        return;
+      }
+
+      const compiled = await compiler.record_compilation({
+        bot,
+        conversation_id: request.body.conversation_id,
+        business_knowledge: request.body.business_knowledge ?? [],
+        conversation_memory: request.body.conversation_memory ?? [],
+      });
+      response.json({ ok: true, compiled });
     } catch (error) {
       next(error);
     }

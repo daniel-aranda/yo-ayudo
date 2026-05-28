@@ -26,12 +26,20 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `bots.definition_json` guarda la definicion estructurada inicial del bot custom. En fase 2 no ejecuta routing inteligente todavia; queda disponible para runtime, router y trazabilidad futura.
 
-Desde Fase 5, un bot creado desde paquete comercial puede guardar:
+Desde Fase 5, un bot configurable puede guardar:
 
-- `paquete_id`: paquete comercial de origen.
-- `enabled_actions_json`: acciones habilitadas inicialmente.
+- `prompt_base`: instrucción base editable del bot.
+- `instrucciones_operativas`: reglas operativas del negocio.
+- `tono`: estilo de respuesta.
+- `objetivos_json`: objetivos configurables.
+- `knowledge_base_ids_json`: knowledge bases asociadas.
+- `acciones_habilitadas_json`: acciones que el bot puede solicitar.
+- `reglas_guardrail_json`: reglas de seguridad.
 - `reglas_escalamiento_json`: reglas base de escalamiento.
-- `campos_requeridos_json`: campos sugeridos/requeridos para operar el paquete.
+- `campos_requeridos_json`: campos sugeridos/requeridos.
+- `memoria_habilitada`: permite activar/desactivar uso de memoria.
+
+`paquete_id` queda como compatibilidad de Fase 5 inicial y se usa como referencia de `template_id` de origen cuando existe.
 
 `accounts.tenant_id` mantiene la compatibilidad explicita entre el modelo SaaS vendible y el runtime legacy basado en tenants.
 
@@ -124,6 +132,10 @@ El `agent_key` existente sigue representando el handler ejecutable. Esto mantien
 
 - `diagnosticos_ai`
 - `action_audit_logs`
+- `bot_templates`
+- `discovery_questions`
+- `bot_prompt_compilations`
+- `bot_guardrail_events`
 
 `diagnosticos_ai` guarda diagnósticos vendidos a prospectos o clientes:
 
@@ -134,7 +146,7 @@ El `agent_key` existente sigue representando el handler ejecutable. Esto mantien
 - respuestas de entrevista.
 - problemas detectados.
 - oportunidades AI.
-- paquete y acciones recomendadas.
+- bots/templates recomendados y acciones recomendadas.
 - precio mensual sugerido.
 - propuesta preliminar estructurada.
 
@@ -149,6 +161,22 @@ El `agent_key` existente sigue representando el handler ejecutable. Esto mantien
 - metadata compacta
 
 Las acciones futuras de voz y OCR real no escriben proveedores externos todavía; quedan como contratos y auditoría.
+
+`bot_templates` guarda ejemplos editables como `recepcionista_ai`, `seguimiento_ventas`, `agenda_facil`, `factura_facil`, `documentos_facil` y `cobranza_suave`. Son datos, no lógica de código.
+
+`discovery_questions` guarda la entrevista de diagnóstico como configuración versionada.
+
+`bot_prompt_compilations` guarda metadata auditable del prompt compilado: bot, conversación, versión, acciones disponibles y knowledge usado. No guarda prompts gigantes completos.
+
+`bot_guardrail_events` registra capability gaps:
+
+- acción no disponible.
+- acción no habilitada.
+- requiere confirmación.
+- riesgo bloqueado.
+- proveedor no configurado.
+- input inválido.
+- permiso insuficiente.
 
 ## Business Day
 

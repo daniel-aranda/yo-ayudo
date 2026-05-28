@@ -93,9 +93,9 @@ Esto habilita vender bots custom configurables sin crear codigo por cliente. Lo 
 
 ## Regla De Producto Fase 5
 
-YoAyudo no se vende como "bots de WhatsApp"; se vende como paquetes de agentes AI para negocios.
+YoAyudo no se vende como "bots de WhatsApp"; se vende como bots configurables con acciones reales, knowledge, prompts y guardrails.
 
-Paquetes iniciales:
+Templates iniciales editables:
 
 - `recepcionista_ai`
 - `seguimiento_ventas`
@@ -103,10 +103,8 @@ Paquetes iniciales:
 - `factura_facil`
 - `documentos_facil`
 - `cobranza_suave`
-- `reporte_diario`
-- `llamadas_y_conexion` como premium futuro deshabilitado por default
 
-Un paquete define casos de uso, acciones requeridas/opcionales, knowledge base sugerida, campos recomendados, reglas de escalamiento, complejidad y precio sugerido. Desde un paquete se puede crear un bot custom con `definition_json`, acciones habilitadas y checklist inicial.
+Un template define configuración sugerida: prompt base, acciones sugeridas, knowledge sugerido, campos recomendados y reglas. Desde un template se puede crear un bot custom, pero el engine no tiene lógica especial por template.
 
 La capa de acciones separa valor real de conversación:
 
@@ -114,6 +112,6 @@ La capa de acciones separa valor real de conversación:
 - acciones con confirmación como enviar email, facturación, pagos u OCR sensible.
 - acciones solo humano o futuras como llamadas y conexión telefónica.
 
-Los diagnósticos AI de $400 se guardan como entidad comercial. Permiten registrar entrevista, problemas detectados, oportunidades, paquete recomendado, acciones recomendadas y propuesta preliminar. El diagnóstico puede acreditarse al primer mes.
+Los diagnósticos AI de $400 se guardan como entidad comercial. Permiten registrar entrevista, problemas detectados, oportunidades, bots/templates recomendados, acciones recomendadas y propuesta preliminar. El diagnóstico puede acreditarse al primer mes.
 
 OCR queda como capacidad clave con contrato para fotos, screenshots, PDFs, tickets, constancias y comprobantes. Voz/Twilio queda preparada como proveedor futuro, sin credenciales ni integración real.
