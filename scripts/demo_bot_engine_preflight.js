@@ -52,26 +52,30 @@ try {
     bot_id: bot.id,
     modo_test: true,
     mensaje:
-      "Registra que hablé con Taller El Rayo. Están interesados en un bot que dé seguimiento a cotizaciones. Crea tarea para llamar mañana.",
-  });
-  const gap_result = await tester.test_message({
-    organization_id: account.organization_id,
-    account_id: account.id,
-    bot_id: bot.id,
-    modo_test: true,
-    mensaje: "También manda un email y programa una llamada automática.",
+      "Registra este prospecto: Clínica Dental Sonrisa. Llegó por recomendación. Quiere responder WhatsApp fuera de horario y confirmar citas. Crea una tarea para llamarle mañana y prepara un resumen del posible diagnóstico. También intenta programar una llamada automática.",
   });
   const audit_logs = await list_action_audit_logs(pool, { account_id: account.id, bot_id: bot.id, limit: 20 });
   const guardrail_events = await list_bot_guardrail_events(pool, { account_id: account.id, bot_id: bot.id, limit: 20 });
 
+  print_section("Organization/account", { organization_id: account.organization_id, account_id: account.id, account_name: account.name });
   print_section("Bot", { id: bot.id, slug: bot.slug, name: bot.name });
+  print_section("Prompt compilation", { prompt_compilation_id: result.prompt_compilation_id });
+  print_section("Acciones disponibles", result.acciones_disponibles.map((action) => action.action_id));
   print_section("Respuesta", result.respuesta);
-  print_section("Respuesta con capability gaps", gap_result.respuesta);
   print_section("Action requests", result.action_requests);
   print_section("Actions ejecutadas", result.actions_ejecutadas.map((action) => ({
     action_id: action.action_id,
     status: action.status,
     output: action.output,
+  })));
+  print_section("Actions pendientes de confirmacion", result.actions_pendientes_confirmacion.map((action) => ({
+    action_id: action.action_id,
+    status: action.status,
+  })));
+  print_section("Guardrail events generados en esta prueba", result.guardrail_events_generados.map((event) => ({
+    tipo: event.tipo,
+    action_id: event.action_id,
+    descripcion: event.descripcion,
   })));
   print_section("Audit logs", audit_logs.map((log) => ({
     action_id: log.action_id,

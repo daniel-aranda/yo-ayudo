@@ -16,7 +16,7 @@ describe("whatsapp_identity_resolver", () => {
     expect(identity.whatsapp_phone_number.id).toBe(phone_number.rows[0].id);
     expect(identity.phone_number_bot_assignment.id).toBe(assignment.rows[0].id);
     expect(identity.organization.name).toBe("YoAyudo Demo");
-    expect(identity.account.name).toBe("Demo Account");
+    expect(identity.account.name).toBe("YoAyudo Ventas");
     expect(identity.account.tenant_id).toBe(identity.tenant.id);
     expect(identity.bot.id).toBe(assignment.rows[0].bot_id);
 

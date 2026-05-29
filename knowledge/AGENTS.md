@@ -27,6 +27,7 @@ Tambien utiles:
 - `knowledge/architecture/agents.md` para entender routing legacy/transicional.
 - `knowledge/roadmap/next.md` para prioridades inmediatas.
 - `knowledge/testing/founder_preflight_checklist.md` para validar el primer flujo interno.
+- `knowledge/testing/founder_trial_checklist.md` para la prueba manual founder de punta a punta.
 - `knowledge/agents/testing.md` para pruebas.
 
 ## Reglas Duras

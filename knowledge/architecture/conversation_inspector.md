@@ -94,7 +94,7 @@ En development puede estar abierto. En production, si `INSPECTOR_INTERNAL_TOKEN`
 Seed crea:
 
 - organization `YoAyudo Demo`
-- account `Demo Account`
+- account `YoAyudo Ventas`
 - bot demo conectado al tenant demo
 
 ## Pendiente Para Produccion

@@ -39,7 +39,7 @@ npm run demo:bot-engine
    - Seed: `YoAyudo Demo`.
 
 2. Buscar o crear account demo.
-   - Seed: `Demo Account`.
+   - Seed: `YoAyudo Ventas`.
 
 3. Buscar bot configurable.
    - Seed: `operador_comercial_yoayudo`.
@@ -65,7 +65,7 @@ Payload sugerido:
   "organization_id": "<organization_id>",
   "account_id": "<account_id>",
   "modo_test": true,
-  "mensaje": "Registra que hablé con Taller El Rayo. Están interesados en un bot que dé seguimiento a cotizaciones. Crea tarea para llamar mañana."
+  "mensaje": "Registra este prospecto: Clínica Dental Sonrisa. Llegó por recomendación. Quiere responder WhatsApp fuera de horario y confirmar citas. Crea una tarea para llamarle mañana y prepara un resumen del posible diagnóstico. También intenta programar una llamada automática."
 }
 ```
 

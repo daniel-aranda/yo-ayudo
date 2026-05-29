@@ -187,7 +187,7 @@ async function upsert_account(pool, organization_id, tenant_id) {
   const account = await upsert_account_record(pool, {
     organization_id,
     tenant_id,
-    name: "Demo Account",
+    name: "YoAyudo Ventas",
     slug: "demo-account",
     status: "active",
   });

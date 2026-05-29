@@ -226,6 +226,16 @@ export function register_commercial_routes(router, dependencies = {}) {
       });
       response.json({ ok: true, result });
     } catch (error) {
+      if (error.message?.startsWith("Bot no encontrado")) {
+        response.status(404).json({ ok: false, error: "bot_not_found", message: error.message });
+        return;
+      }
+
+      if (error.message?.includes("modo_test=true")) {
+        response.status(400).json({ ok: false, error: "modo_test_required", message: error.message });
+        return;
+      }
+
       next(error);
     }
   });
