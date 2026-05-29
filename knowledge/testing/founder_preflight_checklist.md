@@ -36,10 +36,10 @@ npm run demo:bot-engine
 ## Flujo Manual
 
 1. Buscar o crear organization demo.
-   - Seed: `YoAyudo Demo`.
+   - Seed: `YoAyudo`.
 
 2. Buscar o crear account demo.
-   - Seed: `YoAyudo Ventas`.
+   - Seed: `Cuenta principal`.
 
 3. Buscar bot configurable.
    - Seed: `operador_comercial_yoayudo`.

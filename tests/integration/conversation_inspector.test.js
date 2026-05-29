@@ -185,7 +185,7 @@ describe("Conversation Inspector", () => {
     const conversation = await pool.query("SELECT * FROM conversations LIMIT 1");
     const view = await get_conversation_view(pool, conversation.rows[0].id);
 
-    expect(view.conversation.bot_name).toBe("Margen Sabroso Bot");
+    expect(view.conversation.bot_name).toBe("Agente WhatsApp YoAyudo");
     expect(view.messages).toHaveLength(2);
     expect(view.messages[0].compact_trace_summary.selected_agent).toBe("purchases_agent");
     expect(view.messages[1].message.direction).toBe("outbound");
@@ -206,8 +206,8 @@ describe("Conversation Inspector", () => {
     `);
     const app = create_inspector_test_app(pool);
 
-    await request(app).get("/inspector").expect(200).expect(/Conversation Inspector/);
-    await request(app).get(`/inspector/bots/${ids.rows[0].bot_id}`).expect(200).expect(/Margen Sabroso Bot/);
+    await request(app).get("/inspector").expect(200).expect(/Inspector de bots y agentes/);
+    await request(app).get(`/inspector/bots/${ids.rows[0].bot_id}`).expect(200).expect(/Agente WhatsApp YoAyudo/);
     await request(app)
       .get(`/inspector/conversations/${ids.rows[0].conversation_id}`)
       .expect(200)

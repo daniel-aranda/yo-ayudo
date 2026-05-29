@@ -1,93 +1,37 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
 
 export async function get_inspector_home(pool) {
-  const [organizations, bots, conversations, errors, review_items] = await Promise.all([
-    pool.query("SELECT * FROM organizations ORDER BY name"),
+  const [business, bots] = await Promise.all([
+    pool.query("SELECT * FROM organizations WHERE status = 'active' ORDER BY created_at DESC LIMIT 1"),
     pool.query(`
       SELECT
         bots.*,
-        tenants.name AS tenant_name,
         accounts.name AS account_name,
         organizations.name AS organization_name
       FROM bots
-      JOIN tenants ON tenants.id = bots.tenant_id
       JOIN accounts ON accounts.id = bots.account_id
       JOIN organizations ON organizations.id = bots.organization_id
+      WHERE organizations.status = 'active'
+        AND accounts.status = 'active'
+        AND bots.status = 'active'
       ORDER BY bots.updated_at DESC
-      LIMIT 20
-    `),
-    pool.query(`
-      SELECT
-        conversations.id,
-        conversations.tenant_id,
-        conversations.branch_id,
-        conversations.bot_id,
-        conversations.contact_id,
-        conversations.channel,
-        conversations.status,
-        conversations.last_message_at,
-        conversations.human_handoff_status,
-        conversations.created_at,
-        conversations.updated_at,
-        contacts.display_name,
-        contacts.whatsapp_phone,
-        bots.name AS bot_name,
-        max(messages.created_at) AS last_activity,
-        count(messages.id)::int AS messages_count
-      FROM conversations
-      JOIN contacts ON contacts.id = conversations.contact_id
-      LEFT JOIN bots ON bots.id = conversations.bot_id
-      LEFT JOIN messages ON messages.conversation_id = conversations.id
-      GROUP BY
-        conversations.id,
-        conversations.tenant_id,
-        conversations.branch_id,
-        conversations.bot_id,
-        conversations.contact_id,
-        conversations.channel,
-        conversations.status,
-        conversations.last_message_at,
-        conversations.human_handoff_status,
-        conversations.created_at,
-        conversations.updated_at,
-        contacts.display_name,
-        contacts.whatsapp_phone,
-        bots.name
-      ORDER BY max(messages.created_at) DESC
-      LIMIT 20
-    `),
-    pool.query(`
-      SELECT messages.*
-      FROM messages
-      WHERE needs_review = true OR processing_status IN ('needs_review', 'failed')
-      ORDER BY created_at DESC
-      LIMIT 20
-    `),
-    pool.query(`
-      SELECT review_items.*, messages.text_body
-      FROM review_items
-      JOIN messages ON messages.id = review_items.message_id
-      WHERE review_items.status IN ('pending', 'open')
-      ORDER BY review_items.created_at DESC
-      LIMIT 20
     `),
   ]);
 
   return {
-    organizations: organizations.rows,
+    business: business.rows[0] ?? null,
     bots: bots.rows,
-    conversations: conversations.rows,
-    error_messages: errors.rows,
-    review_items: review_items.rows,
   };
 }
 
 export async function get_organization_view(pool, organization_id) {
   const organization = await pool.query("SELECT * FROM organizations WHERE id = $1", [organization_id]);
-  const accounts = await pool.query("SELECT * FROM accounts WHERE organization_id = $1 ORDER BY name", [
+  const accounts = await pool.query("SELECT * FROM accounts WHERE organization_id = $1 AND status = 'active' ORDER BY name", [
     organization_id,
   ]);
-  const bots = await pool.query("SELECT * FROM bots WHERE organization_id = $1 ORDER BY name", [organization_id]);
+  const bots = await pool.query("SELECT * FROM bots WHERE organization_id = $1 AND status = 'active' ORDER BY name", [
+    organization_id,
+  ]);
 
   return {
     organization: organization.rows[0],
@@ -107,7 +51,9 @@ export async function get_account_view(pool, account_id) {
     `,
     [account_id],
   );
-  const bots = await pool.query("SELECT * FROM bots WHERE account_id = $1 ORDER BY name", [account_id]);
+  const bots = await pool.query("SELECT * FROM bots WHERE account_id = $1 AND status = 'active' ORDER BY name", [
+    account_id,
+  ]);
 
   return {
     account: account.rows[0],
@@ -120,15 +66,12 @@ export async function get_bot_view(pool, bot_id) {
     `
       SELECT
         bots.*,
-        tenants.name AS tenant_name,
-        tenants.slug AS tenant_slug,
         bot_profiles.name AS bot_profile_name,
         accounts.name AS account_name,
         organizations.name AS organization_name,
         whatsapp_phone_numbers.display_phone_number,
         whatsapp_phone_numbers.phone_number_id
       FROM bots
-      JOIN tenants ON tenants.id = bots.tenant_id
       LEFT JOIN bot_profiles ON bot_profiles.id = bots.bot_profile_id
       JOIN accounts ON accounts.id = bots.account_id
       JOIN organizations ON organizations.id = bots.organization_id

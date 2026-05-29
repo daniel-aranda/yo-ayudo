@@ -23,9 +23,9 @@ async function upsert_solution_template(pool) {
         status
       )
       VALUES (
-        'taqueria_control',
-        'Control operativo para taquerias',
-        'Captura de ventas, compras, inventario, caja y cierre diario para taquerias.',
+        'yoayudo_agent_engine',
+        'YoAyudo Agent Engine',
+        'Configuración base para bots y agentes de WhatsApp por account.',
         $1::jsonb,
         $2::jsonb,
         $3::jsonb,
@@ -72,7 +72,7 @@ async function upsert_tenant(pool) {
   const result = await pool.query(
     `
       INSERT INTO tenants (name, slug, status, timezone)
-      VALUES ('Margen Sabroso', 'margen-sabroso', 'active', 'America/Mexico_City')
+      VALUES ('YoAyudo', 'yoayudo', 'active', 'America/Mexico_City')
       ON CONFLICT (slug)
       DO UPDATE SET
         name = EXCLUDED.name,
@@ -88,7 +88,7 @@ async function upsert_tenant(pool) {
 
 async function get_or_create_branch(pool, tenant_id) {
   const existing = await pool.query(
-    "SELECT id FROM branches WHERE tenant_id = $1 AND name = 'Sucursal Centro' LIMIT 1",
+    "SELECT id FROM branches WHERE tenant_id = $1 AND name = 'Account principal' LIMIT 1",
     [tenant_id],
   );
 
@@ -99,7 +99,7 @@ async function get_or_create_branch(pool, tenant_id) {
   const inserted = await pool.query(
     `
       INSERT INTO branches (tenant_id, name, address, phone, timezone, status)
-      VALUES ($1, 'Sucursal Centro', 'Centro', '+525555000000', 'America/Mexico_City', 'active')
+      VALUES ($1, 'Account principal', 'YoAyudo', '+525555000000', 'America/Mexico_City', 'active')
       RETURNING id
     `,
     [tenant_id],
@@ -110,7 +110,7 @@ async function get_or_create_branch(pool, tenant_id) {
 
 async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_id) {
   const existing = await pool.query(
-    "SELECT id FROM bot_profiles WHERE tenant_id = $1 AND branch_id = $2 AND name = 'Margen Sabroso' LIMIT 1",
+    "SELECT id FROM bot_profiles WHERE tenant_id = $1 AND branch_id = $2 AND name = 'YoAyudo Engine Profile' LIMIT 1",
     [tenant_id, branch_id],
   );
 
@@ -129,7 +129,7 @@ async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_
           settings_json,
           status
         )
-        VALUES ($1, $2, 'Margen Sabroso', $3, 'es-MX', 'America/Mexico_City', '{}'::jsonb, 'active')
+        VALUES ($1, $2, 'YoAyudo Engine Profile', $3, 'es-MX', 'America/Mexico_City', '{}'::jsonb, 'active')
         RETURNING id
       `,
       [tenant_id, branch_id, solution_template_id],
@@ -170,10 +170,19 @@ async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_
 }
 
 async function upsert_organization(pool) {
+  await pool.query(
+    `
+      UPDATE organizations
+      SET status = 'archived', updated_at = now()
+      WHERE slug = 'yoayudo-demo'
+        AND NOT EXISTS (SELECT 1 FROM organizations WHERE slug = 'yoayudo')
+    `,
+  );
+
   const result = await pool.query(
     `
       INSERT INTO organizations (name, slug, status)
-      VALUES ('YoAyudo Demo', 'yoayudo-demo', 'active')
+      VALUES ('YoAyudo', 'yoayudo', 'active')
       ON CONFLICT (slug)
       DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, updated_at = now()
       RETURNING id
@@ -183,12 +192,32 @@ async function upsert_organization(pool) {
   return result.rows[0].id;
 }
 
+async function archive_legacy_demo_entities(pool, organization_id) {
+  await pool.query(
+    `
+      UPDATE accounts
+      SET status = 'archived', updated_at = now()
+      WHERE organization_id = $1
+        AND slug = 'demo-account'
+    `,
+    [organization_id],
+  );
+  await pool.query(
+    `
+      UPDATE bots
+      SET status = 'archived', updated_at = now()
+      WHERE slug IN ('margen-sabroso-bot', 'bot-ventas-clinica-dental')
+         OR name IN ('Margen Sabroso Bot', 'Bot Ventas Clínica Dental')
+    `,
+  );
+}
+
 async function upsert_account(pool, organization_id, tenant_id) {
   const account = await upsert_account_record(pool, {
     organization_id,
     tenant_id,
-    name: "YoAyudo Ventas",
-    slug: "demo-account",
+    name: "Cuenta principal",
+    slug: "cuenta-principal",
     status: "active",
   });
 
@@ -201,12 +230,12 @@ async function upsert_bot(pool, input) {
     account_id: input.account_id,
     tenant_id: input.tenant_id,
     bot_profile_id: input.bot_profile_id,
-    name: "Margen Sabroso Bot",
-    slug: "margen-sabroso-bot",
+    name: "Agente WhatsApp YoAyudo",
+    slug: "agente-whatsapp-yoayudo",
     channel: "whatsapp",
     bot_type: "system",
     status: "active",
-    description: "Bot operativo demo basado en bot_profile legacy.",
+    description: "Agente base para operar conversaciones de WhatsApp desde el engine.",
     settings_json: {},
   });
 
@@ -241,7 +270,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
     channel: "internal",
     bot_type: "custom",
     status: "active",
-    description: "Bot configurable demo para operar ventas internas de YoAyudo.",
+    description: "Bot configurable demo para operar procesos internos de YoAyudo.",
     settings_json: {
       source: "seed",
       purpose: "founder_preflight",
@@ -251,7 +280,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       name: "Operador Comercial YoAyudo",
       description: "Apoya al founder a registrar prospectos, crear tareas, resumir conversaciones y detectar capability gaps.",
       goal:
-        "Operar ventas internas de YoAyudo con acciones seguras: guardar notas, crear tareas, generar resúmenes y solicitar aprobación humana cuando aplique.",
+        "Operar procesos internos de YoAyudo con acciones seguras: guardar notas, crear tareas, generar resúmenes y solicitar aprobación humana cuando aplique.",
       supported_intents: ["sales_follow_up", "prospect_note", "task_request", "summary_request", "human_approval", "capability_gap"],
       required_fields: [
         { key: "negocio_nombre", label: "Nombre del negocio", required: false },
@@ -339,15 +368,14 @@ async function upsert_whatsapp_number(pool, input) {
   });
 }
 
-function dental_sales_bot_definition() {
+function lead_capture_bot_definition() {
   return {
-    name: "Bot Ventas Clínica Dental",
-    description: "Atiende ventas de una clínica dental, detecta urgencias y escala casos sensibles.",
+    name: "Agente de Prospectos",
+    description: "Califica prospectos, captura datos iniciales y escala conversaciones sensibles.",
     goal:
-      "Capturar prospectos dentales, entender el tratamiento de interes, detectar urgencias, explicar siguientes pasos y escalar a humano cuando aplique.",
+      "Capturar prospectos, entender su necesidad, explicar siguientes pasos y escalar a humano cuando aplique.",
     supported_intents: [
       "sales_inquiry",
-      "dental_emergency",
       "price_question",
       "appointment_request",
       "financing_question",
@@ -355,8 +383,8 @@ function dental_sales_bot_definition() {
     ],
     required_fields: [
       {
-        key: "patient_name",
-        label: "Nombre del paciente",
+        key: "contact_name",
+        label: "Nombre del contacto",
         description: "Nombre de la persona que solicita atención.",
         required: true,
       },
@@ -368,21 +396,21 @@ function dental_sales_bot_definition() {
       },
       {
         key: "treatment_interest",
-        label: "Tratamiento de interés",
-        description: "Tratamiento o problema dental que quiere resolver.",
+        label: "Necesidad principal",
+        description: "Problema o proceso que el prospecto quiere resolver.",
         required: true,
       },
       {
-        key: "preferred_branch",
-        label: "Sucursal preferida",
-        description: "Sucursal o zona preferida por el paciente.",
+        key: "preferred_account",
+        label: "Account preferida",
+        description: "Account, canal o equipo preferido para seguimiento.",
         required: false,
       },
     ],
     agent_definitions: [
       {
-        key: "dental_sales_agent",
-        name: "Agente de ventas dentales",
+        key: "lead_capture_agent",
+        name: "Agente de prospectos",
         role: "Califica prospectos, responde dudas iniciales y propone siguiente paso.",
         allowed_intents: ["sales_inquiry", "price_question", "appointment_request"],
         tools: [],
@@ -391,38 +419,37 @@ function dental_sales_bot_definition() {
         key: "human_handoff_agent",
         name: "Escalamiento humano",
         role: "Canaliza conversaciones delicadas o comerciales complejas a una persona.",
-        allowed_intents: ["dental_emergency", "financing_question", "human_help"],
+        allowed_intents: ["financing_question", "human_help", "capability_gap"],
         tools: [],
       },
     ],
     routing_config: {
-      default_agent_key: "dental_sales_agent",
+      default_agent_key: "lead_capture_agent",
       intent_routes: [
-        { intent: "sales_inquiry", agent_key: "dental_sales_agent", priority: 10 },
-        { intent: "price_question", agent_key: "dental_sales_agent", priority: 20 },
-        { intent: "appointment_request", agent_key: "dental_sales_agent", priority: 30 },
-        { intent: "dental_emergency", agent_key: "human_handoff_agent", priority: 5 },
+        { intent: "sales_inquiry", agent_key: "lead_capture_agent", priority: 10 },
+        { intent: "price_question", agent_key: "lead_capture_agent", priority: 20 },
+        { intent: "appointment_request", agent_key: "lead_capture_agent", priority: 30 },
         { intent: "financing_question", agent_key: "human_handoff_agent", priority: 5 },
       ],
     },
     handoff_policy: {
       enabled: true,
       triggers: [
-        "El paciente pregunta por financiamiento.",
-        "El paciente describe dolor fuerte, sangrado, golpe o infección.",
-        "El paciente pide hablar con una persona.",
+        "El prospecto pregunta por financiamiento.",
+        "El prospecto pide una accion no conectada.",
+        "El prospecto pide hablar con una persona.",
       ],
-      message: "Te canalizo con una persona de la clínica para darte seguimiento.",
+      message: "Te canalizo con una persona para darte seguimiento.",
     },
     knowledge_requirements: [
       {
         key: "services_and_prices",
-        description: "Lista de tratamientos, precios aproximados y condiciones.",
+        description: "Lista de servicios, precios aproximados y condiciones.",
         required: true,
       },
       {
-        key: "branches_and_hours",
-        description: "Sucursales, horarios y zonas de atención.",
+        key: "accounts_and_hours",
+        description: "Accounts, horarios y zonas de atención.",
         required: true,
       },
       {
@@ -438,8 +465,8 @@ function dental_sales_bot_definition() {
       formatting: "mensajes cortos de WhatsApp",
     },
     constraints: [
-      "No diagnosticar condiciones médicas.",
-      "No prometer precios finales sin evaluación.",
+      "No prometer acciones externas no configuradas.",
+      "No prometer precios finales sin validación.",
       "Escalar urgencias y financiamiento a humano.",
     ],
   };
@@ -803,17 +830,17 @@ async function seed_knowledge_documents(pool, input) {
       document_family: "system_knowledge",
       document_type: "solution_knowledge",
       source_family: "system_knowledge",
-      name: "taqueria_control knowledge",
+      name: "YoAyudo Agent Engine knowledge",
       solution_template_id: input.solution_template_id,
       content:
-        "La solución taqueria_control captura ventas, compras, inventario, caja, sobrantes, faltantes, merma y notas del día. Debe pedir datos consistentes, no perfectos.",
+        "YoAyudo permite configurar bots y agentes por account, conectar canales, registrar conversaciones, ejecutar acciones habilitadas y escalar a humano cuando falte contexto o capacidad.",
     },
     {
       scope: "account",
       document_family: "business_knowledge",
       document_type: "client_knowledge",
       source_family: "business_knowledge",
-      name: "demo tenant knowledge",
+      name: "YoAyudo account knowledge",
       organization_id: input.organization_id,
       account_id: input.account_id,
       tenant_id: input.tenant_id,
@@ -821,7 +848,7 @@ async function seed_knowledge_documents(pool, input) {
       bot_id: input.bot_id,
       bot_profile_id: input.bot_profile_id,
       content:
-        "El cliente demo prefiere respuestas cortas, claras y enfocadas en registrar operación. No quiere conversación larga.",
+        "YoAyudo prefiere respuestas cortas, claras y enfocadas en capturar contexto, proponer siguiente acción y no fingir capacidades no conectadas.",
     },
   ];
 
@@ -872,6 +899,7 @@ export async function seed_development_data(pool) {
   const branch_id = await get_or_create_branch(pool, tenant_id);
   const bot_profile_id = await upsert_bot_profile(pool, tenant_id, branch_id, solution_template_id);
   const organization_id = await upsert_organization(pool);
+  await archive_legacy_demo_entities(pool, organization_id);
   const account_id = await upsert_account(pool, organization_id, tenant_id);
   const bot_id = await upsert_bot(pool, {
     organization_id,
@@ -894,10 +922,10 @@ export async function seed_development_data(pool) {
   });
   const custom_bot = await new custom_bot_service({ pool }).create_custom_bot({
     account_id,
-    name: "Bot Ventas Clínica Dental",
-    slug: "bot-ventas-clinica-dental",
+    name: "Agente de Prospectos",
+    slug: "agente-de-prospectos",
     status: "active",
-    definition_json: dental_sales_bot_definition(),
+    definition_json: lead_capture_bot_definition(),
     settings_json: { source: "seed" },
   });
   const custom_whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
@@ -905,7 +933,7 @@ export async function seed_development_data(pool) {
     account_id,
     tenant_id,
     branch_id,
-    phone_number_id: "demo-dental-phone-number-id",
+    phone_number_id: "demo-prospectos-phone-number-id",
     display_phone_number: "+525555888888",
     status: "active",
   });
@@ -926,26 +954,17 @@ export async function seed_development_data(pool) {
   await upsert_business_settings(pool, tenant_id, branch_id);
 
   await insert_named_rows(pool, "catalog_items", tenant_id, branch_id, [
-    { name: "taco pastor", category: "tacos", price: 22, active: true, metadata_json: "{}" },
-    { name: "taco bistec", category: "tacos", price: 24, active: true, metadata_json: "{}" },
-    { name: "gringa", category: "especialidades", price: 65, active: true, metadata_json: "{}" },
-    { name: "torta", category: "tortas", price: 55, active: true, metadata_json: "{}" },
-    { name: "refresco", category: "bebidas", price: 25, active: true, metadata_json: "{}" },
+    { name: "plan starter", category: "planes", price: 0, active: true, metadata_json: "{}" },
+    { name: "plan business", category: "planes", price: 0, active: true, metadata_json: "{}" },
   ]);
 
   await insert_named_rows(pool, "inventory_items", tenant_id, branch_id, [
-    { name: "pastor", default_unit: "kg", category: "proteina", approximate_unit_cost: 140, yield_notes: null, active: true },
-    { name: "bistec", default_unit: "kg", category: "proteina", approximate_unit_cost: 165, yield_notes: null, active: true },
-    { name: "tortilla", default_unit: "kg", category: "base", approximate_unit_cost: 22, yield_notes: null, active: true },
-    { name: "queso", default_unit: "kg", category: "lacteo", approximate_unit_cost: 110, yield_notes: null, active: true },
-    { name: "verdura", default_unit: "kg", category: "verdura", approximate_unit_cost: 35, yield_notes: null, active: true },
-    { name: "bolillo", default_unit: "pieza", category: "pan", approximate_unit_cost: 3, yield_notes: null, active: true },
-    { name: "bebidas", default_unit: "pieza", category: "bebidas", approximate_unit_cost: 13, yield_notes: null, active: true },
+    { name: "whatsapp_channel", default_unit: "unidad", category: "canal", approximate_unit_cost: 0, yield_notes: null, active: true },
+    { name: "bot_agent", default_unit: "unidad", category: "engine", approximate_unit_cost: 0, yield_notes: null, active: true },
   ]);
 
   await insert_named_rows(pool, "suppliers", tenant_id, branch_id, [
-    { name: "proveedor Juan", contact_name: "Juan", phone: "+525555111111", notes: "Carnes y pastor" },
-    { name: "Tortillería La Lupita", contact_name: "Lupita", phone: "+525555222222", notes: "Tortilla diaria" },
+    { name: "Proveedor de WhatsApp", contact_name: "Soporte", phone: "+525555111111", notes: "Canal demo" },
   ]);
 
   await seed_agent_profiles(pool, solution_template_id, bot_profile_id);

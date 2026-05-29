@@ -2,26 +2,28 @@ extends layout
 
 block content
   section.page-header
-    h1 Negocios
-    p WhatsApp Bot Engine operativo
+    h1 Business
+    p WhatsApp Bot Engine / Agents Engine
 
-  if !tenants || tenants.length === 0
-    .empty Ejecuta el seed de desarrollo para crear el cliente demo.
+  if !businesses || businesses.length === 0
+    .empty Ejecuta el seed de desarrollo para crear YoAyudo.
   else
     .table-wrap
       table
         thead
           tr
-            th Negocio
+            th Business
             th Estado
-            th Sucursales
+            th Accounts
+            th Bots
             th
         tbody
-          each tenant in tenants
+          each business in businesses
             tr
-              td= tenant.name
+              td= business.name
               td
-                span.status= tenant.status
-              td= tenant.branch_count
+                span.status= business.status
+              td= business.account_count
+              td= business.bot_count
               td
-                a.button(href=`/dashboard/tenants/${tenant.id}`) Abrir
+                a.button(href=`/dashboard/business/${business.id}`) Abrir

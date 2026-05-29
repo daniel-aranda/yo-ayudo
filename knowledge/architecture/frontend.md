@@ -17,15 +17,15 @@ src/dashboard
 ## Rutas Actuales
 
 - `GET /dashboard`
-- `GET /dashboard/tenants/:tenant_id`
-- `GET /dashboard/tenants/:tenant_id/branches/:branch_id`
-- `GET /dashboard/tenants/:tenant_id/branches/:branch_id/days/:date`
+- `GET /dashboard/business/:business_id`
+- `GET /dashboard/business/:business_id/accounts/:account_id`
+- `GET /inspector`
 - `GET /review`
 
 ## Principios UI
 
-- Mostrar operación del día de forma densa y clara.
-- Priorizar ventas, compras, caja, inventario, notas, mensajes y review.
+- Mostrar business, accounts, canales, bots, conversaciones y eventos del engine.
+- No hardcodear métricas verticales como ventas, compras, caja o inventario en el dashboard base.
 - Evitar dashboards decorativos.
 - Evitar cards dentro de cards.
 - No mostrar raw payloads en dashboard público.

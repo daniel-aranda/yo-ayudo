@@ -14,7 +14,7 @@ describe("memory_retrieval_service", () => {
 
   it("does not cross tenants and respects limit", async () => {
     const pool = await create_test_pool();
-    const tenant = await pool.query("SELECT id FROM tenants WHERE slug = 'margen-sabroso' LIMIT 1");
+    const tenant = await pool.query("SELECT id FROM tenants WHERE slug = 'yoayudo' LIMIT 1");
     const tenant_id = tenant.rows[0].id;
     const other_tenant = await pool.query(
       "INSERT INTO tenants (name, slug, status, timezone) VALUES ('Otro', 'otro', 'active', 'America/Mexico_City') RETURNING id",

@@ -85,9 +85,8 @@ Core:
 Dashboard/review/inspector:
 
 - `GET /dashboard`
-- `GET /dashboard/tenants/:tenant_id`
-- `GET /dashboard/tenants/:tenant_id/branches/:branch_id`
-- `GET /dashboard/tenants/:tenant_id/branches/:branch_id/days/:date`
+- `GET /dashboard/business/:business_id`
+- `GET /dashboard/business/:business_id/accounts/:account_id`
 - `GET /review`
 - `POST /review/:review_item_id/resolve`
 - `GET /inspector`
@@ -138,7 +137,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Legacy / Transicional
 
-- `solution_templates`: compatibilidad/demo legacy. `taqueria_control` sigue en seed.
+- `solution_templates`: compatibilidad tecnica del runtime legacy.
 - `bot_profiles` y `bot_intents`: runtime legacy.
 - `src/agents`, `agent_router`, `agent_runs`, `subagents`: routing/orquestacion actual, no centro del futuro.
 - `agent_routing_rules`: fallback legacy.

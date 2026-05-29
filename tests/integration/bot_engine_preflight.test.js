@@ -32,12 +32,12 @@ describe("bot engine founder preflight", () => {
   });
 
   it("loads the internal YoAyudo configurable bot and executes safe internal actions in test mode", async () => {
-    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'demo-account' LIMIT 1");
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'cuenta-principal' LIMIT 1");
     const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'operador_comercial_yoayudo' LIMIT 1");
     const account = account_result.rows[0];
     const bot = bot_result.rows[0];
 
-    expect(account.name).toBe("YoAyudo Ventas");
+    expect(account.name).toBe("Cuenta principal");
     expect(bot.bot_type).toBe("custom");
     expect(bot.acciones_habilitadas_json).toEqual(
       expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"]),
@@ -87,7 +87,7 @@ describe("bot engine founder preflight", () => {
   });
 
   it("returns guardrail events for disabled, unknown, confirmation and stub actions", async () => {
-    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'demo-account' LIMIT 1");
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'cuenta-principal' LIMIT 1");
     const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'operador_comercial_yoayudo' LIMIT 1");
     const account = account_result.rows[0];
     const bot = bot_result.rows[0];
@@ -218,7 +218,7 @@ describe("bot engine founder preflight", () => {
   });
 
   it("supports the minimum diagnosticos_ai flow for internal commercial use", async () => {
-    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'demo-account' LIMIT 1");
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'cuenta-principal' LIMIT 1");
     const account = account_result.rows[0];
 
     const create_response = await request(app)

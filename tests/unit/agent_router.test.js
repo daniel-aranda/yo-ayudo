@@ -94,7 +94,7 @@ async function route_intent(pool, intent) {
     JOIN contacts ON contacts.tenant_id = tenants.id
     LEFT JOIN conversations ON conversations.contact_id = contacts.id
     JOIN bot_profiles ON bot_profiles.tenant_id = tenants.id
-    WHERE tenants.slug = 'margen-sabroso'
+    WHERE tenants.slug = 'yoayudo'
     LIMIT 1
   `);
   const row = context.rows[0];

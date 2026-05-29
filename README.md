@@ -1,8 +1,8 @@
 # YoAyudo WhatsApp Bot Engine MVP
 
-Engine para convertir operación capturada en WhatsApp en datos estructurados, reportes simples y un dashboard ligero.
+WhatsApp Bot Engine / Agents Engine para configurar businesses, accounts y bots/agentes conectados a canales como WhatsApp.
 
-El cliente demo es **Margen Sabroso**, pero vive como datos de seed/configuración. El código runtime es genérico: maneja jornadas, ventas, compras, inventario, cierres, notas, reportes y review.
+El seed principal crea **YoAyudo** como business demo, una cuenta principal y bots/agentes configurables. Los dashboards operativos verticales deben generarse después usando el engine; no viven hardcodeados en el dashboard base.
 
 ## Stack
 
@@ -36,7 +36,7 @@ Servidor local:
 
 - Health: `http://localhost:3000/health`
 - Dashboard: `http://localhost:3000/dashboard`
-- Conversation Inspector: `http://localhost:3000/inspector`
+- Inspector: `http://localhost:3000/inspector`
 - Review: `http://localhost:3000/review`
 
 Verificación rápida:
@@ -137,16 +137,16 @@ El engine procesa mensajes y despacha operaciones genéricas:
 - `solution_templates` y `bot_profiles`: viven en DB/seed; no hay módulo runtime hasta que exista lógica real.
 - `src/channels/whatsapp`: webhook, parsing de payload y cliente WhatsApp.
 - `src/ai`: gateway de modelo, mock provider y stub Bedrock.
-- `src/dashboard`: rutas y queries del dashboard.
-- `src/inspector`: Conversation Inspector, trace builder y vistas internas de conversación.
+- `src/dashboard`: rutas y queries del dashboard business/accounts.
+- `src/inspector`: inspector de bots/agentes, trace builder y vistas internas de conversación.
 - `src/processing_events`: timeline tecnica del pipeline.
 - `src/review`: review queue.
 
-La solución demo se modela como:
+El seed demo se modela como:
 
-- `solution_templates.key = "taqueria_control"`
-- `tenant.name = "Margen Sabroso"`
-- `bot_profile.name = "Margen Sabroso"`
+- `organizations.name = "YoAyudo"`
+- `accounts.name = "Cuenta principal"`
+- `bots.name = "Agente WhatsApp YoAyudo"`
 
 ## Tests
 
@@ -154,4 +154,4 @@ La solución demo se modela como:
 npm test
 ```
 
-Las pruebas de integración usan `pg-mem`, aplican migraciones y corren el seed demo sin requerir PostgreSQL local. Cubren raw payload, resolución de tenant desde `phone_number_id`, `mock_provider`, operaciones diarias, memoria local, router, reportes, review queue y Conversation Inspector.
+Las pruebas de integración usan `pg-mem`, aplican migraciones y corren el seed demo sin requerir PostgreSQL local. Cubren raw payload, resolución desde `phone_number_id`, `mock_provider`, operaciones diarias, memoria local, router, reportes, review queue e Inspector.

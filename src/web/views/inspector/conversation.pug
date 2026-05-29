@@ -2,9 +2,9 @@ extends ../layout
 
 block content
   section.page-header
-    h1 Conversation Inspector
+    h1 Inspector
     if conversation
-      p= `${conversation.bot_name || "sin bot"} · ${conversation.tenant_name} · ${conversation.display_name || conversation.whatsapp_phone} · ${conversation.status}`
+      p= `${conversation.bot_name || "sin bot"} · ${conversation.organization_name || "business sin asignar"} · ${conversation.account_name || "account sin asignar"} · ${conversation.display_name || conversation.whatsapp_phone} · ${conversation.status}`
 
   if conversation
     div.inspector-layout

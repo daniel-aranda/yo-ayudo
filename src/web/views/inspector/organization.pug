@@ -2,8 +2,8 @@ extends ../layout
 
 block content
   section.page-header
-    h1= organization ? organization.name : "Organization no encontrada"
-    p Conversation Inspector
+    h1= organization ? organization.name : "Business no encontrado"
+    p Inspector de bots y agentes
 
   if organization
     div.two-column
@@ -29,4 +29,4 @@ block content
         else
           div.empty Sin bots.
   else
-    div.empty No se encontró la organization.
+    div.empty No se encontró el business.

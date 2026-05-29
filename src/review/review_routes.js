@@ -8,11 +8,13 @@ export function register_review_routes(router) {
         `
           SELECT
             review_items.*,
-            tenants.name AS tenant_name,
-            branches.name AS branch_name
+            organizations.name AS business_name,
+            accounts.name AS account_name,
+            bots.name AS bot_name
           FROM review_items
-          JOIN tenants ON tenants.id = review_items.tenant_id
-          LEFT JOIN branches ON branches.id = review_items.branch_id
+          LEFT JOIN bots ON bots.id = review_items.bot_id
+          LEFT JOIN accounts ON accounts.id = bots.account_id
+          LEFT JOIN organizations ON organizations.id = bots.organization_id
           WHERE review_items.status = 'pending'
           ORDER BY review_items.created_at DESC
           LIMIT 100

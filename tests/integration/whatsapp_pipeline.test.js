@@ -176,7 +176,7 @@ describe("WhatsApp inbound pipeline", () => {
     `);
     const ai_calls = await pool.query("SELECT * FROM ai_calls ORDER BY created_at");
 
-    expect(messages.rows[0].tenant_name).toBe("Margen Sabroso");
+    expect(messages.rows[0].tenant_name).toBe("YoAyudo");
     expect(ai_calls.rowCount).toBeGreaterThanOrEqual(3);
     expect(ai_calls.rows.some((row) => row.provider === "mock")).toBe(true);
   });

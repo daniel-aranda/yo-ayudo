@@ -4,27 +4,19 @@ block content
   section.page-header
     h1= bot ? bot.name : "Bot no encontrado"
     if bot
-      p= `${bot.organization_name} · ${bot.account_name} · ${bot.tenant_name}`
+      p= `${bot.organization_name} · ${bot.account_name}`
 
   if bot
-    div.metrics
-      article.metric
-        span.label Conversaciones
-        strong= stats.conversations_count
-      article.metric
-        span.label Senders
-        strong= stats.senders_count
-      article.metric
-        span.label Mensajes 24h
-        strong= stats.messages_24h
-      article.metric
-        span.label Review
-        strong= stats.pending_review_count
-
     div.two-column
       section.panel
-        h2 Bot
+        h2 Configuración base
         dl.compact
+          div
+            dt Nombre
+            dd= bot.name
+          div
+            dt Propósito
+            dd= bot.description || bot.definition_json.description || "sin descripción"
           div
             dt Canal
             dd= bot.channel
@@ -32,21 +24,41 @@ block content
             dt Estado
             dd= bot.status
           div
-            dt WhatsApp
-            dd= bot.display_phone_number || bot.phone_number_id || "sin número"
-          div
-            dt Bot profile
-            dd= bot.bot_profile_name || "sin profile"
+            dt Tipo
+            dd= bot.bot_type || "system"
 
       section.panel
-        h2 Señales recientes
+        h2 Canales / accounts asignados
         dl.compact
           div
-            dt Agent runs
-            dd= stats.agent_runs_count
+            dt Account
+            dd= bot.account_name
           div
-            dt Memory docs
-            dd= stats.memory_docs_count
+            dt WhatsApp
+            dd= bot.display_phone_number || bot.phone_number_id || "sin número"
+
+    section.panel
+      h2 Instrucciones base
+      if bot.prompt_base || bot.instrucciones_operativas
+        if bot.prompt_base
+          label Prompt base
+          textarea(rows="5", readonly)= bot.prompt_base
+        if bot.instrucciones_operativas
+          label Instrucciones operativas
+          textarea(rows="5", readonly)= bot.instrucciones_operativas
+      else if bot.definition_json && (bot.definition_json.goal || bot.definition_json.description)
+        if bot.definition_json.goal
+          label Objetivo
+          textarea(rows="4", readonly)= bot.definition_json.goal
+        if bot.definition_json.description
+          label Descripción
+          textarea(rows="4", readonly)= bot.definition_json.description
+      else
+        div.empty Sin instrucciones base configuradas.
+
+    section.panel
+      h2 Configuración inicial
+      textarea(rows="12", readonly)= json(bot.definition_json && Object.keys(bot.definition_json).length ? bot.definition_json : bot.settings_json)
 
     section.panel
       h2 Conversaciones recientes

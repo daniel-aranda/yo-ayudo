@@ -12,7 +12,7 @@ block content
       each item in review_items
         article.card
           h2= item.reason
-          p.meta #{item.tenant_name} #{item.branch_name ? "· " + item.branch_name : ""}
+          p.meta #{item.business_name || "Business sin asignar"} #{item.account_name ? "· " + item.account_name : ""} #{item.bot_name ? "· " + item.bot_name : ""}
           p= item.raw_text
           form(method="post", action=`/review/${item.id}/resolve`)
             label(for=`note-${item.id}`) Resolución

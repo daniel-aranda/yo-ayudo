@@ -31,6 +31,10 @@ export function create_app() {
     response.json({ ok: true, service: "yoayudo", environment: config.node_env });
   });
 
+  router.get("/", (_request, response) => {
+    response.redirect("/dashboard");
+  });
+
   register_whatsapp_routes(router);
   register_dashboard_routes(router);
   register_commercial_routes(router);

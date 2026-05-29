@@ -15,8 +15,8 @@ describe("whatsapp_identity_resolver", () => {
 
     expect(identity.whatsapp_phone_number.id).toBe(phone_number.rows[0].id);
     expect(identity.phone_number_bot_assignment.id).toBe(assignment.rows[0].id);
-    expect(identity.organization.name).toBe("YoAyudo Demo");
-    expect(identity.account.name).toBe("YoAyudo Ventas");
+    expect(identity.organization.name).toBe("YoAyudo");
+    expect(identity.account.name).toBe("Cuenta principal");
     expect(identity.account.tenant_id).toBe(identity.tenant.id);
     expect(identity.bot.id).toBe(assignment.rows[0].bot_id);
 
@@ -28,13 +28,13 @@ describe("whatsapp_identity_resolver", () => {
 
     const identity = await resolve_whatsapp_identity_by_phone_number_id(
       pool,
-      "demo-dental-phone-number-id",
+      "demo-prospectos-phone-number-id",
     );
 
     expect(identity.bot.bot_type).toBe("custom");
-    expect(identity.bot.name).toBe("Bot Ventas Clínica Dental");
-    expect(identity.bot.definition_json.goal).toContain("Capturar prospectos dentales");
-    expect(identity.bot.definition_json.supported_intents).toContain("dental_emergency");
+    expect(identity.bot.name).toBe("Agente de Prospectos");
+    expect(identity.bot.definition_json.goal).toContain("Capturar prospectos");
+    expect(identity.bot.definition_json.supported_intents).toContain("sales_inquiry");
 
     await pool.end();
   });

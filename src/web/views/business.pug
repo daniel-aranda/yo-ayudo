@@ -1,0 +1,32 @@
+extends layout
+
+block content
+  if !business
+    .empty Business no encontrado.
+  else
+    section.page-header
+      h1= business.name
+      p= business.slug
+
+    if !accounts || accounts.length === 0
+      .empty Sin accounts configuradas.
+    else
+      .grid
+        each account in accounts
+          article.card
+            h2= account.name
+            p.meta= account.status
+            dl.compact
+              div
+                dt Bots
+                dd= account.bot_count
+              div
+                dt Canales
+                dd= account.channel_count
+              div
+                dt Conversaciones
+                dd= account.conversation_count
+              div
+                dt Última actividad
+                dd= account.last_activity || "sin actividad"
+            a.button(href=`/dashboard/business/${business.id}/accounts/${account.id}`) Abrir account

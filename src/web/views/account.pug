@@ -1,0 +1,106 @@
+extends layout
+
+block content
+  if !account
+    .empty Account no encontrada.
+  else
+    section.page-header
+      h1 #{account.business_name} / #{account.name}
+      p WhatsApp Bot Engine / Agents Engine
+
+    .metrics
+      article.metric
+        span.label Bots asignados
+        strong= stats.bots_count || 0
+      article.metric
+        span.label Canales conectados
+        strong= stats.channels_count || 0
+      article.metric
+        span.label Conversaciones
+        strong= stats.conversations_count || 0
+      article.metric
+        span.label Eventos con error
+        strong= stats.error_events_count || 0
+
+    section.panel
+      h2 Dashboard operativo
+      .empty No hay dashboard operativo configurado todavía.
+
+    .two-column
+      section.panel
+        h2 Canales conectados
+        if channels && channels.length
+          table
+            thead
+              tr
+                th Canal
+                th Identificador
+                th Estado
+            tbody
+              each channel in channels
+                tr
+                  td WhatsApp
+                  td= channel.display_phone_number || channel.phone_number_id
+                  td
+                    span.status= channel.status
+        else
+          .empty Sin canales conectados.
+
+      section.panel
+        h2 Bots asignados
+        if bots && bots.length
+          table
+            thead
+              tr
+                th Bot
+                th Tipo
+                th Estado
+            tbody
+              each bot in bots
+                tr
+                  td
+                    a(href=`/inspector/bots/${bot.id}`)= bot.name
+                    if bot.description
+                      div.meta= bot.description
+                  td= bot.bot_type || bot.channel
+                  td
+                    span.status= bot.status
+        else
+          .empty Sin bots asignados.
+
+    .two-column
+      section.panel
+        h2 Conversaciones recientes
+        if conversations && conversations.length
+          table
+            thead
+              tr
+                th Contacto
+                th Bot
+                th Último mensaje
+                th Estado
+            tbody
+              each conversation in conversations
+                tr
+                  td
+                    a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
+                    div.meta= conversation.whatsapp_phone
+                  td= conversation.bot_name || "sin bot"
+                  td= conversation.last_message || "-"
+                  td
+                    span.status= conversation.status
+        else
+          .empty Sin conversaciones.
+
+      section.panel
+        h2 Eventos recientes
+        if events && events.length
+          ul.clean-list
+            each event in events
+              li
+                strong= event.title || event.event_type
+                span.meta= ` · ${event.event_stage} · ${event.status}`
+                if event.summary
+                  div= event.summary
+        else
+          .empty Sin eventos recientes.

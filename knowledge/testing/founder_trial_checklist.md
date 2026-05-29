@@ -32,8 +32,8 @@ http://localhost:3000
 
 Datos demo esperados:
 
-- Organization: `YoAyudo Demo`
-- Account: `YoAyudo Ventas`
+- Organization: `YoAyudo`
+- Account: `Cuenta principal`
 - Bot configurable: `operador_comercial_yoayudo`
 - Actions reales habilitadas: `guardar_nota`, `crear_tarea`, `generar_resumen`, `solicitar_aprobacion_humana`
 - Actions futuras/stub visibles pero no productivas: `programar_llamada`, `llamar_y_conectar`, `extraer_datos_de_imagen`, `enviar_email`
@@ -119,7 +119,7 @@ curl -X POST http://localhost:3000/internal/bots \
     "template_id": "seguimiento_ventas",
     "nombre": "Operador Comercial Founder Test",
     "slug": "operador-comercial-founder-test",
-    "descripcion": "Bot de prueba para operar ventas internas de YoAyudo.",
+    "descripcion": "Bot de prueba para operar procesos internos de YoAyudo.",
     "status": "active",
     "prompt_base": "Eres un operador comercial interno de YoAyudo. Registra prospectos, crea tareas, genera resúmenes y no finjas acciones externas.",
     "instrucciones_operativas": "Usa solo actions habilitadas. Si falta una capacidad, registra guardrail y responde de forma segura.",
