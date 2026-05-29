@@ -52,8 +52,10 @@ La direccion actual es Bot Engine configurable:
 - `prompt_compiler` para prompt final auditable.
 - Action Registry en codigo.
 - Action Executor con validacion de schema, permiso por bot, riesgo, confirmacion, audit log y guardrails.
+- Actions internas reales iniciales: `guardar_nota`, `crear_tarea`, `generar_resumen`.
 - `action_audit_logs`.
 - `bot_guardrail_events`.
+- `internal_notes` e `internal_tasks` para preflight founder sin integraciones externas.
 - `diagnosticos_ai` con `bots_recomendados`.
 - `discovery_questions` versionadas.
 - BusinessKnowledgeService y ConversationMemoryService separados por `document_family`.
@@ -66,17 +68,9 @@ La direccion actual es Bot Engine configurable:
 
 ## Migraciones
 
-El runner aplica migraciones en `src/db/migrations`:
+El proyecto esta prelaunch, asi que las migraciones historicas se consolidaron en una sola migracion inicial:
 
-- `0001_initial.sql`: modelo operativo inicial, WhatsApp, mensajes, operaciones, review.
-- `0002_memory_agents.sql`: knowledge, memory, agent profiles/rules/runs.
-- `0003_conversation_inspector.sql`: organizations, accounts, bots, processing events y `bot_id`.
-- `0004_account_phone_bot_assignments.sql`: account/number links y assignments numero -> bot.
-- `0005_bot_definitions.sql`: bot type, description, `definition_json`, version y creator.
-- `0006_memory_knowledge_families.sql`: `document_family`, org/account/bot scopes para knowledge/memory.
-- `0007_agent_routing_decisions.sql`: trazabilidad estructurada de routing legacy.
-- `0008_commercial_agent_platform.sql`: base inicial de diagnósticos/action audit y columnas de acciones en bots.
-- `0009_bot_engine_config.sql`: Bot Engine configurable, `bot_templates`, `discovery_questions`, prompt compilations y guardrail events.
+- `0001_initial.sql`: esquema completo actual, incluyendo modelo operativo legacy, SaaS base, memory/knowledge, routing transicional, Bot Engine configurable, diagnósticos, action audit, guardrails, templates, notas y tareas internas.
 
 ## Endpoints Actuales
 
@@ -121,6 +115,7 @@ Internas Bot Engine/comercial:
 - `PATCH /internal/bots/:bot_id`
 - `POST /internal/bots/:bot_id/actions/:action_id`
 - `POST /internal/bots/:bot_id/compile-prompt`
+- `POST /internal/bots/:bot_id/test-message`
 - `POST /internal/diagnosticos-ai`
 - `GET /internal/diagnosticos-ai`
 - `GET /internal/diagnosticos-ai/:diagnostico_id`
@@ -163,7 +158,7 @@ No hay clases ni branches de codigo para estos templates.
 - S3 productivo probado.
 - Vector DB real.
 - Generacion PDF de propuesta.
-- Handlers reales para la mayoria de actions; hoy muchos son stubs seguros.
+- Handlers reales para la mayoria de actions; hoy solo `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecución interna real.
 - Idempotencia robusta por `external_message_id`.
 - Aislamiento de conversation por numero/bot; hoy sigue basado en tenant/contact/channel.
 
@@ -178,8 +173,8 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 14 archivos, 38 tests.
-- `npm run db:migrate`: aplica migraciones `0001` a `0009`.
+- `npm test`: OK, 15 archivos, 41 tests.
+- `npm run db:migrate`: aplica una sola migracion inicial, `0001_initial.sql`.
 
 Comandos locales disponibles:
 
@@ -189,6 +184,7 @@ npm test
 npm run db:up
 npm run db:migrate
 npm run db:seed
+npm run demo:bot-engine
 npm run dev
 ```
 

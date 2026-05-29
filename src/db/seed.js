@@ -231,6 +231,86 @@ async function upsert_bot(pool, input) {
   return bot.id;
 }
 
+async function upsert_yoayudo_commercial_operator_bot(pool, input) {
+  const bot = await upsert_bot_record(pool, {
+    organization_id: input.organization_id,
+    account_id: input.account_id,
+    tenant_id: input.tenant_id,
+    name: "Operador Comercial YoAyudo",
+    slug: "operador_comercial_yoayudo",
+    channel: "internal",
+    bot_type: "custom",
+    status: "active",
+    description: "Bot configurable demo para operar ventas internas de YoAyudo.",
+    settings_json: {
+      source: "seed",
+      purpose: "founder_preflight",
+      capability_gap_actions: ["enviar_email", "extraer_datos_de_imagen", "programar_llamada", "llamar_y_conectar"],
+    },
+    definition_json: {
+      name: "Operador Comercial YoAyudo",
+      description: "Apoya al founder a registrar prospectos, crear tareas, resumir conversaciones y detectar capability gaps.",
+      goal:
+        "Operar ventas internas de YoAyudo con acciones seguras: guardar notas, crear tareas, generar resúmenes y solicitar aprobación humana cuando aplique.",
+      supported_intents: ["sales_follow_up", "prospect_note", "task_request", "summary_request", "human_approval", "capability_gap"],
+      required_fields: [
+        { key: "negocio_nombre", label: "Nombre del negocio", required: false },
+        { key: "interes", label: "Interés comercial", required: false },
+        { key: "siguiente_accion", label: "Siguiente acción", required: false },
+      ],
+      agent_definitions: [],
+      routing_config: { default_agent_key: "operations_agent", intent_routes: [] },
+      handoff_policy: {
+        enabled: true,
+        triggers: ["acción no disponible", "acción no habilitada", "riesgo sensible", "proveedor no configurado"],
+        message: "Esto requiere revisión humana o una capacidad que todavía no está conectada.",
+      },
+      knowledge_requirements: ["oferta YoAyudo", "planes", "diagnóstico comercial", "criterios de venta"],
+      response_style: {
+        tone: "directo, comercial y operativo",
+        language: "es-MX",
+        max_length: 700,
+        formatting: "mensajes breves con siguiente acción clara",
+      },
+      constraints: [
+        "No fingir que envió emails, hizo llamadas o leyó documentos.",
+        "No prometer integraciones externas no configuradas.",
+        "Registrar guardrail event cuando falte una capacidad.",
+      ],
+    },
+    definition_version: 1,
+    paquete_id: null,
+    prompt_base:
+      "Eres el operador comercial interno de YoAyudo. Ayudas al founder a registrar prospectos, resumir conversaciones, crear tareas de seguimiento, sugerir siguiente acción comercial y preparar diagnósticos. Usa solo acciones habilitadas y no finjas ejecuciones.",
+    instrucciones_operativas:
+      "Si el mensaje contiene información relevante de un prospecto, guarda una nota. Si pide seguimiento, crea una tarea. Si pide resumen, genera un resumen. Si pide email, OCR, llamada o integración externa, registra el gap mediante guardrails en vez de fingir ejecución.",
+    tono: "directo, práctico y comercial",
+    objetivos_json: [
+      "Registrar prospectos y contexto comercial.",
+      "Crear tareas de seguimiento.",
+      "Generar resúmenes operativos.",
+      "Detectar capability gaps para roadmap.",
+    ],
+    knowledge_base_ids_json: [],
+    acciones_habilitadas_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
+    enabled_actions_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
+    reglas_guardrail_json: [
+      "No ejecutar acciones no habilitadas.",
+      "No fingir integraciones externas.",
+      "Registrar capability gap cuando el proveedor no esté configurado.",
+    ],
+    reglas_escalamiento_json: [
+      "Escalar si el founder pide enviar email real.",
+      "Escalar si pide OCR real sobre documentos.",
+      "Escalar si pide llamada o conexión telefónica real.",
+    ],
+    campos_requeridos_json: ["negocio_nombre", "interes", "siguiente_accion"],
+    memoria_habilitada: true,
+  });
+
+  return bot.id;
+}
+
 async function upsert_contact(pool, tenant_id, branch_id) {
   await pool.query(
     `
@@ -836,6 +916,11 @@ export async function seed_development_data(pool) {
     bot_id: custom_bot.id,
     metadata_json: { source: "seed", purpose: "custom_bot_demo" },
   });
+  const yoayudo_commercial_bot_id = await upsert_yoayudo_commercial_operator_bot(pool, {
+    organization_id,
+    account_id,
+    tenant_id,
+  });
 
   await upsert_contact(pool, tenant_id, branch_id);
   await upsert_business_settings(pool, tenant_id, branch_id);
@@ -874,8 +959,8 @@ export async function seed_development_data(pool) {
     bot_id,
   });
 
-  logger.info({ tenant_id, branch_id, bot_id }, "development seed complete");
-  return { tenant_id, branch_id, solution_template_id, bot_profile_id, organization_id, account_id, bot_id };
+  logger.info({ tenant_id, branch_id, bot_id, yoayudo_commercial_bot_id }, "development seed complete");
+  return { tenant_id, branch_id, solution_template_id, bot_profile_id, organization_id, account_id, bot_id, yoayudo_commercial_bot_id };
 }
 
 if (is_entrypoint(import.meta.url)) {

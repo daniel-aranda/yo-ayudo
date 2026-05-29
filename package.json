@@ -12,6 +12,7 @@
     "db:reset": "docker compose down -v && docker compose up -d postgres",
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node src/db/seed.js",
+    "demo:bot-engine": "node scripts/demo_bot_engine_preflight.js",
     "test": "vitest run"
   },
   "dependencies": {

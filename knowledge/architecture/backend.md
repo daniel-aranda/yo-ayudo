@@ -2,7 +2,9 @@
 
 ## Objetivo
 
-El backend recibe mensajes de WhatsApp, resuelve numero/account/organization/bot asignado y conserva compatibilidad con tenant/sucursal/bot profile. Despues guarda raw payloads, clasifica intención, valida datos parseados, enruta a un subagente delgado, ejecuta handlers operativos, genera memoria normalizada y responde de forma corta.
+El backend actual conserva un pipeline inbound legacy/transicional: recibe mensajes de WhatsApp, resuelve numero/account/organization/bot, guarda raw payloads, clasifica intención, valida datos y todavia puede enrutar por `src/agents`.
+
+La direccion nueva no es construir mas subagentes. El centro es Bot Engine + Actions + Prompt Compiler + Guardrails: cargar un bot configurable, recuperar knowledge/memoria, compilar prompt, validar acciones, ejecutar o bloquear de forma segura y registrar auditoria/capability gaps.
 
 ## Capas
 

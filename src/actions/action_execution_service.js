@@ -1,4 +1,5 @@
 import { create_action_audit_log } from "./action_audit_repository.js";
+import { execute_internal_action_handler } from "./internal_action_handlers.js";
 import { get_action } from "./action_registry.js";
 import { get_bot_by_id } from "../bots/bot_repository.js";
 import { create_bot_guardrail_event } from "../bot_engine/bot_guardrail_event_repository.js";
@@ -104,7 +105,7 @@ export class action_execution_service {
 
     if (!action) {
       const output = { message: `Acción desconocida: ${input.action_id}` };
-      await this.create_guardrail(input, {
+      const guardrail_event = await this.create_guardrail(input, {
         tipo: "accion_no_disponible",
         descripcion: output.message,
         severidad: "media",
@@ -118,7 +119,7 @@ export class action_execution_service {
         confirmation_required: false,
       });
 
-      return { status: "unknown_action", action_id: input.action_id, output, audit_log };
+      return { status: "unknown_action", action_id: input.action_id, output, audit_log, guardrail_events: [guardrail_event] };
     }
 
     if (action.habilitada === false) {
@@ -141,6 +142,21 @@ export class action_execution_service {
       });
     }
 
+    if (Array.isArray(input.permisos_disponibles)) {
+      const missing_permissions = (action.permisos_requeridos ?? []).filter(
+        (permission) => !input.permisos_disponibles.includes(permission),
+      );
+
+      if (missing_permissions.length) {
+        return this.block_with_guardrail(input, action, {
+          tipo: "permiso_insuficiente",
+          status: "blocked",
+          descripcion: `Faltan permisos para ${action.action_id}: ${missing_permissions.join(", ")}.`,
+          severidad: "alta",
+        });
+      }
+    }
+
     const schema_errors = validate_input_schema(action.input_schema, input.input_json ?? {});
 
     if (schema_errors.length) {
@@ -153,33 +169,43 @@ export class action_execution_service {
     }
 
     let result;
+    const guardrail_events = [];
 
     if (action.nivel_riesgo === "solo_humano") {
-      await this.create_guardrail(input, {
+      guardrail_events.push(await this.create_guardrail(input, {
         tipo: "riesgo_bloqueado",
         action_id: action.action_id,
         descripcion: `La acción ${action.action_id} está marcada como solo_humano.`,
         severidad: "alta",
-      });
+      }));
       result = human_only_result(action);
     } else if (action.nivel_riesgo === "requiere_confirmacion" && !input.confirmed_by) {
-      await this.create_guardrail(input, {
+      guardrail_events.push(await this.create_guardrail(input, {
         tipo: "requiere_confirmacion",
         action_id: action.action_id,
         descripcion: `La acción ${action.action_id} requiere confirmación humana.`,
         severidad: "media",
-      });
+      }));
       result = pending_confirmation_result(action, input.input_json ?? {});
     } else {
-      result = stub_result(action);
+      result = await execute_internal_action_handler(this.pool, action, input);
+      result ??= stub_result(action);
+      result.action_id ??= action.action_id;
 
       if (result.status === "pending_provider") {
-        await this.create_guardrail(input, {
+        guardrail_events.push(await this.create_guardrail(input, {
           tipo: "proveedor_no_configurado",
           action_id: action.action_id,
           descripcion: `La acción ${action.action_id} requiere un proveedor no configurado.`,
           severidad: "media",
-        });
+        }));
+      } else if (result.status === "not_implemented") {
+        guardrail_events.push(await this.create_guardrail(input, {
+          tipo: "accion_no_disponible",
+          action_id: action.action_id,
+          descripcion: `La acción ${action.action_id} existe como contrato, pero aún no tiene handler productivo.`,
+          severidad: "media",
+        }));
       }
     }
 
@@ -204,11 +230,11 @@ export class action_execution_service {
       },
     });
 
-    return { ...result, audit_log };
+    return { ...result, audit_log, guardrail_events };
   }
 
   async block_with_guardrail(input, action, event) {
-    await this.create_guardrail(input, {
+    const guardrail_event = await this.create_guardrail(input, {
       ...event,
       action_id: action?.action_id ?? input.action_id,
     });
@@ -237,6 +263,7 @@ export class action_execution_service {
       action_id: action?.action_id ?? input.action_id,
       output,
       audit_log,
+      guardrail_events: [guardrail_event],
     };
   }
 

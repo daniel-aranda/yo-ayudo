@@ -4,6 +4,7 @@ import { action_execution_service } from "../actions/action_execution_service.js
 import { list_action_audit_logs } from "../actions/action_audit_repository.js";
 import { get_action, list_actions } from "../actions/action_registry.js";
 import { bot_configuration_service } from "../bot_engine/bot_configuration_service.js";
+import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
 import { get_bot_template, list_bot_templates } from "../bot_engine/bot_template_repository.js";
 import { list_bot_guardrail_events } from "../bot_engine/bot_guardrail_event_repository.js";
 import { prompt_compiler } from "../bot_engine/prompt_compiler.js";
@@ -33,6 +34,7 @@ export function register_commercial_routes(router, dependencies = {}) {
   const bot_service = new bot_configuration_service({ pool: route_pool });
   const actions = new action_execution_service({ pool: route_pool });
   const compiler = new prompt_compiler({ pool: route_pool });
+  const bot_engine_tester = new bot_engine_test_service({ pool: route_pool });
 
   router.get("/internal/bot-templates", internal_auth, async (request, response, next) => {
     try {
@@ -211,6 +213,18 @@ export function register_commercial_routes(router, dependencies = {}) {
         conversation_memory: request.body.conversation_memory ?? [],
       });
       response.json({ ok: true, compiled });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/internal/bots/:bot_id/test-message", internal_auth, async (request, response, next) => {
+    try {
+      const result = await bot_engine_tester.test_message({
+        ...(request.body ?? {}),
+        bot_id: route_value(request.params.bot_id),
+      });
+      response.json({ ok: true, result });
     } catch (error) {
       next(error);
     }

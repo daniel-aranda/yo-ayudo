@@ -113,7 +113,7 @@ Desde Fase 5, un bot configurable puede guardar:
 - `agent_routing_rules`
 - `agent_runs`
 
-`agent_runs` registra decisiones de routing y futuras ejecuciones de subagentes.
+`agent_runs` registra decisiones de routing legacy/transicional. Sigue siendo util para auditar el pipeline actual, pero no debe ser la trazabilidad principal de nuevas features del Bot Engine configurable.
 
 Desde Fase 4, `agent_runs` tambien guarda trazabilidad estructurada de routing:
 
@@ -126,7 +126,13 @@ Desde Fase 4, `agent_runs` tambien guarda trazabilidad estructurada de routing:
 - `used_context_summary_json`: resumen sin prompts gigantes de business knowledge y conversation memory usadas.
 - `handoff_recommended` y `handoff_reason`: soporte basico de escalamiento humano.
 
-El `agent_key` existente sigue representando el handler ejecutable. Esto mantiene compatibilidad: un subagente custom como `ventas` puede quedar seleccionado en `selected_agent_id`, mientras `agent_key` apunta a `sales_agent` para ejecutar el handler actual.
+El `agent_key` existente sigue representando el handler ejecutable. Esto mantiene compatibilidad con `src/agents`.
+
+Para Bot Engine configurable, la trazabilidad principal debe vivir en:
+
+- `bot_prompt_compilations`
+- `action_audit_logs`
+- `bot_guardrail_events`
 
 ### Commercial
 
@@ -136,6 +142,8 @@ El `agent_key` existente sigue representando el handler ejecutable. Esto mantien
 - `discovery_questions`
 - `bot_prompt_compilations`
 - `bot_guardrail_events`
+- `internal_notes`
+- `internal_tasks`
 
 `diagnosticos_ai` guarda diagnósticos vendidos a prospectos o clientes:
 
@@ -178,6 +186,8 @@ Las acciones futuras de voz y OCR real no escriben proveedores externos todavía
 - input inválido.
 - permiso insuficiente.
 
+`internal_notes` e `internal_tasks` son almacenamiento interno mínimo para preflight founder. Permiten que `guardar_nota` y `crear_tarea` sean acciones reales sin depender todavía de CRM, email, OCR, Twilio u otra integración externa.
+
 ## Business Day
 
 `op_business_days` tiene una fila por tenant/sucursal/día.
@@ -207,7 +217,7 @@ Las migraciones son SQL explícito en:
 src/db/migrations
 ```
 
-El runner registra archivos aplicados en `schema_migrations`.
+Como el proyecto sigue prelaunch, el esquema actual esta consolidado en `0001_initial.sql`. El runner registra archivos aplicados en `schema_migrations`.
 
 ## Cambios Futuros
 

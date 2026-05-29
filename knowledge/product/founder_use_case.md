@@ -2,11 +2,25 @@
 
 ## Objetivo Comercial
 
-YoAyudo debe permitir vender bots de WhatsApp a negocios rapidamente.
+YoAyudo debe permitir vender y operar bots configurables para negocios sin trabajo manual de ingenieria por cliente.
 
-El caso principal del founder es dar de alta un negocio, conectarle uno o mas numeros de WhatsApp y asignarles bots sin trabajo manual de ingenieria por cliente.
+El producto no debe vender "agentes hardcodeados". Debe vender un Bot Engine configurable que convierte:
 
-## Modelo Mental
+```text
+prompts + business knowledge + conversation memory + actions + guardrails
+```
+
+en bots operativos capaces de atender, vender, dar seguimiento, organizar trabajo y ejecutar acciones seguras.
+
+## Direccion Actual
+
+- El codigo es el motor.
+- Los bots son configuracion.
+- Las acciones son capacidades.
+- Los guardrails son el radar de seguridad y roadmap.
+- WhatsApp es un canal importante, no el centro del dominio.
+
+## Modelo Mental De Venta
 
 1. `organization`
    - Representa al duenho o grupo empresarial.
@@ -19,99 +33,100 @@ El caso principal del founder es dar de alta un negocio, conectarle uno o mas nu
 
 3. `whatsapp_phone_numbers`
    - Cada account puede tener uno o varios numeros de WhatsApp.
-   - Cada numero debe poder resolverse de forma directa desde `phone_number_id`.
+   - Cada numero debe resolverse de forma directa desde `phone_number_id`.
 
-4. `bots`
-   - A cada numero se le asigna un bot activo.
-   - El bot puede ser predefinido del sistema o custom.
-   - Un `system` bot es una configuracion predefinida o legacy lista para asignarse.
-   - Un `custom` bot pertenece a un account y guarda una definicion estructurada en `definition_json`.
+4. `bot`
+   - Configuracion operativa asociada a un account.
+   - Puede partir de un `bot_template`, pero no depende de codigo especial por template.
+   - Define prompt, knowledge, memoria, acciones habilitadas, reglas y guardrails.
 
-5. `custom bots`
-   - Un custom bot debe poder crearse casi con lenguaje humano.
-   - El sistema debe convertir esa descripcion en configuracion estructurada en fases posteriores.
+5. `bot_template`
+   - Punto de partida editable para crear bots.
+   - Vive en DB/configuracion.
+   - Ejemplos: `recepcionista_ai`, `seguimiento_ventas`, `agenda_facil`, `factura_facil`, `documentos_facil`, `cobranza_suave`.
 
 ## Ruta Critica Para Vender
 
-La ruta inicial para onboarding debe ser:
-
 ```text
-organization -> account -> whatsapp_phone_number -> active bot assignment -> bot
+organization -> account -> whatsapp_phone_number -> active bot assignment -> bot configurable
 ```
 
-`tenant`, `branch` y `bot_profile` siguen vivos como compatibilidad tecnica del runtime actual, pero no deben ser la ruta mental principal para vender o dar de alta clientes nuevos.
+`tenant`, `branch`, `bot_profile`, `solution_template` y `src/agents` siguen vivos como compatibilidad tecnica/transicional, pero no deben ser la ruta mental principal para vender ni para construir nuevas features.
 
-## Regla De Producto Fase 1
+## Que Debe Poder Definir Un Bot
 
-Un numero de WhatsApp tiene un solo bot activo asignado.
+- nombre y descripcion.
+- prompt base.
+- instrucciones operativas.
+- tono.
+- objetivos.
+- business knowledge asociado.
+- conversation memory habilitada o no.
+- acciones habilitadas.
+- reglas de guardrail.
+- reglas de escalamiento.
+- campos a capturar.
+- status.
 
-El modelo conserva historial de asignaciones para poder cambiar el bot de un numero sin perder trazabilidad, pero no implementa multiples bots activos por numero todavia.
+## Acciones Como Valor Real
 
-## Regla De Producto Fase 2
+La capa de acciones separa conversacion de ejecucion real.
 
-Un custom bot puede existir como dato estructurado antes de tener builder visual o LLM builder.
+Ejemplos:
 
-La definicion inicial incluye objetivo, intents soportados, campos requeridos, subagentes declarativos, routing declarativo, politica de handoff, necesidades de knowledge, estilo de respuesta y restricciones.
+- crear tarea.
+- guardar nota.
+- crear recordatorio.
+- cambiar estatus.
+- enviar email con confirmacion.
+- crear solicitud de facturacion.
+- validar datos fiscales.
+- revisar documentos requeridos.
+- extraer datos de imagen/PDF como capacidad futura real.
+- preparar llamadas como capacidad premium futura.
 
-La definicion queda disponible para runtime y trazabilidad, pero el routing inteligente y el uso formal de business knowledge/conversation memory quedan para fases posteriores.
+Si algo modifica el mundo, debe ser Action. Si el bot intenta hacer algo que no existe o no esta habilitado, debe registrarse guardrail event.
 
-## Regla De Producto Fase 3
+## Guardrails Como Roadmap
 
-La definicion del bot no es knowledge del negocio ni memoria conversacional.
+Los guardrails protegen al negocio y tambien muestran demanda real.
 
-- `bot_definition`: que debe hacer el bot, que campos pide, como escala y que estilo usa.
-- `business_knowledge`: como opera el negocio. Servicios, precios, reglas, procesos, politicas, horarios, FAQs e instrucciones del duenho.
-- `conversation_memory`: que ha pasado con este cliente o conversacion. Mensajes relevantes, datos capturados, pendientes, objeciones, decisiones y estado.
+Ejemplos:
 
-Esta separacion permite vender custom bots sin hardcodear clientes y prepara el camino para S3, Bedrock Knowledge Bases, embeddings y retrieval semantico sin obligarlos en el MVP.
+- accion no disponible.
+- accion no habilitada para el bot.
+- requiere confirmacion humana.
+- riesgo bloqueado.
+- proveedor no configurado.
+- input invalido.
+- permiso insuficiente.
 
-## Regla De Producto Fase 4
+El engine no debe fingir que ejecuto una accion. Debe responder de forma segura, escalar si aplica y registrar el evento.
 
-Un bot custom puede definir subagentes en `definition_json.agent_definitions`.
+## Diagnostico Comercial
 
-Ejemplos de subagentes:
+Los diagnosticos AI de $400 se guardan como entidad comercial. Permiten registrar:
 
-- `ventas`
-- `soporte`
-- `documentos`
-- `seguimiento`
-- `intake`
-- `handoff_humano`
+- entrevista.
+- problemas detectados.
+- oportunidades AI.
+- bots/templates recomendados.
+- acciones recomendadas.
+- precio mensual sugerido.
+- propuesta preliminar.
 
-El router usa la definicion del bot, `routing_config`, `handoff_policy`, intencion detectada, business knowledge y conversation memory para elegir un subagente. No usa todavia un router LLM; la estrategia actual es heuristica y trazable.
+El diagnostico puede acreditarse al primer mes. Su salida debe ayudar a crear/configurar bots desde la app sin tocar codigo.
 
-La decision queda en `agent_runs` con:
+## Compatibilidad Transicional
 
-- agente seleccionado
-- candidatos evaluados
-- razon
-- confianza
-- señales usadas
-- si se recomienda handoff
+`definition_json.agent_definitions`, subagentes, `agent_router` y `agent_runs` existen porque el pipeline actual los usa. Son utiles para trazabilidad y routing legacy/transicional.
 
-Esto habilita vender bots custom configurables sin crear codigo por cliente. Lo pendiente es el builder desde lenguaje natural, router LLM real, Bedrock Knowledge Bases real, S3 productivo y vector DB externa.
+No son el futuro conceptual del producto.
 
-## Regla De Producto Fase 5
+Para nuevas features, preferir:
 
-YoAyudo no se vende como "bots de WhatsApp"; se vende como bots configurables con acciones reales, knowledge, prompts y guardrails.
+```text
+Bot Engine + Actions + Prompt Compiler + Guardrails
+```
 
-Templates iniciales editables:
-
-- `recepcionista_ai`
-- `seguimiento_ventas`
-- `agenda_facil`
-- `factura_facil`
-- `documentos_facil`
-- `cobranza_suave`
-
-Un template define configuración sugerida: prompt base, acciones sugeridas, knowledge sugerido, campos recomendados y reglas. Desde un template se puede crear un bot custom, pero el engine no tiene lógica especial por template.
-
-La capa de acciones separa valor real de conversación:
-
-- acciones automáticas como guardar notas, crear tareas o generar resúmenes.
-- acciones con confirmación como enviar email, facturación, pagos u OCR sensible.
-- acciones solo humano o futuras como llamadas y conexión telefónica.
-
-Los diagnósticos AI de $400 se guardan como entidad comercial. Permiten registrar entrevista, problemas detectados, oportunidades, bots/templates recomendados, acciones recomendadas y propuesta preliminar. El diagnóstico puede acreditarse al primer mes.
-
-OCR queda como capacidad clave con contrato para fotos, screenshots, PDFs, tickets, constancias y comprobantes. Voz/Twilio queda preparada como proveedor futuro, sin credenciales ni integración real.
+La historia de Fase 1-4 esta en `knowledge/versions/v1/founder_use_case_history.md`.
