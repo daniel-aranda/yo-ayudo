@@ -72,6 +72,7 @@ Ubicación: `src/ai`
 
 - `model_gateway.js`
 - `mock_provider.js`
+- `openai_provider.js`: provider real para `Probar bot` y decisiones estructuradas del Bot Engine en modo test.
 - `bedrock_provider.js` como stub
 - `observed_provider.js`
 

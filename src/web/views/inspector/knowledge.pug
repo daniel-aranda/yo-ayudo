@@ -1,0 +1,127 @@
+extends ../layout
+
+block content
+  -
+    const knowledge_type_label = (type) => {
+      if (type === "document") return "Documento";
+      if (type === "url") return "URL";
+      return "Texto";
+    };
+    const knowledge_preview = (value) => {
+      const text = String(value || "").trim();
+      if (!text) return "Sin knowledge";
+      return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+    };
+
+  section.page-header.builder-header
+    div
+      h1 Knowledge Center
+      p Crea y revisa fuentes de knowledge para asignarlas a agentes.
+    button#show_knowledge_form(type="button", hidden=!!error_message) Agregar knowledge
+
+  section.panel#knowledge_form_panel(hidden=!error_message)
+    h2 Agregar knowledge
+    if error_message
+      div.empty= error_message
+    form(method="post", action="/inspector/knowledge", enctype="multipart/form-data")
+      input(type="hidden", name="scope", value="account")
+      input(type="hidden", name="organization_id", value=filters.organization_id || "")
+      input(type="hidden", name="account_id", value=filters.account_id || "")
+
+      fieldset.radio-group
+        legend Tipo
+        label.radio-option
+          input(type="radio", name="source_type", value="text", checked)
+          span Texto
+        label.radio-option
+          input(type="radio", name="source_type", value="document")
+          span Documento
+        label.radio-option
+          input(type="radio", name="source_type", value="url")
+          span URL
+
+      div.form-grid
+        div
+          label Nombre
+          input(type="text", name="name", placeholder="Ej. Oferta YoAyudo")
+        div.knowledge-field(data-source-field="url", hidden)
+          label URL
+          input(type="url", name="url", placeholder="https://...")
+        div.knowledge-field(data-source-field="document", hidden)
+          label Archivo
+          input(type="file", name="document_file", accept=".pdf,.txt,.md,.doc,.docx,.csv,.xlsx,.png,.jpg,.jpeg,.webp")
+          p.meta Pdf, Word, Excel, CSV, imágenes o archivos de texto. Máx 10MB.
+
+      label Descripción
+      textarea(name="description", rows="3", placeholder="Describe qué contiene esta fuente y cuándo debe usarla el agente.")
+
+      div.knowledge-field(data-source-field="text")
+        label Knowledge
+        textarea(name="content", rows="7", placeholder="Pega aquí reglas, servicios, precios, procesos o FAQ.")
+
+      div.form-actions
+        button(type="submit") Guardar knowledge
+        button.secondary-button#cancel_knowledge_form(type="button") Cancelar
+
+  section.panel
+    h2 Knowledge existente
+    if knowledge_sources.length
+      div.table-wrap
+        table
+          thead
+            tr
+              th Nombre
+              th Tipo
+              th Scope
+              th Estado
+              th Knowledge
+          tbody
+            each source in knowledge_sources
+              tr
+                td
+                  strong
+                    a.knowledge-source-link(href=`/inspector/knowledge/${source.id}?organization_id=${filters.organization_id || ""}&account_id=${filters.account_id || ""}`)= source.name
+                  if source.description
+                    p.meta= source.description
+                td= knowledge_type_label(source.source_type)
+                td= source.scope
+                td
+                  span.status= source.status
+                td= knowledge_preview(source.summary)
+    else
+      div.empty Todavía no hay knowledge creado.
+
+  script.
+    (() => {
+      const showButton = document.getElementById("show_knowledge_form");
+      const cancelButton = document.getElementById("cancel_knowledge_form");
+      const formPanel = document.getElementById("knowledge_form_panel");
+      const form = formPanel?.querySelector("form");
+      const radios = Array.from(document.querySelectorAll('input[name="source_type"]'));
+      const sourceFields = Array.from(document.querySelectorAll("[data-source-field]"));
+
+      function syncFields() {
+        const selected = radios.find((radio) => radio.checked)?.value || "text";
+        for (const field of sourceFields) {
+          field.hidden = field.dataset.sourceField !== selected;
+        }
+      }
+
+      showButton?.addEventListener("click", () => {
+        formPanel.hidden = false;
+        showButton.hidden = true;
+      });
+
+      cancelButton?.addEventListener("click", () => {
+        form?.reset();
+        formPanel.hidden = true;
+        showButton.hidden = false;
+        syncFields();
+      });
+
+      for (const radio of radios) {
+        radio.addEventListener("change", syncFields);
+      }
+
+      syncFields();
+    })();

@@ -30,7 +30,7 @@ export class custom_bot_service {
 
     const definition = parse_custom_bot_definition(input.definition_json);
     const status = bot_status_schema.parse(input.status ?? "draft");
-    const name = input.name ?? definition.name;
+    const name = input.name ?? definition.identity.name;
     const slug = input.slug ?? slug_for_name(name);
 
     if (!slug) {
@@ -47,11 +47,15 @@ export class custom_bot_service {
       channel: input.channel ?? "whatsapp",
       bot_type: "custom",
       status,
-      description: input.description ?? definition.description ?? "",
+      description: input.description ?? definition.identity.description ?? "",
       settings_json: input.settings_json ?? {},
       definition_json: definition,
       definition_version: input.definition_version ?? 1,
       created_by_user_id: input.created_by_user_id ?? null,
+      instrucciones_operativas: definition.behavior.operating_instructions,
+      tono: definition.behavior.tone,
+      knowledge_base_ids_json: definition.knowledge_source_ids,
+      reglas_guardrail_json: definition.behavior.constraints ? definition.behavior.constraints.split("\n") : [],
     });
   }
 

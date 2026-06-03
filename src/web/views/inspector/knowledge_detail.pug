@@ -1,0 +1,92 @@
+extends ../layout
+
+block content
+  -
+    const metadata = source.metadata_json || {};
+    const file = metadata.file || null;
+    const knowledge_type_label = (type) => {
+      if (type === "document") return "Documento";
+      if (type === "url") return "URL";
+      return "Texto";
+    };
+
+  section.page-header.builder-header
+    div
+      h1= source.name
+      p Knowledge source
+    div.builder-actions
+      a.button.secondary-button(href=back_url) Volver
+
+  form(method="post", action=`/inspector/knowledge/${source.id}`)
+    input(type="hidden", name="organization_id", value=filters.organization_id || "")
+    input(type="hidden", name="account_id", value=filters.account_id || "")
+
+    section.panel
+      h2 Editar knowledge
+      div.form-grid
+        div
+          label Nombre
+          input(type="text", name="name", value=source.name)
+        div
+          label Tipo de knowledge
+          input(type="text", value=knowledge_type_label(source.source_type), readonly)
+        div
+          label Scope
+          input(type="text", value=source.scope, readonly)
+        div
+          label Estado
+          select(name="status")
+            each option in ["ready", "active", "draft", "archived"]
+              option(value=option, selected=source.status === option)= option
+        div
+          label Summary status
+          select(name="summary_status")
+            each option in ["ready", "pending_ingestion", "draft", "failed"]
+              option(value=option, selected=(source.summary_status || "ready") === option)= option
+        if source.origin
+          div
+            label Origen
+            input(type="text", value=source.origin, readonly)
+
+      label Descripción
+      textarea(name="description", rows="4")= source.description || ""
+
+      label Knowledge
+      textarea(name="summary", rows="5")= source.summary || ""
+
+      if source.source_type === "url" || metadata.url
+        label URL
+        input(type="url", name="url", value=metadata.url || "", placeholder="https://...")
+
+      div.form-actions
+        button(type="submit") Guardar cambios
+        a.button.secondary-button(href=back_url) Cancelar
+
+  if metadata.url
+    section.panel
+      h2 URL
+      a(href=metadata.url, target="_blank", rel="noreferrer")= metadata.url
+
+  if file
+    section.panel
+      h2 Archivo S3
+      dl.compact
+        div
+          dt Archivo
+          dd= file.original_filename || "sin nombre"
+        div
+          dt Bucket
+          dd= file.bucket || "sin bucket"
+        div
+          dt Key
+          dd= file.key || "sin key"
+        div
+          dt Tipo
+          dd= file.mime_type || "sin mime type"
+        div
+          dt Tamaño
+          dd= file.size_bytes ? String(file.size_bytes) + " bytes" : "sin tamaño"
+
+  section.panel
+    h2 Metadata
+    pre= json(metadata)

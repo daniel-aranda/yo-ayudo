@@ -1,113 +1,436 @@
 extends ../layout
 
 block content
-  section.page-header
-    h1= bot ? bot.name : "Bot no encontrado"
-    if bot
-      p= `${bot.organization_name} · ${bot.account_name}`
+  -
+    const definition = bot?.definition_json || {};
+    const identity = definition.identity || {};
+    const behavior = definition.behavior || {};
+    const interactions = Array.isArray(definition.interactions) ? definition.interactions : [];
+    const assigned_knowledge_sources = Array.isArray(knowledge_sources) ? knowledge_sources : [];
+    const all_knowledge_sources = Array.isArray(available_knowledge_sources) ? available_knowledge_sources : [];
+    const knowledge_ids = Array.isArray(definition.knowledge_source_ids) ? definition.knowledge_source_ids : [];
+    const assigned_knowledge_ids = new Set(assigned_knowledge_sources.map((source) => source.id).concat(knowledge_ids));
+    const addable_knowledge_sources = all_knowledge_sources.filter((source) => !assigned_knowledge_ids.has(source.id));
+    const system_interactions = Array.isArray(available_interactions) ? available_interactions : [];
+    const configured_types = new Set(interactions.map((interaction) => interaction.type));
+    const addable_interactions = system_interactions.filter((interaction) => !configured_types.has(interaction.type));
+    const settings_json = Object.keys(definition).length ? definition : (bot?.settings_json || {});
+    const bot_name = identity.name || bot?.name || "Agente no encontrado";
+    const bot_description = identity.description || bot?.description || "";
+    const bot_goal = identity.goal || definition.goal || "";
+    const behavior_language = behavior.language || "es-MX";
+    const behavior_tone = behavior.tone || bot?.tono || "professional";
+    const operating_instructions = behavior.operating_instructions || bot?.instrucciones_operativas || "";
+    const constraints_text = Array.isArray(behavior.constraints) ? behavior.constraints.join("\n") : (behavior.constraints || "");
+    const knowledge_type_label = (type) => {
+      if (type === "document") return "Documento";
+      if (type === "url") return "URL";
+      return "Texto";
+    };
+    const knowledge_preview = (value) => {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+    };
 
   if bot
-    div.two-column
+    section.page-header.builder-header
+      div
+        h1= bot_name
+        p= `${bot.organization_name || "Organization"} / ${bot.account_name || "Account"}`
+      div.builder-actions
+        button(type="submit", form="bot-editor") Guardar cambios
+        details.json-toggle
+          summary Ver settings JSON
+          pre= JSON.stringify(settings_json, null, 2)
+
+    form(method="post", action=`/inspector/bots/${bot.id}`, id="bot-editor")
       section.panel
-        h2 Configuración base
-        dl.compact
+        h2 Identidad del agente
+        div.form-grid
           div
-            dt Nombre
-            dd= bot.name
+            label(for="name") Nombre
+            input#name(type="text", name="name", value=bot_name)
           div
-            dt Propósito
-            dd= bot.description || bot.definition_json.description || "sin descripción"
+            label(for="status") Estado
+            select#status(name="status")
+              each status_option in ["draft", "active", "archived"]
+                option(value=status_option, selected=(bot.status || identity.status) === status_option)= status_option
           div
-            dt Canal
-            dd= bot.channel
+            label(for="bot_type") Tipo
+            select#bot_type(name="bot_type")
+              each type_option in ["system", "custom"]
+                option(value=type_option, selected=(bot.bot_type || identity.type) === type_option)= type_option
+        div.form-grid
           div
-            dt Estado
-            dd= bot.status
+            label(for="description") Descripción
+            textarea#description(name="description", rows="3")= bot_description
           div
-            dt Tipo
-            dd= bot.bot_type || "system"
+            label(for="goal") Objetivo
+            textarea#goal(name="goal", rows="3")= bot_goal
 
       section.panel
-        h2 Canales / accounts asignados
-        dl.compact
+        h2 Instrucciones operativas
+        div.form-grid
           div
-            dt Account
-            dd= bot.account_name
+            label(for="behavior_language") Idioma
+            select#behavior_language(name="behavior_language")
+              option(value="es-MX", selected=behavior_language === "es-MX") Español México
+              option(value="en-US", selected=behavior_language === "en-US") English US
           div
-            dt WhatsApp
-            dd= bot.display_phone_number || bot.phone_number_id || "sin número"
+            label(for="behavior_tone") Tono
+            select#behavior_tone(name="behavior_tone")
+              option(value="direct", selected=behavior_tone === "direct") Directo
+              option(value="friendly", selected=behavior_tone === "friendly") Amable
+              option(value="professional", selected=behavior_tone === "professional") Profesional
+              option(value="commercial", selected=behavior_tone === "commercial") Comercial
+              option(value="technical", selected=behavior_tone === "technical") Técnico
+              option(value="casual", selected=behavior_tone === "casual") Casual
+        div
+          label(for="instrucciones_operativas") Instrucciones
+          textarea#instrucciones_operativas(
+            name="instrucciones_operativas",
+            rows="8",
+            placeholder="Describe cómo debe operar este agente, qué debe priorizar, cuándo debe preguntar, cómo debe usar knowledge y cuándo debe consultar humanos."
+          )= operating_instructions
 
-    section.panel
-      h2 Instrucciones base
-      if bot.prompt_base || bot.instrucciones_operativas
-        if bot.prompt_base
-          label Prompt base
-          textarea(rows="5", readonly)= bot.prompt_base
-        if bot.instrucciones_operativas
-          label Instrucciones operativas
-          textarea(rows="5", readonly)= bot.instrucciones_operativas
-      else if bot.definition_json && (bot.definition_json.goal || bot.definition_json.description)
-        if bot.definition_json.goal
-          label Objetivo
-          textarea(rows="4", readonly)= bot.definition_json.goal
-        if bot.definition_json.description
-          label Descripción
-          textarea(rows="4", readonly)= bot.definition_json.description
-      else
-        div.empty Sin instrucciones base configuradas.
-
-    section.panel
-      h2 Configuración inicial
-      textarea(rows="12", readonly)= json(bot.definition_json && Object.keys(bot.definition_json).length ? bot.definition_json : bot.settings_json)
-
-    section.panel
-      h2 Conversaciones recientes
-      a.button(href=`/inspector/bots/${bot.id}/conversations`) Ver todas
-      if conversations.length
-        table
-          thead
-            tr
-              th Sender
-              th Último mensaje
-              th Intent
-              th Agent
-              th Review
-              th Actividad
-          tbody
-            each conversation in conversations
-              tr
-                td
-                  a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
-                  div.meta= conversation.whatsapp_phone
-                td= conversation.last_message || "-"
-                td= conversation.last_intent || "-"
-                td= conversation.last_agent || "-"
-                td= conversation.pending_review_count
-                td= conversation.last_activity || "-"
-      else
-        div.empty Sin conversaciones.
-
-    div.two-column
       section.panel
-        h2 Agent runs recientes
-        if agent_runs.length
-          ul.clean-list
-            each run in agent_runs
-              li
-                a(href=run.message_id ? `/inspector/messages/${run.message_id}` : "#")= `${run.agent_key} · ${run.run_type}`
-                span.meta= ` · ${run.status}`
+        div.section-title
+          div
+            h2 Knowledge
+            p.meta Knowledge es contexto nativo del runtime.
+          a.button(href=`/inspector/knowledge?organization_id=${bot.organization_id}&account_id=${bot.account_id}`) Ir a Knowledge Center
+        div.inline-add-row
+          if addable_knowledge_sources.length
+            select#knowledge_source_picker
+              option(value="") Selecciona knowledge existente
+              each source in addable_knowledge_sources
+                option(value=source.id, data-name=source.name, data-type=source.source_type, data-status=source.status, data-summary=source.summary || "")= source.name
+            button#add_knowledge_source(type="button") Asignar knowledge
+          else
+            select(disabled)
+              option Todo el knowledge disponible ya está asignado
+            button(type="button", disabled) Asignar knowledge
+        if assigned_knowledge_sources.length
+          div.table-wrap#assigned_knowledge_table
+            table
+              thead
+                tr
+                  th Fuente
+                  th Tipo
+                  th Estado
+                  th Knowledge
+              tbody
+                each source in assigned_knowledge_sources
+                  tr
+                    td
+                      strong= source.name
+                      if source.description
+                        p.meta= source.description
+                      input(type="hidden", name="knowledge_source_ids", value=source.id)
+                    td= knowledge_type_label(source.source_type)
+                    td
+                      span.status= source.status
+                    td
+                      if source.summary_status
+                        span.status= source.summary_status
+                      if source.summary
+                        p.meta= knowledge_preview(source.summary)
         else
-          div.empty Sin agent runs.
+          div.empty#knowledge_empty_state Este agente todavía no tiene knowledge asignado. Selecciona una fuente existente o créala en Knowledge Center.
+          div#assigned_knowledge_hidden
+            each knowledge_id in knowledge_ids
+              input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
 
       section.panel
-        h2 Memory docs recientes
-        if memory_documents.length
-          ul.clean-list
-            each document in memory_documents
-              li
-                a(href=document.message_id ? `/inspector/messages/${document.message_id}` : "#")= document.title || document.document_type
-                span.meta= ` · ${document.status} · ${document.embedding_status}`
+        div.section-title
+          div
+            h2 Interacciones
+            p.meta Formas permitidas en las que el agente puede interactuar con canales, sistemas o humanos.
+        if interactions.length
+          div.interaction-grid
+            each interaction, index in interactions
+              -
+                const system_interaction = system_interactions.find((item) => item.type === interaction.type) || interaction;
+              div.interaction-card
+                input(type="hidden", name="interaction_type", value=system_interaction.type)
+                div.section-title
+                  div
+                    h3= system_interaction.label || interaction.label
+                    if system_interaction.description
+                      p.meta= system_interaction.description
+                  label.checkbox-line
+                    input(type="checkbox", name="interaction_enabled", value=index, checked=interaction.enabled !== false)
+                    | Habilitada
+                label Instrucciones
+                textarea(
+                  name="interaction_instructions",
+                  rows="4",
+                  placeholder=system_interaction.instructions_placeholder || "Describe cuándo y cómo debe usar esta interacción."
+                )= interaction.instructions || ""
+                if interaction.type === "consult_human"
+                  label Grupos humanos
+                  input(
+                    type="text",
+                    name="interaction_human_group_ids",
+                    value=Array.isArray(interaction.human_group_ids) ? interaction.human_group_ids.join(", ") : "",
+                    placeholder="Selecciona grupos humanos"
+                  )
+                else
+                  input(type="hidden", name="interaction_human_group_ids", value="")
         else
-          div.empty Sin memory docs.
+          div.empty#interaction_empty_state Ninguna interacción configurada.
+
+        div.inline-add-row
+          if addable_interactions.length
+            select#interaction_picker
+              option(value="") Selecciona una interacción
+              each interaction in addable_interactions
+                option(
+                  value=interaction.type,
+                  data-key=interaction.key,
+                  data-label=interaction.label,
+                  data-description=interaction.description,
+                  data-placeholder=interaction.instructions_placeholder
+                )= interaction.label
+            button#add_interaction(type="button") Agregar interacción
+          else
+            select(disabled)
+              option Tienes todas las interacciones conectadas
+            button(type="button", disabled) Agregar interacción
+
+        if addable_interactions.length
+          div#new_interaction_mount
+        else
+          p.meta Todas las interacciones disponibles ya están configuradas.
+
+      section.panel
+        h2 Restricciones
+        textarea(
+          name="constraints_text",
+          rows="6",
+          placeholder="Describe las restricciones del agente: qué no debe prometer, cuándo debe detenerse y cuándo debe consultar a un humano."
+        )= constraints_text
+
+      section.panel
+        h2 Probar bot
+        div.test-bot-panel(
+          data-bot-id=bot.id,
+          data-organization-id=bot.organization_id || "",
+          data-account-id=bot.account_id || ""
+        )
+          label(for="test_bot_message") Mensaje de prueba
+          textarea#test_bot_message(
+            rows="5",
+            placeholder="Escribe un mensaje como si llegara por WhatsApp. Ej. Consulta a humano si podemos prometer llamadas automáticas y crea una tarea de seguimiento."
+          )
+          button#run_bot_test(type="button") Probar bot
+          div#bot_test_result.test-result(hidden)
+
+      div.two-column
+        section.panel
+          h2 Canales / accounts asignados
+          dl.compact
+            div
+              dt Organization
+              dd= bot.organization_name || "Sin organization"
+            div
+              dt Account
+              dd= bot.account_name || "Sin account"
+            div
+              dt Número WhatsApp
+              dd= bot.display_phone_number || bot.phone_number_id || "Sin número asignado"
+            div
+              dt Canal
+              dd= bot.channel || "internal"
+        section.panel
+          h2 Conversaciones recientes
+          if conversations.length
+            ul.clean-list
+              each conversation in conversations
+                li
+                  a(href=`/inspector/conversations/${conversation.id}`)= conversation.contact_display_name || conversation.contact_phone || conversation.id
+                  span.meta= ` · ${conversation.status || "active"}`
+          else
+            div.empty Sin conversaciones recientes.
   else
-    div.empty No se encontró el bot.
+    section.page-header
+      h1 Agente no encontrado
+      p No se encontró el bot solicitado.
+
+  script.
+    (() => {
+      const interactionPicker = document.getElementById("interaction_picker");
+      const addInteractionButton = document.getElementById("add_interaction");
+      const interactionMount = document.getElementById("new_interaction_mount");
+      const interactionGrid = document.querySelector(".interaction-grid");
+      const interactionEmptyState = document.getElementById("interaction_empty_state");
+
+      function syncInteractionPicker() {
+        if (!interactionPicker || !addInteractionButton) return;
+        const hasOptions = Array.from(interactionPicker.options).some((option) => option.value);
+        interactionPicker.disabled = !hasOptions;
+        addInteractionButton.disabled = !hasOptions;
+        if (!hasOptions) {
+          interactionPicker.innerHTML = '<option>Tienes todas las interacciones conectadas</option>';
+        }
+      }
+
+      addInteractionButton?.addEventListener("click", () => {
+        const option = interactionPicker.selectedOptions[0];
+        if (!option?.value || !interactionMount) return;
+        const index = document.querySelectorAll('input[name="interaction_type"]').length;
+        const type = option.value;
+        const label = option.dataset.label || option.textContent;
+        const description = option.dataset.description || "";
+        const placeholder = option.dataset.placeholder || "Describe cuándo y cómo debe usar esta interacción.";
+        const humanField =
+          type === "consult_human"
+            ? '<label>Grupos humanos</label><input type="text" name="interaction_human_group_ids" placeholder="Selecciona grupos humanos">'
+            : '<input type="hidden" name="interaction_human_group_ids" value="">';
+        const card = document.createElement("div");
+        card.className = "interaction-card";
+        card.innerHTML = `
+          <input type="hidden" name="interaction_type" value="${type}">
+          <div class="section-title">
+            <div>
+              <h3>${label}</h3>
+              ${description ? `<p class="meta">${description}</p>` : ""}
+            </div>
+            <label class="checkbox-line">
+              <input type="checkbox" name="interaction_enabled" value="${index}" checked>
+              Habilitada
+            </label>
+          </div>
+          <label>Instrucciones</label>
+          <textarea name="interaction_instructions" rows="4" placeholder="${placeholder}"></textarea>
+          ${humanField}
+        `;
+        if (interactionGrid) {
+          interactionGrid.appendChild(card);
+        } else {
+          const grid = document.createElement("div");
+          grid.className = "interaction-grid";
+          grid.appendChild(card);
+          interactionMount.before(grid);
+        }
+        interactionEmptyState?.remove();
+        option.remove();
+        interactionPicker.value = "";
+        syncInteractionPicker();
+      });
+
+      syncInteractionPicker();
+
+      const knowledgePicker = document.getElementById("knowledge_source_picker");
+      const addKnowledgeButton = document.getElementById("add_knowledge_source");
+      const knowledgeHiddenMount = document.getElementById("assigned_knowledge_hidden");
+      const knowledgeEmptyState = document.getElementById("knowledge_empty_state");
+
+      function syncKnowledgePicker() {
+        if (!knowledgePicker || !addKnowledgeButton) return;
+        const hasOptions = Array.from(knowledgePicker.options).some((option) => option.value);
+        knowledgePicker.disabled = !hasOptions;
+        addKnowledgeButton.disabled = !hasOptions;
+        if (!hasOptions) {
+          knowledgePicker.innerHTML = "<option>Todo el knowledge disponible ya está asignado</option>";
+        }
+      }
+
+      addKnowledgeButton?.addEventListener("click", () => {
+        const option = knowledgePicker.selectedOptions[0];
+        if (!option?.value) return;
+        const hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "knowledge_source_ids";
+        hidden.value = option.value;
+        (knowledgeHiddenMount || document.getElementById("bot-editor")).appendChild(hidden);
+        knowledgeEmptyState?.remove();
+        option.remove();
+        knowledgePicker.value = "";
+        syncKnowledgePicker();
+      });
+
+      syncKnowledgePicker();
+
+      const testPanel = document.querySelector(".test-bot-panel");
+      const testButton = document.getElementById("run_bot_test");
+      const testMessage = document.getElementById("test_bot_message");
+      const testResult = document.getElementById("bot_test_result");
+
+      function renderList(title, items, mapper) {
+        const rows = (items || []).map(mapper).join("");
+        return `<section class="test-result-section"><h3>${title}</h3>${rows || '<p class="meta">Sin registros.</p>'}</section>`;
+      }
+
+      testButton?.addEventListener("click", async () => {
+        const mensaje = testMessage.value.trim();
+        if (!mensaje) return;
+
+        testButton.disabled = true;
+        testResult.hidden = false;
+        testResult.innerHTML = '<p class="meta">Probando bot...</p>';
+
+        try {
+          const response = await fetch(`/inspector/bots/${testPanel.dataset.botId}/test-message`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              organization_id: testPanel.dataset.organizationId,
+              account_id: testPanel.dataset.accountId,
+              mensaje,
+            }),
+          });
+          const payload = await response.json();
+
+          if (!payload.ok) {
+            testResult.innerHTML = `<p class="meta">Error: ${payload.message || payload.error || "No se pudo probar el bot."}</p>`;
+            return;
+          }
+
+          const result = payload.result;
+          const modelDecision = result.model_decision
+            ? `<p class="meta">AI real: ${result.model_decision.provider} · ${result.model_decision.model || "modelo no reportado"} · ${result.model_decision.response_id || "sin response_id"}</p><p class="meta">${result.model_decision.reason || ""}</p>`
+            : '<p class="meta">AI: mock local determinístico. Configura AI_PROVIDER=openai para probar con modelo real.</p>';
+          testResult.innerHTML = `
+            <section class="test-result-section">
+              <h3>Respuesta del bot</h3>
+              <p>${result.respuesta}</p>
+              ${modelDecision}
+              <p class="meta">Prompt compilation: ${result.prompt_compilation_id}</p>
+            </section>
+            ${renderList("Interacciones", result.interaction_trace, (event) => `
+              <div class="trace-card">
+                <strong>${event.label || event.interaction_type}</strong>
+                <span class="status">${event.status}</span>
+                <p class="meta">${event.reason || ""}</p>
+                ${event.output?.response ? `<p>${event.output.response}</p>` : ""}
+              </div>
+            `)}
+            ${renderList("Acciones pedidas", result.action_requests, (action) => `
+              <div class="trace-card">
+                <strong>${action.action_id}</strong>
+                <pre>${JSON.stringify(action.input_json || {}, null, 2)}</pre>
+              </div>
+            `)}
+            ${renderList("Resultados", result.action_results, (action) => `
+              <div class="trace-card">
+                <strong>${action.action_id}</strong>
+                <span class="status">${action.status}</span>
+                <pre>${JSON.stringify(action.output || {}, null, 2)}</pre>
+              </div>
+            `)}
+            ${renderList("Guardrails", result.guardrail_events_generados, (event) => `
+              <div class="trace-card">
+                <strong>${event.tipo}</strong>
+                <p class="meta">${event.descripcion}</p>
+              </div>
+            `)}
+          `;
+        } catch (error) {
+          testResult.innerHTML = `<p class="meta">Error: ${error.message}</p>`;
+        } finally {
+          testButton.disabled = false;
+        }
+      });
+    })();

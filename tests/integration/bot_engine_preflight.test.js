@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { afterEach as after_each, beforeEach as before_each, describe, expect, it } from "vitest";
+import { bot_engine_test_service } from "../../src/bot_engine/bot_engine_test_service.js";
 import { register_commercial_routes } from "../../src/commercial/commercial_routes.js";
 import { create_test_pool } from "../helpers/test_pool.js";
 
@@ -32,15 +33,23 @@ describe("bot engine founder preflight", () => {
   });
 
   it("loads the internal YoAyudo configurable bot and executes safe internal actions in test mode", async () => {
-    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'cuenta-principal' LIMIT 1");
-    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'operador_comercial_yoayudo' LIMIT 1");
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'yoayudo-ventas' LIMIT 1");
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
     const account = account_result.rows[0];
     const bot = bot_result.rows[0];
 
-    expect(account.name).toBe("Cuenta principal");
+    expect(account.name).toBe("YoAyudo Ventas");
     expect(bot.bot_type).toBe("custom");
     expect(bot.acciones_habilitadas_json).toEqual(
       expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"]),
+    );
+    expect(bot.definition_json.identity.name).toBe("Agente WhatsApp YoAyudo");
+    expect(bot.definition_json.knowledge_source_ids.length).toBeGreaterThan(0);
+    expect(bot.definition_json.behavior).not.toHaveProperty("base_prompt");
+    expect(bot.definition_json).not.toHaveProperty("capabilities");
+    expect(bot.definition_json).not.toHaveProperty("dispatch_rules");
+    expect(bot.definition_json.interactions.map((interaction) => interaction.type)).toEqual(
+      expect.arrayContaining(["receive_whatsapp_message", "send_whatsapp_message", "consult_human"]),
     );
 
     const compile_response = await request(app)
@@ -86,9 +95,54 @@ describe("bot engine founder preflight", () => {
     expect(audit_logs.body.logs.some((log) => log.action_id === "programar_llamada" && log.status === "blocked")).toBe(true);
   });
 
+  it("uses a real model provider decision when the bot tester receives one", async () => {
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'yoayudo-ventas' LIMIT 1");
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const account = account_result.rows[0];
+    const bot = bot_result.rows[0];
+    const provider = {
+      async decide_bot_test_message(input) {
+        expect(input.prompt).toContain("Agente WhatsApp YoAyudo");
+        expect(input.acciones_disponibles.map((action) => action.action_id)).toContain("guardar_nota");
+
+        return {
+          provider: "openai",
+          model: "test-openai-model",
+          response_id: "resp_test",
+          reply: "Respuesta decidida por modelo real de prueba.",
+          reason: "El modelo decidió guardar una nota.",
+          action_requests: [
+            {
+              action_id: "guardar_nota",
+              input_json: { nota: "Nota creada desde decisión del modelo." },
+            },
+          ],
+        };
+      },
+    };
+    const tester = new bot_engine_test_service({ pool, provider });
+
+    const result = await tester.test_message({
+      organization_id: account.organization_id,
+      account_id: account.id,
+      bot_id: bot.id,
+      modo_test: true,
+      mensaje: "Este texto no contiene palabras clave locales de guardar nota.",
+    });
+
+    expect(result.respuesta).toBe("Respuesta decidida por modelo real de prueba.");
+    expect(result.model_decision).toMatchObject({
+      provider: "openai",
+      model: "test-openai-model",
+      response_id: "resp_test",
+    });
+    expect(result.action_requests.map((action) => action.action_id)).toEqual(["guardar_nota"]);
+    expect(result.actions_ejecutadas.map((action) => action.action_id)).toEqual(["guardar_nota"]);
+  });
+
   it("returns guardrail events for disabled, unknown, confirmation and stub actions", async () => {
-    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'cuenta-principal' LIMIT 1");
-    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'operador_comercial_yoayudo' LIMIT 1");
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'yoayudo-ventas' LIMIT 1");
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
     const account = account_result.rows[0];
     const bot = bot_result.rows[0];
 
@@ -218,7 +272,7 @@ describe("bot engine founder preflight", () => {
   });
 
   it("supports the minimum diagnosticos_ai flow for internal commercial use", async () => {
-    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'cuenta-principal' LIMIT 1");
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'yoayudo-ventas' LIMIT 1");
     const account = account_result.rows[0];
 
     const create_response = await request(app)

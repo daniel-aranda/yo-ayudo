@@ -70,7 +70,11 @@ describe("commercial platform", () => {
     expect(response.body.bot.paquete_id).toBe("seguimiento_ventas");
     expect(response.body.bot.bot_type).toBe("custom");
     expect(response.body.bot.acciones_habilitadas_json).toContain("crear_tarea");
-    expect(response.body.bot.prompt_base).toContain("asistente comercial");
+    expect(response.body.bot.prompt_base).toBeNull();
+    expect(response.body.bot.instrucciones_operativas).toContain("asistente comercial");
+    expect(response.body.bot.definition_json.interactions.map((interaction) => interaction.type)).toEqual(
+      expect.arrayContaining(["receive_whatsapp_message", "send_whatsapp_message", "consult_human"]),
+    );
     expect(response.body.template.knowledge_base_sugerida).toContain("servicios");
 
     const compiled = await request(app)

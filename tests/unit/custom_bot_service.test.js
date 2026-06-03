@@ -4,50 +4,36 @@ import { create_test_pool } from "../helpers/test_pool.js";
 
 function valid_definition(name = "Bot Custom Test") {
   return {
-    name,
-    description: "Bot custom para ventas y seguimiento.",
-    goal: "Atender prospectos, capturar datos y escalar a humano cuando aplique.",
-    supported_intents: ["sales_inquiry", "human_help"],
-    required_fields: [
-      {
-        key: "customer_name",
-        label: "Nombre",
-        description: "Nombre del cliente.",
-        required: true,
-      },
-    ],
-    agent_definitions: [
-      {
-        key: "sales_agent",
-        name: "Agente de ventas",
-        role: "Responde dudas comerciales y captura datos.",
-        allowed_intents: ["sales_inquiry"],
-        tools: [],
-      },
-    ],
-    routing_config: {
-      default_agent_key: "sales_agent",
-      intent_routes: [{ intent: "sales_inquiry", agent_key: "sales_agent", priority: 10 }],
+    identity: {
+      name,
+      description: "Bot custom para ventas y seguimiento.",
+      goal: "Atender prospectos, capturar datos y consultar a humano cuando aplique.",
+      status: "active",
+      type: "custom",
     },
-    handoff_policy: {
-      enabled: true,
-      triggers: ["El cliente pide hablar con humano."],
-      message: "Te canalizo con una persona.",
-    },
-    knowledge_requirements: [
-      {
-        key: "services",
-        description: "Servicios y precios del negocio.",
-        required: true,
-      },
-    ],
-    response_style: {
-      tone: "claro y amable",
+    behavior: {
       language: "es-MX",
-      max_length: 500,
-      formatting: "mensajes cortos",
+      tone: "friendly",
+      operating_instructions: "Atiende prospectos, pregunta datos faltantes y usa knowledge cuando aplique.",
+      constraints: "No inventar precios.",
     },
-    constraints: ["No inventar precios."],
+    knowledge_source_ids: [],
+    interactions: [
+      {
+        key: "receive_whatsapp_message",
+        type: "receive_whatsapp_message",
+        label: "Recibir mensajes de WhatsApp",
+        enabled: true,
+        instructions: "Atiende mensajes comerciales entrantes.",
+      },
+      {
+        key: "send_whatsapp_message",
+        type: "send_whatsapp_message",
+        label: "Enviar mensaje de WhatsApp",
+        enabled: true,
+        instructions: "Responde con claridad.",
+      },
+    ],
   };
 }
 
@@ -68,8 +54,8 @@ describe("custom_bot_service", () => {
     expect(bot.bot_type).toBe("custom");
     expect(bot.status).toBe("active");
     expect(bot.definition_version).toBe(1);
-    expect(bot.definition_json.goal).toContain("Atender prospectos");
-    expect(bot.definition_json.supported_intents).toContain("sales_inquiry");
+    expect(bot.definition_json.identity.goal).toContain("Atender prospectos");
+    expect(bot.definition_json.interactions.map((interaction) => interaction.type)).toContain("receive_whatsapp_message");
 
     await pool.end();
   });
@@ -85,8 +71,8 @@ describe("custom_bot_service", () => {
         name: "Bot Invalido",
         slug: "bot-invalido",
         definition_json: {
-          name: "Bot Invalido",
-          supported_intents: [],
+          identity: { name: "Bot Invalido" },
+          interactions: [],
         },
       }),
     ).rejects.toThrow();
@@ -100,7 +86,8 @@ describe("custom_bot_service", () => {
     const service = new custom_bot_service({ pool });
     const bots = await service.list_bots_by_account(account.rows[0].id);
 
-    expect(bots.some((bot) => bot.bot_type === "system" && bot.name === "Agente WhatsApp YoAyudo")).toBe(true);
+    expect(bots.some((bot) => bot.bot_type === "system" && bot.name === "Bot WhatsApp Legacy YoAyudo")).toBe(true);
+    expect(bots.some((bot) => bot.bot_type === "custom" && bot.name === "Agente WhatsApp YoAyudo")).toBe(true);
     expect(bots.some((bot) => bot.bot_type === "custom" && bot.name === "Agente de Prospectos")).toBe(true);
 
     await pool.end();

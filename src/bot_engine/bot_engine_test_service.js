@@ -1,4 +1,5 @@
 import { action_execution_service } from "../actions/action_execution_service.js";
+import { create_model_provider } from "../ai/provider_factory.js";
 import { bot_configuration_service } from "./bot_configuration_service.js";
 import { prompt_compiler } from "./prompt_compiler.js";
 
@@ -118,12 +119,96 @@ function build_reply(message, results) {
   return parts.join(" ");
 }
 
+function enabled_interactions_for_bot(bot) {
+  return new Map(
+    (bot.definition_json?.interactions ?? [])
+      .filter((interaction) => interaction.enabled !== false)
+      .map((interaction) => [interaction.type, interaction]),
+  );
+}
+
+function should_consult_human(message, action_results) {
+  const text = String(message ?? "");
+  return (
+    includes_any(text, ["humano", "persona", "consulta", "custom", "riesgo", "aprobación", "aprobacion", "no sé", "no se"]) ||
+    action_results.some((result) => ["blocked", "pending_confirmation", "pending_provider", "not_implemented"].includes(result.status))
+  );
+}
+
+function build_interaction_trace(bot, message, reply, action_results) {
+  const interactions = enabled_interactions_for_bot(bot);
+  const trace = [];
+
+  if (interactions.has("receive_whatsapp_message")) {
+    trace.push({
+      interaction_type: "receive_whatsapp_message",
+      label: interactions.get("receive_whatsapp_message").label,
+      status: "mock_received",
+      reason: "Modo test simuló un mensaje entrante de WhatsApp.",
+      input: { message },
+      output: { channel: "whatsapp_mock", received: true },
+    });
+  } else {
+    trace.push({
+      interaction_type: "receive_whatsapp_message",
+      status: "ignored",
+      reason: "El agente no tiene habilitada la interacción para recibir WhatsApp.",
+    });
+  }
+
+  if (should_consult_human(message, action_results)) {
+    if (interactions.has("consult_human")) {
+      trace.push({
+        interaction_type: "consult_human",
+        label: interactions.get("consult_human").label,
+        status: "mock_requested_and_answered",
+        reason: "El mensaje o los resultados requieren criterio humano en modo test.",
+        input: {
+          question: message,
+          context_summary: action_results.map((result) => `${result.action_id}:${result.status}`).join(", "),
+        },
+        output: {
+          human_group_ids: interactions.get("consult_human").human_group_ids ?? [],
+          response: "Mock humano: valida el contexto, responde con cautela y no prometas integraciones no configuradas.",
+        },
+      });
+    } else {
+      trace.push({
+        interaction_type: "consult_human",
+        status: "ignored",
+        reason: "El bot quiso consultar a humano, pero la interacción no está habilitada.",
+      });
+    }
+  }
+
+  if (interactions.has("send_whatsapp_message")) {
+    trace.push({
+      interaction_type: "send_whatsapp_message",
+      label: interactions.get("send_whatsapp_message").label,
+      status: "mock_sent",
+      reason: "Modo test simuló el envío de respuesta por WhatsApp.",
+      input: { reply },
+      output: { channel: "whatsapp_mock", sent: true, external_message_id: "mock-whatsapp-message" },
+    });
+  } else {
+    trace.push({
+      interaction_type: "send_whatsapp_message",
+      status: "ignored",
+      reason: "El agente no tiene habilitada la interacción para enviar WhatsApp.",
+      input: { reply },
+    });
+  }
+
+  return trace;
+}
+
 export class bot_engine_test_service {
-  constructor({ pool }) {
+  constructor({ pool, provider = create_model_provider() }) {
     this.pool = pool;
     this.bot_service = new bot_configuration_service({ pool });
     this.compiler = new prompt_compiler({ pool });
     this.actions = new action_execution_service({ pool });
+    this.provider = provider;
   }
 
   async test_message(input) {
@@ -145,7 +230,23 @@ export class bot_engine_test_service {
       business_knowledge: input.business_knowledge ?? [],
       conversation_memory: input.conversation_memory ?? [],
     });
-    const action_requests = (input.action_requests ?? infer_action_requests_from_message(input.mensaje ?? input.current_message))
+
+    if (input.require_real_ai === true && typeof this.provider.decide_bot_test_message !== "function") {
+      const error = new Error("Probar bot requiere AI real. Configura AI_PROVIDER=openai y OPENAI_API_KEY.");
+      error.code = "bot_test_real_ai_required";
+      throw error;
+    }
+
+    const model_decision =
+      input.action_requests || typeof this.provider.decide_bot_test_message !== "function"
+        ? null
+        : await this.provider.decide_bot_test_message({
+            prompt: compiled.prompt,
+            mensaje: input.mensaje ?? input.current_message,
+            acciones_disponibles: compiled.acciones_disponibles,
+            bot,
+          });
+    const action_requests = (input.action_requests ?? model_decision?.action_requests ?? infer_action_requests_from_message(input.mensaje ?? input.current_message))
       .map(normalize_action_request)
       .filter((request) => request.action_id);
     const action_results = [];
@@ -164,14 +265,20 @@ export class bot_engine_test_service {
       }));
     }
 
+    const respuesta = model_decision?.reply || build_reply(input.mensaje ?? input.current_message, action_results);
+    const interaction_trace = build_interaction_trace(bot, input.mensaje ?? input.current_message, respuesta, action_results);
+
     return {
-      respuesta: build_reply(input.mensaje ?? input.current_message, action_results),
+      respuesta,
+      respuesta_operativa: build_reply(input.mensaje ?? input.current_message, action_results),
+      model_decision,
       prompt_compilation_id: compiled.compilation.id,
       acciones_disponibles: compiled.acciones_disponibles,
       action_requests,
       actions_ejecutadas: action_results.filter((result) => result.status === "executed"),
       actions_pendientes_confirmacion: action_results.filter((result) => result.status === "pending_confirmation"),
       guardrail_events_generados: action_results.flatMap((result) => result.guardrail_events ?? []),
+      interaction_trace,
       action_results,
       errores: action_results
         .filter((result) => result.audit_log?.error)

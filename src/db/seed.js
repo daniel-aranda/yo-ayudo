@@ -3,11 +3,209 @@ import { config } from "../app/config.js";
 import { upsert_account as upsert_account_record } from "../accounts/account_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { upsert_bot as upsert_bot_record } from "../bots/bot_repository.js";
-import { custom_bot_service } from "../bots/custom_bot_service.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { memory_document_service } from "../memory/memory_document_service.js";
+
+const yoayudo_sales_knowledge = `
+# YoAyudo - Knowledge para vendedores
+
+## Qué es YoAyudo
+
+YoAyudo ayuda a negocios a ordenar, automatizar y mejorar procesos comerciales y operativos usando WhatsApp como interfaz principal.
+No vendemos un bot genérico: vendemos una forma más simple de operar ventas, seguimiento, tareas, diagnósticos y procesos reales desde donde el equipo ya trabaja.
+
+## Problema que resolvemos
+
+Muchas empresas ya venden, atienden y coordinan por WhatsApp, pero lo hacen de forma desordenada:
+
+- Prospectos sin seguimiento.
+- Clientes olvidados.
+- Vendedores que no registran avances.
+- Información perdida en chats.
+- Operaciones manuales y repetitivas.
+- Dueños sin visibilidad clara de qué está pasando.
+- CRMs o sistemas que no se actualizan porque están fuera del flujo diario.
+
+YoAyudo convierte WhatsApp en una capa inteligente de trabajo: captura datos, crea tareas, registra notas, genera resúmenes, consulta knowledge, escala a humanos y se prepara para conectar con herramientas externas mediante APIs.
+
+## Casos de uso principales
+
+### Ventas por WhatsApp
+
+El sistema ayuda a registrar leads, clasificar prospectos, detectar interesados, sugerir próximos pasos, crear tareas de seguimiento y evitar que se pierdan oportunidades.
+El objetivo es vender más sin depender de memoria, notas sueltas o chats desordenados.
+
+### Lead tracking
+
+YoAyudo puede dar seguimiento a prospectos desde primer contacto hasta cierre o descarte.
+Estados útiles: nuevo prospecto, contactado, interesado, cotización enviada, seguimiento pendiente, caliente, cerrado ganado, cerrado perdido, no interesado o recontactar después.
+También puede registrar razones de pérdida, objeciones frecuentes y señales de intención.
+
+### CRM basado en WhatsApp
+
+En vez de obligar al equipo a entrar a un CRM pesado, YoAyudo permite capturar y consultar información desde WhatsApp:
+
+- "Registra que Juan pidió cotización de 20 unidades."
+- "Pon a María como prospecto caliente."
+- "¿A quién tengo que dar seguimiento hoy?"
+- "Muéstrame los leads sin respuesta."
+- "Actualiza este cliente como cerrado ganado."
+
+### Notion, Excel, CRM o sistemas existentes
+
+YoAyudo puede funcionar como puente entre WhatsApp y herramientas que el negocio ya usa.
+Si existe API o una forma viable de integración, se puede evaluar conexión para crear prospectos, actualizar estados, registrar tareas, guardar notas o consultar información.
+
+### Procesos internos
+
+No todo es ventas. También puede apoyar en registro de gastos, solicitud de documentos, seguimiento de pendientes, reportes diarios, coordinación de equipo, consultas frecuentes y escalamiento humano.
+
+## Cómo explicarlo en una frase
+
+YoAyudo convierte WhatsApp en un sistema inteligente para automatizar ventas, seguimiento y procesos internos conectándose con las herramientas que la empresa ya usa.
+
+## Elevator pitch
+
+Muchas empresas ya trabajan por WhatsApp, pero ahí se les pierden prospectos, tareas y seguimiento. YoAyudo convierte WhatsApp en una herramienta inteligente: registra leads, da seguimiento, conecta con CRMs, Notion o APIs, y ayuda al equipo a operar sin depender de memoria o procesos manuales.
+
+## Qué NO somos
+
+YoAyudo no es simplemente un chatbot de respuestas automáticas.
+No somos un bot genérico de FAQs, un CRM tradicional pesado, una herramienta de spam masivo, una solución rígida de flujos cerrados ni un reemplazo total del equipo humano.
+
+Somos una capa de automatización sobre WhatsApp que ayuda al negocio a trabajar mejor.
+
+## Diferenciador
+
+Trabajamos sobre el canal donde muchos negocios ya operan: WhatsApp.
+En lugar de pedirle al equipo que cambie completamente de herramienta, llevamos automatización, seguimiento y conectividad al flujo natural de trabajo.
+Eso reduce fricción y mejora adopción.
+
+## Beneficios
+
+- Más ventas: mejor seguimiento y menos oportunidades perdidas.
+- Más orden: información fuera de chats sueltos.
+- Más visibilidad: dueños y gerentes pueden ver clientes, leads y tareas.
+- Menos trabajo repetitivo: el sistema registra, recuerda, consulta y actualiza.
+- Mejor adopción: el equipo usa WhatsApp, una herramienta que ya conoce.
+- Mejor conexión entre sistemas: WhatsApp puede conectarse con APIs, Notion, CRM, bases de datos u otras herramientas.
+
+## Clientes ideales
+
+Buenos candidatos suelen vender por WhatsApp, recibir leads por redes sociales o referidos, tener vendedores con seguimiento manual, perder prospectos por falta de orden, usar Notion/Excel/CRM sin disciplina de actualización, necesitar automatizar tareas repetitivas o querer más visibilidad operativa.
+
+Tipos de negocios: agencias, clínicas, inmobiliarias, escuelas, cursos, servicios profesionales, talleres, constructoras, despachos, consultorios, ecommerce consultivo, empresas B2B y negocios locales con alto volumen de mensajes.
+
+## Preguntas de descubrimiento
+
+- ¿Cómo dan seguimiento hoy a sus prospectos?
+- ¿Dónde registran los leads que llegan por WhatsApp?
+- ¿Qué pasa cuando un vendedor olvida responder?
+- ¿Cómo sabe el dueño qué prospectos están calientes?
+- ¿Cuántas oportunidades se pierden por falta de seguimiento?
+- ¿Usan CRM, Notion, Excel, ERP o Google Sheets? ¿El equipo realmente los actualiza?
+- ¿Qué información repiten todos los días?
+- ¿Qué proceso les quita más tiempo cada semana?
+- ¿Qué tareas dependen demasiado de una persona?
+- ¿Cuándo debe intervenir un humano?
+
+## Señales de buen prospecto
+
+- "Todo lo manejamos por WhatsApp."
+- "Se nos pierden clientes."
+- "Los vendedores no actualizan el CRM."
+- "Tenemos muchos mensajes."
+- "Damos seguimiento manual."
+- "Usamos Notion, pero nadie lo mantiene al día."
+- "El dueño quiere reportes."
+- "Necesitamos ordenar ventas."
+- "Tenemos procesos repetitivos."
+
+## Señales de mal prospecto
+
+Puede no ser buen candidato si no usa WhatsApp, tiene muy bajo volumen, no tiene proceso repetible, solo quiere un bot barato que conteste todo, busca spam masivo sin estrategia o no quiere invertir tiempo en definir procesos.
+
+## Cómo venderlo
+
+La venta debe enfocarse en dolor real, no en tecnología.
+No iniciar con "tenemos bots con IA conectados a APIs".
+Mejor decir: "Vamos a ayudarte a que ningún prospecto se pierda, que tus vendedores sepan a quién seguir y que puedas ver el avance desde WhatsApp sin depender de memoria o chats desordenados."
+
+## Objeciones frecuentes
+
+"Ya usamos WhatsApp normal": justamente por eso sirve; no quitamos WhatsApp, lo hacemos más ordenado, medible y automatizado.
+
+"Ya tenemos CRM": YoAyudo puede ser la capa de captura y consulta desde WhatsApp para que el CRM sí se alimente.
+
+"No queremos reemplazar vendedores": buscamos ayudarlos a dar mejor seguimiento, registrar avances y enfocarse en cerrar.
+
+"¿Es solo un bot?": no. Puede incluir bots, pero el valor está en automatizar procesos completos: seguimiento, registro, consultas, escalamiento e integraciones.
+
+"¿Puede conectarse con mi sistema?": si el sistema tiene API o forma viable de integración, se revisa técnicamente.
+
+## Qué prometer
+
+Se puede prometer automatización sobre WhatsApp, organización de leads, seguimiento más consistente, configuración personalizada, reducción de tareas repetitivas, mejor visibilidad y conexión con herramientas externas cuando sea técnicamente posible.
+
+## Qué NO prometer
+
+No prometer que la IA nunca se equivoca, que cerrará ventas sin esfuerzo humano, que cualquier integración es inmediata, que reemplaza al equipo, que se puede hacer spam masivo o que WhatsApp permite cualquier automatización sin reglas.
+
+## Forma correcta de hablar de IA
+
+La IA ayuda a interpretar conversaciones, clasificar información, sugerir acciones y ejecutar procesos definidos. No es magia. El negocio conserva reglas, límites y escalamiento humano.
+
+## Interacciones importantes
+
+Enviar mensajes de WhatsApp permite dar seguimiento, recordar citas, pedir datos faltantes, confirmar recepción, notificar avances o avisar a vendedores. Debe usarse con contexto y reglas, no para spam.
+
+Recibir mensajes de WhatsApp permite interpretar mensajes entrantes, registrar datos, atender consultas y decidir si debe actuar o ignorar según reglas.
+
+Consultar humano permite pedir criterio cuando falta información, hay excepciones, aprobaciones, casos complejos o información que no existe en el knowledge.
+
+## Flujo ejemplo de ventas
+
+1. Entra un lead por WhatsApp.
+2. YoAyudo registra el prospecto.
+3. Identifica interés, producto o necesidad.
+4. Se asigna o notifica a un vendedor.
+5. El vendedor conversa con el prospecto.
+6. YoAyudo registra avances relevantes.
+7. Recuerda seguimientos pendientes.
+8. Prioriza prospectos calientes.
+9. Marca ganado o perdido.
+10. La empresa obtiene visibilidad del proceso.
+
+## Tono de venta
+
+Claro, consultivo y práctico. Primero entender proceso y dolor. Después explicar cómo YoAyudo ayuda. La conversación debe sentirse como diagnóstico, no como demo forzada.
+
+## Cierre diagnóstico
+
+"Si pudiéramos automatizar una parte de tu operación por WhatsApp para ahorrar tiempo o vender más, ¿qué proceso sería el primero que te gustaría arreglar?"
+
+## Principio central
+
+No automatizamos por automatizar. Primero entendemos el proceso, luego diseñamos una solución simple, útil y medible.
+`.trim();
+
+const yoayudo_sales_knowledge_description =
+  "Guía comercial para vendedores internos de YoAyudo: qué vendemos, dolores que resolvemos, casos de uso, objeciones, límites de promesa y preguntas de descubrimiento.";
+
+async function ensure_seed_schema(pool) {
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS summary text");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS quick_facts jsonb NOT NULL DEFAULT '[]'::jsonb");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS summary_status text NOT NULL DEFAULT 'draft'");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS last_summarized_at timestamptz");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS origin text");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS source_family text NOT NULL DEFAULT 'business_knowledge'");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS account_id uuid REFERENCES accounts(id) ON DELETE CASCADE");
+  await pool.query("ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS bot_id uuid REFERENCES bots(id) ON DELETE CASCADE");
+}
 
 async function upsert_solution_template(pool) {
   const result = await pool.query(
@@ -174,15 +372,15 @@ async function upsert_organization(pool) {
     `
       UPDATE organizations
       SET status = 'archived', updated_at = now()
-      WHERE slug = 'yoayudo-demo'
-        AND NOT EXISTS (SELECT 1 FROM organizations WHERE slug = 'yoayudo')
+      WHERE slug = 'yoayudo'
+        AND NOT EXISTS (SELECT 1 FROM organizations WHERE slug = 'yoayudo-demo')
     `,
   );
 
   const result = await pool.query(
     `
       INSERT INTO organizations (name, slug, status)
-      VALUES ('YoAyudo', 'yoayudo', 'active')
+      VALUES ('YoAyudo Demo', 'yoayudo-demo', 'active')
       ON CONFLICT (slug)
       DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, updated_at = now()
       RETURNING id
@@ -198,7 +396,7 @@ async function archive_legacy_demo_entities(pool, organization_id) {
       UPDATE accounts
       SET status = 'archived', updated_at = now()
       WHERE organization_id = $1
-        AND slug = 'demo-account'
+        AND slug IN ('demo-account', 'cuenta-principal')
     `,
     [organization_id],
   );
@@ -213,11 +411,43 @@ async function archive_legacy_demo_entities(pool, organization_id) {
 }
 
 async function upsert_account(pool, organization_id, tenant_id) {
+  const existing = await pool.query(
+    `
+      SELECT *
+      FROM accounts
+      WHERE (organization_id = $1 AND slug = 'yoayudo-ventas')
+         OR tenant_id = $2
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `,
+    [organization_id, tenant_id],
+  );
+
+  if (existing.rows[0]) {
+    const updated = await pool.query(
+      `
+        UPDATE accounts
+        SET
+          organization_id = $2,
+          tenant_id = $3,
+          name = 'YoAyudo Ventas',
+          slug = 'yoayudo-ventas',
+          status = 'active',
+          updated_at = now()
+        WHERE id = $1
+        RETURNING id
+      `,
+      [existing.rows[0].id, organization_id, tenant_id],
+    );
+
+    return updated.rows[0].id;
+  }
+
   const account = await upsert_account_record(pool, {
     organization_id,
     tenant_id,
-    name: "Cuenta principal",
-    slug: "cuenta-principal",
+    name: "YoAyudo Ventas",
+    slug: "yoayudo-ventas",
     status: "active",
   });
 
@@ -230,12 +460,12 @@ async function upsert_bot(pool, input) {
     account_id: input.account_id,
     tenant_id: input.tenant_id,
     bot_profile_id: input.bot_profile_id,
-    name: "Agente WhatsApp YoAyudo",
-    slug: "agente-whatsapp-yoayudo",
+    name: "Bot WhatsApp Legacy YoAyudo",
+    slug: "bot-whatsapp-legacy-yoayudo",
     channel: "whatsapp",
     bot_type: "system",
     status: "active",
-    description: "Agente base para operar conversaciones de WhatsApp desde el engine.",
+    description: "Bot system de compatibilidad para el pipeline WhatsApp legacy.",
     settings_json: {},
   });
 
@@ -261,72 +491,87 @@ async function upsert_bot(pool, input) {
 }
 
 async function upsert_yoayudo_commercial_operator_bot(pool, input) {
+  const operating_instructions =
+    "Ayuda a los vendedores con dudas sobre YoAyudo. Responde con claridad. Si falta contexto, pregunta. Si la respuesta requiere conocimiento de planes, pricing, integraciones o capacidades, usa el knowledge asignado. No inventes capacidades. Si algo requiere desarrollo custom o no está soportado, explícalo y consulta a un humano cuando aplique.";
+  const constraints =
+    "No inventar capacidades no disponibles.\nNo fingir que ejecutó acciones externas.\nNo prometer integraciones no configuradas.\nConsultar humano cuando falte knowledge o exista riesgo sensible.";
+  const interactions = [
+    {
+      key: "receive_whatsapp_message",
+      type: "receive_whatsapp_message",
+      label: "Recibir mensajes de WhatsApp",
+      enabled: true,
+      instructions:
+        "Atiende mensajes de vendedores relacionados con dudas sobre YoAyudo, capacidades, integraciones, pricing o estrategia comercial. Ignora mensajes que no requieran acción o respuesta.",
+    },
+    {
+      key: "send_whatsapp_message",
+      type: "send_whatsapp_message",
+      label: "Enviar mensaje de WhatsApp",
+      enabled: true,
+      instructions: "Envía respuestas breves, claras y útiles. No prometas acciones externas ni integraciones no configuradas.",
+    },
+    {
+      key: "consult_human",
+      type: "consult_human",
+      label: "Consultar humano",
+      enabled: true,
+      instructions:
+        "Consulta a un humano cuando el knowledge no tenga información suficiente, cuando exista riesgo sensible o cuando el vendedor pregunte por un alcance custom.",
+      human_group_ids: [],
+    },
+  ];
   const bot = await upsert_bot_record(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
     tenant_id: input.tenant_id,
-    name: "Operador Comercial YoAyudo",
-    slug: "operador_comercial_yoayudo",
+    name: "Agente WhatsApp YoAyudo",
+    slug: "agente-whatsapp-yoayudo",
     channel: "internal",
     bot_type: "custom",
     status: "active",
-    description: "Bot configurable demo para operar procesos internos de YoAyudo.",
+    description: "Agente base para resolver dudas de vendedores sobre YoAyudo.",
     settings_json: {
       source: "seed",
       purpose: "founder_preflight",
-      capability_gap_actions: ["enviar_email", "extraer_datos_de_imagen", "programar_llamada", "llamar_y_conectar"],
+      future_actions: ["enviar_email", "extraer_datos_de_imagen", "programar_llamada", "llamar_y_conectar"],
     },
     definition_json: {
-      name: "Operador Comercial YoAyudo",
-      description: "Apoya al founder a registrar prospectos, crear tareas, resumir conversaciones y detectar capability gaps.",
-      goal:
-        "Operar procesos internos de YoAyudo con acciones seguras: guardar notas, crear tareas, generar resúmenes y solicitar aprobación humana cuando aplique.",
-      supported_intents: ["sales_follow_up", "prospect_note", "task_request", "summary_request", "human_approval", "capability_gap"],
-      required_fields: [
-        { key: "negocio_nombre", label: "Nombre del negocio", required: false },
-        { key: "interes", label: "Interés comercial", required: false },
-        { key: "siguiente_accion", label: "Siguiente acción", required: false },
-      ],
-      agent_definitions: [],
-      routing_config: { default_agent_key: "operations_agent", intent_routes: [] },
-      handoff_policy: {
-        enabled: true,
-        triggers: ["acción no disponible", "acción no habilitada", "riesgo sensible", "proveedor no configurado"],
-        message: "Esto requiere revisión humana o una capacidad que todavía no está conectada.",
+      identity: {
+        name: "Agente WhatsApp YoAyudo",
+        description: "Agente base para resolver dudas de vendedores sobre YoAyudo.",
+        goal:
+          "Ayudar a vendedores a entender YoAyudo, resolver dudas sobre la plataforma, explicar capacidades y guiarlos para cerrar mejor.",
+        status: "active",
+        type: "custom",
       },
-      knowledge_requirements: ["oferta YoAyudo", "planes", "diagnóstico comercial", "criterios de venta"],
-      response_style: {
-        tone: "directo, comercial y operativo",
+      behavior: {
         language: "es-MX",
-        max_length: 700,
-        formatting: "mensajes breves con siguiente acción clara",
+        tone: "commercial",
+        operating_instructions,
+        constraints,
       },
-      constraints: [
-        "No fingir que envió emails, hizo llamadas o leyó documentos.",
-        "No prometer integraciones externas no configuradas.",
-        "Registrar guardrail event cuando falte una capacidad.",
-      ],
+      knowledge_source_ids: input.knowledge_source_ids ?? [],
+      interactions,
     },
     definition_version: 1,
     paquete_id: null,
-    prompt_base:
-      "Eres el operador comercial interno de YoAyudo. Ayudas al founder a registrar prospectos, resumir conversaciones, crear tareas de seguimiento, sugerir siguiente acción comercial y preparar diagnósticos. Usa solo acciones habilitadas y no finjas ejecuciones.",
-    instrucciones_operativas:
-      "Si el mensaje contiene información relevante de un prospecto, guarda una nota. Si pide seguimiento, crea una tarea. Si pide resumen, genera un resumen. Si pide email, OCR, llamada o integración externa, registra el gap mediante guardrails en vez de fingir ejecución.",
-    tono: "directo, práctico y comercial",
+    prompt_base: null,
+    instrucciones_operativas: operating_instructions,
+    tono: "commercial",
     objetivos_json: [
       "Registrar prospectos y contexto comercial.",
       "Crear tareas de seguimiento.",
       "Generar resúmenes operativos.",
-      "Detectar capability gaps para roadmap.",
+      "Detectar acciones o integraciones faltantes para roadmap.",
     ],
-    knowledge_base_ids_json: [],
+    knowledge_base_ids_json: input.knowledge_source_ids ?? [],
     acciones_habilitadas_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
     enabled_actions_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
     reglas_guardrail_json: [
       "No ejecutar acciones no habilitadas.",
       "No fingir integraciones externas.",
-      "Registrar capability gap cuando el proveedor no esté configurado.",
+      "Registrar guardrail cuando el proveedor no esté configurado.",
     ],
     reglas_escalamiento_json: [
       "Escalar si el founder pide enviar email real.",
@@ -370,104 +615,45 @@ async function upsert_whatsapp_number(pool, input) {
 
 function lead_capture_bot_definition() {
   return {
-    name: "Agente de Prospectos",
-    description: "Califica prospectos, captura datos iniciales y escala conversaciones sensibles.",
-    goal:
-      "Capturar prospectos, entender su necesidad, explicar siguientes pasos y escalar a humano cuando aplique.",
-    supported_intents: [
-      "sales_inquiry",
-      "price_question",
-      "appointment_request",
-      "financing_question",
-      "human_help",
-    ],
-    required_fields: [
-      {
-        key: "contact_name",
-        label: "Nombre del contacto",
-        description: "Nombre de la persona que solicita atención.",
-        required: true,
-      },
-      {
-        key: "phone",
-        label: "Teléfono",
-        description: "Teléfono de contacto para seguimiento.",
-        required: true,
-      },
-      {
-        key: "treatment_interest",
-        label: "Necesidad principal",
-        description: "Problema o proceso que el prospecto quiere resolver.",
-        required: true,
-      },
-      {
-        key: "preferred_account",
-        label: "Account preferida",
-        description: "Account, canal o equipo preferido para seguimiento.",
-        required: false,
-      },
-    ],
-    agent_definitions: [
-      {
-        key: "lead_capture_agent",
-        name: "Agente de prospectos",
-        role: "Califica prospectos, responde dudas iniciales y propone siguiente paso.",
-        allowed_intents: ["sales_inquiry", "price_question", "appointment_request"],
-        tools: [],
-      },
-      {
-        key: "human_handoff_agent",
-        name: "Escalamiento humano",
-        role: "Canaliza conversaciones delicadas o comerciales complejas a una persona.",
-        allowed_intents: ["financing_question", "human_help", "capability_gap"],
-        tools: [],
-      },
-    ],
-    routing_config: {
-      default_agent_key: "lead_capture_agent",
-      intent_routes: [
-        { intent: "sales_inquiry", agent_key: "lead_capture_agent", priority: 10 },
-        { intent: "price_question", agent_key: "lead_capture_agent", priority: 20 },
-        { intent: "appointment_request", agent_key: "lead_capture_agent", priority: 30 },
-        { intent: "financing_question", agent_key: "human_handoff_agent", priority: 5 },
-      ],
+    identity: {
+      name: "Agente de Prospectos",
+      description: "Califica prospectos, captura datos iniciales y consulta a humano en conversaciones sensibles.",
+      goal: "Capturar prospectos, entender su necesidad, explicar siguientes pasos y consultar a humano cuando aplique.",
+      status: "active",
+      type: "custom",
     },
-    handoff_policy: {
-      enabled: true,
-      triggers: [
-        "El prospecto pregunta por financiamiento.",
-        "El prospecto pide una accion no conectada.",
-        "El prospecto pide hablar con una persona.",
-      ],
-      message: "Te canalizo con una persona para darte seguimiento.",
-    },
-    knowledge_requirements: [
-      {
-        key: "services_and_prices",
-        description: "Lista de servicios, precios aproximados y condiciones.",
-        required: true,
-      },
-      {
-        key: "accounts_and_hours",
-        description: "Accounts, horarios y zonas de atención.",
-        required: true,
-      },
-      {
-        key: "sales_policies",
-        description: "Reglas para promociones, anticipos, citas y financiamiento.",
-        required: false,
-      },
-    ],
-    response_style: {
-      tone: "amable, claro y profesional",
+    behavior: {
       language: "es-MX",
-      max_length: 650,
-      formatting: "mensajes cortos de WhatsApp",
+      tone: "friendly",
+      operating_instructions:
+        "Atiende prospectos con mensajes claros y breves. Pregunta nombre, teléfono y necesidad principal cuando falten. Usa knowledge asignado para explicar servicios o siguientes pasos. Consulta a humano si preguntan por financiamiento, urgencias, excepciones o acciones no conectadas.",
+      constraints:
+        "No prometer acciones externas no configuradas.\nNo prometer precios finales sin validación.\nConsultar humano ante urgencias, financiamiento o excepciones comerciales.",
     },
-    constraints: [
-      "No prometer acciones externas no configuradas.",
-      "No prometer precios finales sin validación.",
-      "Escalar urgencias y financiamiento a humano.",
+    knowledge_source_ids: [],
+    interactions: [
+      {
+        key: "receive_whatsapp_message",
+        type: "receive_whatsapp_message",
+        label: "Recibir mensajes de WhatsApp",
+        enabled: true,
+        instructions: "Atiende mensajes de prospectos interesados en servicios, citas, precios o seguimiento.",
+      },
+      {
+        key: "send_whatsapp_message",
+        type: "send_whatsapp_message",
+        label: "Enviar mensaje de WhatsApp",
+        enabled: true,
+        instructions: "Envía respuestas cortas, útiles y orientadas al siguiente paso comercial.",
+      },
+      {
+        key: "consult_human",
+        type: "consult_human",
+        label: "Consultar humano",
+        enabled: true,
+        instructions: "Consulta a humano si el prospecto pide financiamiento, una excepción, urgencia o hablar con una persona.",
+        human_group_ids: [],
+      },
     ],
   };
 }
@@ -767,6 +953,37 @@ async function upsert_knowledge_source(pool, input) {
   );
 
   if (existing.rows[0]) {
+    await pool.query(
+      `
+        UPDATE knowledge_sources
+        SET
+          organization_id = COALESCE($2, organization_id),
+          account_id = COALESCE($3, account_id),
+          bot_id = COALESCE($4, bot_id),
+          description = COALESCE($5, description),
+          summary = COALESCE($6, summary),
+          quick_facts = $7::jsonb,
+          summary_status = COALESCE($8, summary_status),
+          last_summarized_at = COALESCE($9, last_summarized_at),
+          metadata_json = $10::jsonb,
+          status = COALESCE($11, status),
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [
+        existing.rows[0].id,
+        input.organization_id ?? null,
+        input.account_id ?? null,
+        input.bot_id ?? null,
+        input.description ?? null,
+        input.summary ?? null,
+        JSON.stringify(input.quick_facts ?? []),
+        input.summary_status ?? null,
+        input.last_summarized_at ?? null,
+        JSON.stringify(input.metadata_json ?? {}),
+        input.status ?? null,
+      ],
+    );
     return existing.rows[0].id;
   }
 
@@ -785,11 +1002,15 @@ async function upsert_knowledge_source(pool, input) {
         source_type,
         name,
         description,
+        summary,
+        quick_facts,
+        summary_status,
+        last_summarized_at,
         origin,
         metadata_json,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, 'active')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, COALESCE($15, 'draft'), $16, $17, $18::jsonb, COALESCE($19, 'active'))
       RETURNING id
     `,
     [
@@ -805,12 +1026,71 @@ async function upsert_knowledge_source(pool, input) {
       input.source_type,
       input.name,
       input.description ?? null,
+      input.summary ?? null,
+      JSON.stringify(input.quick_facts ?? []),
+      input.summary_status ?? "draft",
+      input.last_summarized_at ?? null,
       input.origin ?? "seed",
       JSON.stringify(input.metadata_json ?? {}),
+      input.status ?? "active",
     ],
   );
 
   return inserted.rows[0].id;
+}
+
+async function upsert_yoayudo_sales_knowledge_source(pool, input) {
+  return upsert_knowledge_source(pool, {
+    organization_id: input.organization_id,
+    account_id: input.account_id,
+    tenant_id: input.tenant_id,
+    branch_id: input.branch_id,
+    source_family: "business_knowledge",
+    scope: "account",
+    source_type: "text",
+    name: "YoAyudo account knowledge",
+    description: yoayudo_sales_knowledge_description,
+    summary: yoayudo_sales_knowledge,
+    quick_facts: [
+      "YoAyudo usa Bot Engine configurable: el código es motor y los agentes son configuración.",
+      "Los agentes pueden tener knowledge sources asignadas, instrucciones operativas, restricciones e interacciones permitidas.",
+      "Si una integración no está configurada, el agente no debe fingir que la ejecutó.",
+      "Las acciones internas reales actuales incluyen guardar notas, crear tareas y generar resúmenes.",
+    ],
+    summary_status: "ready",
+    last_summarized_at: null,
+    origin: "seed",
+    metadata_json: { source: "seed_config", purpose: "founder_trial" },
+    status: "ready",
+  });
+}
+
+async function update_legacy_yoayudo_seed_knowledge(pool, input) {
+  await pool.query(
+    `
+      UPDATE knowledge_sources
+      SET
+        organization_id = COALESCE($1, organization_id),
+        account_id = COALESCE($2, account_id),
+        source_type = 'text',
+        source_family = 'business_knowledge',
+        description = $3,
+        summary = $4,
+        summary_status = 'ready',
+        status = CASE WHEN status = 'active' THEN 'ready' ELSE status END,
+        metadata_json = metadata_json || $5::jsonb,
+        updated_at = now()
+      WHERE name = 'YoAyudo account knowledge'
+        AND source_type = 'seed_config'
+    `,
+    [
+      input.organization_id,
+      input.account_id,
+      yoayudo_sales_knowledge_description,
+      yoayudo_sales_knowledge,
+      JSON.stringify({ migrated_from_source_type: "seed_config", purpose: "founder_trial" }),
+    ],
+  );
 }
 
 async function seed_knowledge_documents(pool, input) {
@@ -847,8 +1127,7 @@ async function seed_knowledge_documents(pool, input) {
       branch_id: input.branch_id,
       bot_id: input.bot_id,
       bot_profile_id: input.bot_profile_id,
-      content:
-        "YoAyudo prefiere respuestas cortas, claras y enfocadas en capturar contexto, proponer siguiente acción y no fingir capacidades no conectadas.",
+      content: yoayudo_sales_knowledge,
     },
   ];
 
@@ -863,9 +1142,14 @@ async function seed_knowledge_documents(pool, input) {
       bot_profile_id: document.bot_profile_id,
       source_family: document.source_family,
       scope: document.scope,
-      source_type: "seed_config",
+      source_type: "text",
       name: document.name,
-      description: "Seed knowledge document",
+      description:
+        document.name === "YoAyudo account knowledge"
+          ? yoayudo_sales_knowledge_description
+          : "Knowledge operativo de sistema para guiar respuestas, límites y comportamiento base de YoAyudo.",
+      summary: document.content,
+      summary_status: "ready",
     });
 
     await service.create_document({
@@ -894,6 +1178,7 @@ async function seed_knowledge_documents(pool, input) {
 }
 
 export async function seed_development_data(pool) {
+  await ensure_seed_schema(pool);
   const solution_template_id = await upsert_solution_template(pool);
   const tenant_id = await upsert_tenant(pool);
   const branch_id = await get_or_create_branch(pool, tenant_id);
@@ -901,6 +1186,13 @@ export async function seed_development_data(pool) {
   const organization_id = await upsert_organization(pool);
   await archive_legacy_demo_entities(pool, organization_id);
   const account_id = await upsert_account(pool, organization_id, tenant_id);
+  await update_legacy_yoayudo_seed_knowledge(pool, { organization_id, account_id });
+  const yoayudo_knowledge_source_id = await upsert_yoayudo_sales_knowledge_source(pool, {
+    organization_id,
+    account_id,
+    tenant_id,
+    branch_id,
+  });
   const bot_id = await upsert_bot(pool, {
     organization_id,
     account_id,
@@ -913,19 +1205,24 @@ export async function seed_development_data(pool) {
     tenant_id,
     branch_id,
   });
-  await assign_bot_to_whatsapp_phone_number(pool, {
+  const prospect_bot_definition = lead_capture_bot_definition();
+  const custom_bot = await upsert_bot_record(pool, {
     organization_id,
     account_id,
-    whatsapp_phone_number_id: whatsapp_phone_number.id,
-    bot_id,
-    metadata_json: { source: "seed" },
-  });
-  const custom_bot = await new custom_bot_service({ pool }).create_custom_bot({
-    account_id,
+    tenant_id,
     name: "Agente de Prospectos",
     slug: "agente-de-prospectos",
+    channel: "whatsapp",
+    bot_type: "custom",
     status: "active",
-    definition_json: lead_capture_bot_definition(),
+    description: prospect_bot_definition.identity.description,
+    definition_json: prospect_bot_definition,
+    definition_version: 1,
+    instrucciones_operativas: prospect_bot_definition.behavior.operating_instructions,
+    tono: prospect_bot_definition.behavior.tone,
+    reglas_guardrail_json: prospect_bot_definition.behavior.constraints.split("\n"),
+    acciones_habilitadas_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
+    enabled_actions_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
     settings_json: { source: "seed" },
   });
   const custom_whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
@@ -948,6 +1245,14 @@ export async function seed_development_data(pool) {
     organization_id,
     account_id,
     tenant_id,
+    knowledge_source_ids: [yoayudo_knowledge_source_id],
+  });
+  await assign_bot_to_whatsapp_phone_number(pool, {
+    organization_id,
+    account_id,
+    whatsapp_phone_number_id: whatsapp_phone_number.id,
+    bot_id: yoayudo_commercial_bot_id,
+    metadata_json: { source: "seed", purpose: "main_configurable_agent" },
   });
 
   await upsert_contact(pool, tenant_id, branch_id);

@@ -28,6 +28,25 @@ function route_value(value) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function handle_bot_test_error(error, response) {
+  if (error.message?.startsWith("Bot no encontrado")) {
+    response.status(404).json({ ok: false, error: "bot_not_found", message: error.message });
+    return true;
+  }
+
+  if (error.message?.includes("modo_test=true")) {
+    response.status(400).json({ ok: false, error: "modo_test_required", message: error.message });
+    return true;
+  }
+
+  if (error.code === "bot_test_real_ai_required" || error.code?.startsWith("openai_")) {
+    response.status(error.status ?? 400).json({ ok: false, error: error.code, message: error.message });
+    return true;
+  }
+
+  return false;
+}
+
 export function register_commercial_routes(router, dependencies = {}) {
   const route_pool = dependencies.pool ?? pool;
   const diagnosticos = new diagnostico_ai_service({ pool: route_pool });
@@ -223,18 +242,11 @@ export function register_commercial_routes(router, dependencies = {}) {
       const result = await bot_engine_tester.test_message({
         ...(request.body ?? {}),
         bot_id: route_value(request.params.bot_id),
+        require_real_ai: config.node_env !== "test",
       });
       response.json({ ok: true, result });
     } catch (error) {
-      if (error.message?.startsWith("Bot no encontrado")) {
-        response.status(404).json({ ok: false, error: "bot_not_found", message: error.message });
-        return;
-      }
-
-      if (error.message?.includes("modo_test=true")) {
-        response.status(400).json({ ok: false, error: "modo_test_required", message: error.message });
-        return;
-      }
+      if (handle_bot_test_error(error, response)) return;
 
       next(error);
     }

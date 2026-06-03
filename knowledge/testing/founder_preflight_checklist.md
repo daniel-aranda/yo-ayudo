@@ -4,7 +4,7 @@
 
 Probar que YoAyudo ya puede operar un bot configurable interno sin WhatsApp real ni integraciones externas.
 
-El caso base es `operador_comercial_yoayudo`: un bot configurable para registrar prospectos, crear tareas de seguimiento, generar resúmenes y mostrar guardrails cuando se pide algo que el engine todavía no puede ejecutar.
+El caso base es `agente-whatsapp-yoayudo`: un bot configurable para registrar prospectos, crear tareas de seguimiento, generar resúmenes y mostrar guardrails cuando se pide algo que el engine todavía no puede ejecutar.
 
 ## Preparacion Local
 
@@ -36,18 +36,18 @@ npm run demo:bot-engine
 ## Flujo Manual
 
 1. Buscar o crear organization demo.
-   - Seed: `YoAyudo`.
+   - Seed: `YoAyudo Demo`.
 
 2. Buscar o crear account demo.
-   - Seed: `Cuenta principal`.
+   - Seed: `YoAyudo Ventas`.
 
 3. Buscar bot configurable.
-   - Seed: `operador_comercial_yoayudo`.
+   - Seed: `agente-whatsapp-yoayudo`.
    - No es clase de código; vive como fila en `bots`.
 
 4. Revisar configuración del bot.
-   - `prompt_base`.
    - `instrucciones_operativas`.
+   - `definition_json.interactions`.
    - `acciones_habilitadas_json`.
    - `reglas_guardrail_json`.
    - `reglas_escalamiento_json`.

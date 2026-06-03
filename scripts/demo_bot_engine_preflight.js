@@ -41,16 +41,17 @@ function print_section(title, value) {
 const pool = await create_memory_pool();
 
 try {
-  const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'demo-account' LIMIT 1");
-  const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'operador_comercial_yoayudo' LIMIT 1");
-  const account = account_result.rows[0];
+  const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
   const bot = bot_result.rows[0];
+  const account_result = await pool.query("SELECT * FROM accounts WHERE id = $1 LIMIT 1", [bot.account_id]);
+  const account = account_result.rows[0];
   const tester = new bot_engine_test_service({ pool });
   const result = await tester.test_message({
     organization_id: account.organization_id,
     account_id: account.id,
     bot_id: bot.id,
     modo_test: true,
+    require_real_ai: true,
     mensaje:
       "Registra este prospecto: Clínica Dental Sonrisa. Llegó por recomendación. Quiere responder WhatsApp fuera de horario y confirmar citas. Crea una tarea para llamarle mañana y prepara un resumen del posible diagnóstico. También intenta programar una llamada automática.",
   });
@@ -62,6 +63,7 @@ try {
   print_section("Prompt compilation", { prompt_compilation_id: result.prompt_compilation_id });
   print_section("Acciones disponibles", result.acciones_disponibles.map((action) => action.action_id));
   print_section("Respuesta", result.respuesta);
+  print_section("Interacciones mock", result.interaction_trace);
   print_section("Action requests", result.action_requests);
   print_section("Actions ejecutadas", result.actions_ejecutadas.map((action) => ({
     action_id: action.action_id,
@@ -87,6 +89,12 @@ try {
     action_id: event.action_id,
     descripcion: event.descripcion,
   })));
+} catch (error) {
+  console.error(`\n[demo:bot-engine] ${error.message}`);
+  if (error.code === "bot_test_real_ai_required" || error.code === "openai_api_key_required") {
+    console.error("[demo:bot-engine] Configura AI_PROVIDER=openai y OPENAI_API_KEY antes de correr esta demo.");
+  }
+  process.exitCode = 1;
 } finally {
   await pool.end();
 }

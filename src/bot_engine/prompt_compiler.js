@@ -22,6 +22,10 @@ function action_metadata(action) {
   };
 }
 
+function list_items(items = [], mapper = (item) => item) {
+  return items.map((item) => `- ${mapper(item)}`).join("\n");
+}
+
 export class prompt_compiler {
   constructor({ pool }) {
     this.pool = pool;
@@ -29,6 +33,18 @@ export class prompt_compiler {
 
   compile(input) {
     const bot = input.bot;
+    const definition = bot.definition_json ?? {};
+    const identity = definition.identity ?? {};
+    const behavior = definition.behavior ?? {};
+    const interactions = Array.isArray(definition.interactions) ? definition.interactions : [];
+    const constraints =
+      typeof behavior.constraints === "string"
+        ? behavior.constraints
+        : Array.isArray(behavior.constraints)
+          ? behavior.constraints.join("\n")
+          : Array.isArray(definition.constraints)
+            ? definition.constraints.join("\n")
+            : list_items(bot.reglas_guardrail_json ?? []);
     const enabled_actions = new Set(bot.acciones_habilitadas_json ?? bot.enabled_actions_json ?? []);
     const available_actions = list_actions()
       .filter((action) => action.habilitada !== false && enabled_actions.has(action.action_id))
@@ -37,27 +53,32 @@ export class prompt_compiler {
     const memory_summary = summarize_documents(input.conversation_memory ?? []);
     const prompt = [
       "# Bot",
-      `Nombre: ${bot.name}`,
-      `Descripcion: ${bot.description ?? ""}`,
-      `Tono: ${bot.tono ?? "claro y profesional"}`,
-      "",
-      "# Prompt base",
-      bot.prompt_base ?? bot.definition_json?.goal ?? "Atiende al usuario con claridad y seguridad.",
+      `Nombre: ${identity.name ?? bot.name}`,
+      `Descripcion: ${identity.description ?? bot.description ?? ""}`,
+      `Objetivo: ${identity.goal ?? definition.goal ?? ""}`,
+      `Tono: ${behavior.tone ?? bot.tono ?? "claro y profesional"}`,
+      `Idioma: ${behavior.language ?? "es-MX"}`,
       "",
       "# Instrucciones operativas",
-      bot.instrucciones_operativas ?? "",
+      behavior.operating_instructions ?? bot.instrucciones_operativas ?? bot.prompt_base ?? "",
       "",
       "# Objetivos",
-      (bot.objetivos_json ?? []).map((objetivo) => `- ${objetivo}`).join("\n"),
+      list_items(bot.objetivos_json ?? []),
       "",
       "# Campos a capturar",
-      (bot.campos_requeridos_json ?? []).map((campo) => `- ${campo}`).join("\n"),
+      list_items(bot.campos_requeridos_json ?? []),
       "",
       "# Reglas de guardrail",
-      (bot.reglas_guardrail_json ?? []).map((regla) => `- ${regla}`).join("\n"),
+      constraints,
       "",
       "# Reglas de escalamiento",
-      (bot.reglas_escalamiento_json ?? []).map((regla) => `- ${regla}`).join("\n"),
+      list_items(bot.reglas_escalamiento_json ?? []),
+      "",
+      "# Interacciones permitidas",
+      list_items(
+        interactions.filter((interaction) => interaction.enabled !== false),
+        (interaction) => `${interaction.label ?? interaction.type}: ${interaction.instructions ?? ""}`,
+      ),
       "",
       "# Acciones disponibles",
       available_actions.map((action) => `- ${action.action_id}: ${action.descripcion}`).join("\n"),
@@ -68,7 +89,7 @@ export class prompt_compiler {
       "# Memoria conversacional relevante",
       memory_summary.map((document) => `- ${document.title ?? document.id} (${document.document_type})`).join("\n"),
       "",
-      "# Formato esperado",
+      "# Respuesta esperada",
       "Responde al usuario o solicita una acción con JSON estructurado: {\"reply\":\"...\",\"action_request\":{\"action_id\":\"...\",\"input\":{}}}. No inventes ejecuciones.",
     ].join("\n");
 

@@ -6,7 +6,10 @@ describe("whatsapp_identity_resolver", () => {
   it("resolves organization, account and active bot assignment from phone_number_id", async () => {
     const pool = await create_test_pool();
     const phone_number = await pool.query("SELECT * FROM whatsapp_phone_numbers LIMIT 1");
-    const assignment = await pool.query("SELECT * FROM phone_number_bot_assignments WHERE status = 'active' LIMIT 1");
+    const assignment = await pool.query(
+      "SELECT * FROM phone_number_bot_assignments WHERE status = 'active' AND whatsapp_phone_number_id = $1 LIMIT 1",
+      [phone_number.rows[0].id],
+    );
 
     const identity = await resolve_whatsapp_identity_by_phone_number_id(
       pool,
@@ -15,8 +18,8 @@ describe("whatsapp_identity_resolver", () => {
 
     expect(identity.whatsapp_phone_number.id).toBe(phone_number.rows[0].id);
     expect(identity.phone_number_bot_assignment.id).toBe(assignment.rows[0].id);
-    expect(identity.organization.name).toBe("YoAyudo");
-    expect(identity.account.name).toBe("Cuenta principal");
+    expect(identity.organization.name).toBe("YoAyudo Demo");
+    expect(identity.account.name).toBe("YoAyudo Ventas");
     expect(identity.account.tenant_id).toBe(identity.tenant.id);
     expect(identity.bot.id).toBe(assignment.rows[0].bot_id);
 
@@ -33,8 +36,10 @@ describe("whatsapp_identity_resolver", () => {
 
     expect(identity.bot.bot_type).toBe("custom");
     expect(identity.bot.name).toBe("Agente de Prospectos");
-    expect(identity.bot.definition_json.goal).toContain("Capturar prospectos");
-    expect(identity.bot.definition_json.supported_intents).toContain("sales_inquiry");
+    expect(identity.bot.definition_json.identity.goal).toContain("Capturar prospectos");
+    expect(identity.bot.definition_json.interactions.map((interaction) => interaction.type)).toEqual(
+      expect.arrayContaining(["receive_whatsapp_message", "send_whatsapp_message", "consult_human"]),
+    );
 
     await pool.end();
   });

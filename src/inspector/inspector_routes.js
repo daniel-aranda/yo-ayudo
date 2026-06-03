@@ -1,4 +1,5 @@
 import { config } from "../app/config.js";
+import multer from "multer";
 import { pool } from "../db/client.js";
 import {
   get_account_view,
@@ -8,7 +9,16 @@ import {
   get_inspector_home,
   get_message_trace_view,
   get_organization_view,
+  update_bot_builder_view,
 } from "./inspector_repository.js";
+import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
+import {
+  create_knowledge_source,
+  get_knowledge_source,
+  list_knowledge_sources,
+  update_knowledge_source,
+} from "../knowledge/knowledge_center_repository.js";
+import { upload_knowledge_document_to_s3 } from "../knowledge/knowledge_s3_uploader.js";
 
 function inspector_auth(request, response, next) {
   if (!config.inspector_enabled) {
@@ -36,8 +46,57 @@ function route_value(value) {
   return value;
 }
 
+function handle_bot_test_error(error, response) {
+  if (error.message?.startsWith("Bot no encontrado")) {
+    response.status(404).json({ ok: false, error: "bot_not_found", message: error.message });
+    return true;
+  }
+
+  if (error.message?.includes("modo_test=true")) {
+    response.status(400).json({ ok: false, error: "modo_test_required", message: error.message });
+    return true;
+  }
+
+  if (error.code === "bot_test_real_ai_required" || error.code?.startsWith("openai_")) {
+    response.status(error.status ?? 400).json({ ok: false, error: error.code, message: error.message });
+    return true;
+  }
+
+  return false;
+}
+
+function knowledge_query_from(input = {}) {
+  const query = new URLSearchParams();
+  if (route_value(input.organization_id)) {
+    query.set("organization_id", route_value(input.organization_id));
+  }
+  if (route_value(input.account_id)) {
+    query.set("account_id", route_value(input.account_id));
+  }
+
+  return query;
+}
+
+async function render_knowledge_center(response, route_pool, input = {}) {
+  response.status(input.status ?? 200).render("inspector/knowledge", {
+    knowledge_sources: await list_knowledge_sources(route_pool, {
+      organization_id: input.filters?.organization_id,
+      account_id: input.filters?.account_id,
+      limit: 200,
+    }),
+    filters: input.filters ?? {},
+    error_message: input.error_message,
+  });
+}
+
 export function register_inspector_routes(router, dependencies = {}) {
   const route_pool = dependencies.pool ?? pool;
+  const bot_engine_tester = new bot_engine_test_service({ pool: route_pool });
+  const knowledge_document_uploader = dependencies.knowledge_document_uploader ?? upload_knowledge_document_to_s3;
+  const knowledge_upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: config.knowledge_upload_max_bytes },
+  });
 
   router.get("/inspector", inspector_auth, async (_request, response, next) => {
     try {
@@ -76,7 +135,172 @@ export function register_inspector_routes(router, dependencies = {}) {
 
   router.get("/inspector/bots/:bot_id", inspector_auth, async (request, response, next) => {
     try {
-      response.render("inspector/bot", await get_bot_view(route_pool, route_value(request.params.bot_id)));
+      if (request.query.saved !== undefined) {
+        response.redirect(`/inspector/bots/${route_value(request.params.bot_id)}`);
+        return;
+      }
+
+      response.render("inspector/bot", {
+        ...(await get_bot_view(route_pool, route_value(request.params.bot_id))),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/bots/:bot_id", inspector_auth, async (request, response, next) => {
+    try {
+      const bot = await update_bot_builder_view(route_pool, route_value(request.params.bot_id), request.body ?? {});
+
+      if (!bot) {
+        response.status(404).send("Bot not found");
+        return;
+      }
+
+      response.redirect(`/inspector/bots/${bot.id}`);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/bots/:bot_id/test-message", inspector_auth, async (request, response, next) => {
+    try {
+      const result = await bot_engine_tester.test_message({
+        ...(request.body ?? {}),
+        bot_id: route_value(request.params.bot_id),
+        modo_test: true,
+        require_real_ai: config.node_env !== "test",
+      });
+
+      response.json({ ok: true, result });
+    } catch (error) {
+      if (handle_bot_test_error(error, response)) return;
+
+      next(error);
+    }
+  });
+
+  router.get("/inspector/knowledge", inspector_auth, async (request, response, next) => {
+    try {
+      await render_knowledge_center(response, route_pool, { filters: request.query });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/knowledge", inspector_auth, knowledge_upload.single("document_file"), async (request, response, next) => {
+    try {
+      const source_type = route_value(request.body.source_type) || "text";
+      let metadata_json = {
+        url: route_value(request.body.url) || null,
+        source_type,
+      };
+      let content = route_value(request.body.content);
+      let summary_status = "ready";
+
+      if (source_type === "document") {
+        if (!request.file) {
+          await render_knowledge_center(response, route_pool, {
+            status: 400,
+            filters: request.body,
+            error_message: "Selecciona un archivo para crear knowledge de tipo documento.",
+          });
+          return;
+        }
+
+        const upload_result = await knowledge_document_uploader({
+          organization_id: route_value(request.body.organization_id) || null,
+          account_id: route_value(request.body.account_id) || null,
+          file: request.file,
+        });
+
+        metadata_json = {
+          ...metadata_json,
+          file: upload_result,
+        };
+        content = route_value(request.body.description) || request.file.originalname;
+        summary_status = "pending_ingestion";
+      }
+
+      await create_knowledge_source(route_pool, {
+        organization_id: route_value(request.body.organization_id) || null,
+        account_id: route_value(request.body.account_id) || null,
+        scope: route_value(request.body.scope) || "account",
+        source_type,
+        name: route_value(request.body.name),
+        description: route_value(request.body.description),
+        content,
+        summary_status,
+        metadata_json,
+      });
+
+      const query = knowledge_query_from(request.body);
+
+      response.redirect(`/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`);
+    } catch (error) {
+      if (error.code?.startsWith("knowledge_s3_")) {
+        await render_knowledge_center(response, route_pool, {
+          status: 400,
+          filters: request.body,
+          error_message: error.message,
+        });
+        return;
+      }
+
+      next(error);
+    }
+  });
+
+  router.get("/inspector/knowledge/:source_id", inspector_auth, async (request, response, next) => {
+    try {
+      const source = await get_knowledge_source(route_pool, route_value(request.params.source_id));
+
+      if (!source) {
+        response.status(404).send("Knowledge source not found");
+        return;
+      }
+
+      const query = knowledge_query_from(request.query);
+
+      response.render("inspector/knowledge_detail", {
+        source,
+        back_url: `/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`,
+        filters: request.query,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/knowledge/:source_id", inspector_auth, async (request, response, next) => {
+    try {
+      const source = await get_knowledge_source(route_pool, route_value(request.params.source_id));
+
+      if (!source) {
+        response.status(404).send("Knowledge source not found");
+        return;
+      }
+
+      const metadata_json = {
+        ...(source.metadata_json ?? {}),
+      };
+      const url = route_value(request.body.url);
+
+      if (source.source_type === "url" || url) {
+        metadata_json.url = url || null;
+      }
+
+      const updated = await update_knowledge_source(route_pool, source.id, {
+        name: route_value(request.body.name),
+        description: route_value(request.body.description),
+        summary: route_value(request.body.summary),
+        status: route_value(request.body.status),
+        summary_status: route_value(request.body.summary_status),
+        metadata_json,
+      });
+      const query = knowledge_query_from(request.body);
+
+      response.redirect(`/inspector/knowledge/${updated.id}${query.size ? `?${query.toString()}` : ""}`);
     } catch (error) {
       next(error);
     }

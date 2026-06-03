@@ -11,7 +11,7 @@ const doctor_env_schema = z.object({
   port: z.number().int().positive(),
   database_url: z.string().url(),
   app_base_url: z.string().url(),
-  ai_provider: z.enum(["mock", "bedrock"]),
+  ai_provider: z.enum(["mock", "bedrock", "openai"]),
   memory_store_provider: z.enum(["local", "s3"]),
   embedding_provider: z.enum(["mock", "bedrock"]),
   vector_index_provider: z.enum(["mock"]),
@@ -51,6 +51,10 @@ function check_environment() {
 
   if (config.node_env === "development" && config.ai_provider === "bedrock") {
     fail("AI_PROVIDER=bedrock is a stub in this MVP. Use AI_PROVIDER=mock for local dev.");
+  }
+
+  if (config.ai_provider === "openai" && !config.openai_api_key) {
+    fail("OPENAI_API_KEY is required when AI_PROVIDER=openai. Set it in .env before using Probar bot with real AI.");
   }
 
   if (config.node_env === "development" && config.embedding_provider === "bedrock") {

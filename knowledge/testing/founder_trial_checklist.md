@@ -30,11 +30,25 @@ La app local corre en:
 http://localhost:3000
 ```
 
+Para que `Probar bot` use AI real y no mock local, configura:
+
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.2
+```
+
+Si `AI_PROVIDER=openai` no tiene `OPENAI_API_KEY`, la app debe fallar al arrancar. Esa falla es intencional: evita probar el bot creyendo que hay AI real cuando no la hay.
+
+En desarrollo, el endpoint de `Probar bot` exige AI real. Si la app está con `AI_PROVIDER=mock`, debe responder que configures `AI_PROVIDER=openai` y `OPENAI_API_KEY`.
+
+`npm run demo:bot-engine` tambien exige AI real. Configura OpenAI antes de correr la demo.
+
 Datos demo esperados:
 
-- Organization: `YoAyudo`
-- Account: `Cuenta principal`
-- Bot configurable: `operador_comercial_yoayudo`
+- Organization: `YoAyudo Demo`
+- Account: `YoAyudo Ventas`
+- Bot configurable: `agente-whatsapp-yoayudo`
 - Actions reales habilitadas: `guardar_nota`, `crear_tarea`, `generar_resumen`, `solicitar_aprobacion_humana`
 - Actions futuras/stub visibles pero no productivas: `programar_llamada`, `llamar_y_conectar`, `extraer_datos_de_imagen`, `enviar_email`
 
@@ -46,7 +60,7 @@ npm run demo:bot-engine
 
 Debe mostrar:
 
-- Bot `operador_comercial_yoayudo`.
+- Bot `agente-whatsapp-yoayudo`.
 - `prompt_compilation_id`.
 - Action requests detectadas.
 - `guardar_nota` ejecutada.
@@ -101,7 +115,7 @@ curl http://localhost:3000/internal/actions
 curl http://localhost:3000/internal/bots
 ```
 
-Copia del bot `operador_comercial_yoayudo`:
+Copia del bot `agente-whatsapp-yoayudo`:
 
 - `id` como `bot_id`
 - `organization_id`
@@ -121,7 +135,6 @@ curl -X POST http://localhost:3000/internal/bots \
     "slug": "operador-comercial-founder-test",
     "descripcion": "Bot de prueba para operar procesos internos de YoAyudo.",
     "status": "active",
-    "prompt_base": "Eres un operador comercial interno de YoAyudo. Registra prospectos, crea tareas, genera resúmenes y no finjas acciones externas.",
     "instrucciones_operativas": "Usa solo actions habilitadas. Si falta una capacidad, registra guardrail y responde de forma segura.",
     "tono": "directo, práctico y comercial",
     "acciones_habilitadas": ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
@@ -131,13 +144,12 @@ curl -X POST http://localhost:3000/internal/bots \
   }'
 ```
 
-### 5. Actualizar prompt o acciones del bot
+### 5. Actualizar instrucciones o actions del bot
 
 ```bash
 curl -X PATCH http://localhost:3000/internal/bots/<bot_id> \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt_base": "Eres el operador comercial interno de YoAyudo. Tu prioridad es registrar contexto comercial accionable y crear seguimiento.",
     "instrucciones_operativas": "Responde breve. Ejecuta solo actions habilitadas. No prometas integraciones no conectadas.",
     "acciones_habilitadas_json": ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"]
   }'
@@ -339,6 +351,7 @@ http://localhost:3000/inspector
 - Ejecutar `generar_resumen`.
 - Ver `action_audit_logs`.
 - Ver `bot_guardrail_events`.
+- Crear knowledge de texto, URL y documento. Documento sube a S3 si `KNOWLEDGE_S3_BUCKET` y credenciales AWS están configuradas.
 - Crear y editar diagnósticos AI.
 - Generar propuesta preliminar estructurada.
 - Usar `bot_templates` editables como base.
@@ -355,7 +368,7 @@ http://localhost:3000/inspector
 - Twilio/voz real.
 - Email real.
 - Bedrock Knowledge Bases real.
-- S3 productivo probado.
+- S3 productivo probado sin credenciales reales.
 - Vector DB real.
 - Generación PDF de propuesta.
 - Mayoría de actions reales.

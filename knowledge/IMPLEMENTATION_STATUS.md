@@ -11,6 +11,7 @@ La direccion actual es Bot Engine configurable:
 - El codigo es el motor.
 - Los bots son configuracion.
 - Las acciones son capacidades.
+- Las interacciones describen como el agente puede usar canales o consultar humanos.
 - Los guardrails registran riesgos y capability gaps.
 
 `src/agents` sigue existiendo por routing actual y compatibilidad, pero no es el centro conceptual para nuevas features.
@@ -38,9 +39,12 @@ La direccion actual es Bot Engine configurable:
   - `phone_number_bot_assignments`
 - Bots `system` y `custom`.
 - Bot config:
-  - `prompt_base`
   - `instrucciones_operativas`
   - `tono`
+  - `definition_json.identity`
+  - `definition_json.behavior`
+  - `definition_json.knowledge_source_ids`
+  - `definition_json.interactions`
   - `objetivos_json`
   - `knowledge_base_ids_json`
   - `acciones_habilitadas_json`
@@ -59,7 +63,8 @@ La direccion actual es Bot Engine configurable:
 - `diagnosticos_ai` con `bots_recomendados`.
 - `discovery_questions` versionadas.
 - BusinessKnowledgeService y ConversationMemoryService separados por `document_family`.
-- Memory local/mock, S3 stub, Bedrock embedding stub.
+- Knowledge Center con texto, URL y upload de documentos a S3 via `.env`.
+- Memory local/mock, S3 memory store stub, Bedrock embedding stub.
 - Conversation Inspector interno.
 - Processing events.
 - Dashboard server-rendered.
@@ -154,7 +159,7 @@ No hay clases ni branches de codigo para estos templates.
 - OCR real.
 - Voz/Twilio real.
 - Bedrock Knowledge Bases real.
-- S3 productivo probado.
+- S3 productivo probado sin credenciales reales.
 - Vector DB real.
 - Generacion PDF de propuesta.
 - Handlers reales para la mayoria de actions; hoy solo `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecución interna real.
@@ -172,7 +177,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 15 archivos, 41 tests.
+- `npm test`: OK, 15 archivos, 47 tests.
 - `npm run db:migrate`: aplica una sola migracion inicial, `0001_initial.sql`.
 
 Comandos locales disponibles:

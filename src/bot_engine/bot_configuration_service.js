@@ -13,31 +13,49 @@ function slug_from_name(name) {
 }
 
 function definition_from_config(config) {
-  return {
-    name: config.nombre,
-    description: config.descripcion ?? "",
-    goal: (config.objetivos ?? []).join("\n") || config.prompt_base,
-    supported_intents: ["unknown", "human_help"],
-    required_fields: (config.campos_a_capturar ?? []).map((field) => ({
-      key: slug_from_name(field).replace(/-/g, "_"),
-      label: field,
-      required: false,
-    })),
-    agent_definitions: [],
-    routing_config: { default_agent_key: "operations_agent", intent_routes: [] },
-    handoff_policy: {
+  const operating_instructions = config.instrucciones_operativas ?? config.prompt_base ?? "";
+  const constraints = (config.reglas_guardrail ?? []).join("\n");
+  const interactions = config.interactions ?? [
+    {
+      key: "receive_whatsapp_message",
+      type: "receive_whatsapp_message",
+      label: "Recibir mensajes de WhatsApp",
       enabled: true,
-      triggers: config.reglas_escalamiento ?? [],
-      message: "Te canalizo con una persona del equipo.",
+      instructions: "Atiende mensajes entrantes relacionados con el objetivo del agente y pide contexto cuando haga falta.",
     },
-    knowledge_requirements: [],
-    response_style: {
-      tone: config.tono ?? "claro y profesional",
+    {
+      key: "send_whatsapp_message",
+      type: "send_whatsapp_message",
+      label: "Enviar mensaje de WhatsApp",
+      enabled: true,
+      instructions: "Envía respuestas claras, útiles y alineadas con las instrucciones operativas.",
+    },
+    {
+      key: "consult_human",
+      type: "consult_human",
+      label: "Consultar humano",
+      enabled: true,
+      instructions: "Consulta a un humano cuando falte knowledge, exista riesgo o el cliente pida algo fuera de alcance.",
+      human_group_ids: [],
+    },
+  ];
+
+  return {
+    identity: {
+      name: config.nombre,
+      description: config.descripcion ?? "",
+      goal: (config.objetivos ?? []).join("\n") || operating_instructions,
+      status: "active",
+      type: "custom",
+    },
+    behavior: {
       language: "es-MX",
-      max_length: 700,
-      formatting: "mensajes cortos de WhatsApp",
+      tone: config.tono ?? "professional",
+      operating_instructions,
+      constraints,
     },
-    constraints: config.reglas_guardrail ?? [],
+    knowledge_source_ids: config.knowledge_base_ids ?? [],
+    interactions,
   };
 }
 
@@ -45,8 +63,7 @@ function template_to_config(template, input) {
   return {
     nombre: input.nombre ?? template.nombre,
     descripcion: input.descripcion ?? template.descripcion,
-    prompt_base: input.prompt_base ?? template.prompt_base,
-    instrucciones_operativas: input.instrucciones_operativas ?? "",
+    instrucciones_operativas: input.instrucciones_operativas ?? template.prompt_base ?? "",
     tono: input.tono ?? "claro y profesional",
     objetivos: input.objetivos ?? [template.descripcion].filter(Boolean),
     knowledge_base_ids: input.knowledge_base_ids ?? [],
@@ -123,7 +140,7 @@ export class bot_configuration_service {
       definition_json,
       definition_version: 1,
       paquete_id: input.template_id ?? null,
-      prompt_base: config.prompt_base,
+      prompt_base: null,
       instrucciones_operativas: config.instrucciones_operativas,
       tono: config.tono,
       objetivos_json: config.objetivos ?? [],

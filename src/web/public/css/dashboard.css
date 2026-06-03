@@ -174,6 +174,27 @@ button:hover {
   background: var(--accent-dark);
 }
 
+.secondary-button {
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.secondary-button:hover {
+  background: #e5e3dc;
+}
+
+.form-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.knowledge-source-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .status {
   background: #e4f4ef;
   border-radius: 999px;
@@ -241,6 +262,267 @@ input {
   border-radius: 7px;
   font: inherit;
   padding: 9px 10px;
+}
+
+select {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+input[readonly],
+textarea[readonly] {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+button:disabled {
+  background: var(--surface-strong);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.builder-header {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.builder-actions {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.json-toggle {
+  min-width: 260px;
+}
+
+.json-toggle summary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 650;
+  list-style: none;
+  margin-top: 12px;
+  padding: 9px 12px;
+  text-align: center;
+}
+
+.json-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-bottom: 12px;
+}
+
+.form-grid input,
+.edit-list input,
+.chip-edit input,
+td input {
+  width: 100%;
+}
+
+.section-title {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.placeholder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.placeholder-actions button {
+  margin-top: 0;
+}
+
+.inline-add-row {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  margin: 12px 0;
+}
+
+.inline-add-row button,
+.inline-add-row .button {
+  margin-top: 0;
+}
+
+.radio-group {
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.radio-group legend {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.radio-option {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.radio-option input {
+  width: auto;
+}
+
+.edit-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.edit-list-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chip-edit {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 8px;
+}
+
+.chip-edit input {
+  background: transparent;
+  border: 0;
+  max-width: 190px;
+  padding: 3px;
+}
+
+.chip-edit input[type="checkbox"] {
+  width: auto;
+}
+
+.ordered-config-list,
+.interaction-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.config-row {
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding: 12px;
+}
+
+.config-row-new,
+.interaction-card-new {
+  background: var(--surface-strong);
+  border-style: dashed;
+}
+
+.row-number {
+  align-items: center;
+  background: #e4f4ef;
+  border-radius: 999px;
+  color: var(--accent-dark);
+  display: inline-flex;
+  font-weight: 750;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.interaction-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.interaction-card h3 {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+
+.test-bot-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.test-bot-panel button {
+  justify-self: start;
+}
+
+.test-result {
+  display: grid;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.test-result-section {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.test-result-section h3 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+
+.checkbox-line {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.checkbox-line {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.checkbox-line input {
+  width: auto;
 }
 
 .filters {

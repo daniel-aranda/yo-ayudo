@@ -62,9 +62,13 @@ Defaults locales:
 ```bash
 DATABASE_URL=postgres://yoayudo:yoayudo@localhost:5433/yoayudo
 AI_PROVIDER=mock
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.2
 WHATSAPP_PHONE_NUMBER_ID=demo-phone-number-id
 WHATSAPP_VERIFY_TOKEN=dev_verify_token
 MEMORY_STORE_PROVIDER=local
+KNOWLEDGE_S3_BUCKET=
+KNOWLEDGE_S3_PREFIX=yoayudo/knowledge
 EMBEDDING_PROVIDER=mock
 AGENT_ROUTER_ENABLED=true
 MEMORY_INGESTION_ENABLED=true
@@ -72,6 +76,20 @@ INSPECTOR_ENABLED=true
 ```
 
 Si no configuras `WHATSAPP_ACCESS_TOKEN`, el envío real a Meta se omite y queda registrado como outbound skipped.
+
+Para probar el Bot Engine con AI real en el inspector, usa:
+
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.2
+```
+
+Con `AI_PROVIDER=openai`, `npm run dev` falla si falta `OPENAI_API_KEY`; esto evita probar `Probar bot` creyendo que está usando un modelo real cuando sigue en mock.
+
+Además, en desarrollo las rutas de `Probar bot` exigen AI real. Si la app corre con `AI_PROVIDER=mock`, el tester responde con un error pidiendo configurar OpenAI. Los tests automatizados conservan mock para ser determinísticos.
+
+`npm run demo:bot-engine` también exige AI real. Configura OpenAI antes de correrlo.
 
 ## Comandos
 
@@ -136,7 +154,7 @@ El engine procesa mensajes y despacha operaciones genéricas:
 - `src/operations`: handlers de jornadas, compras, ventas, inventario, cierres, notas y reportes.
 - `solution_templates` y `bot_profiles`: viven en DB/seed; no hay módulo runtime hasta que exista lógica real.
 - `src/channels/whatsapp`: webhook, parsing de payload y cliente WhatsApp.
-- `src/ai`: gateway de modelo, mock provider y stub Bedrock.
+- `src/ai`: gateway de modelo, provider OpenAI para pruebas reales del Bot Engine, mock provider y stub Bedrock.
 - `src/dashboard`: rutas y queries del dashboard business/accounts.
 - `src/inspector`: inspector de bots/agentes, trace builder y vistas internas de conversación.
 - `src/processing_events`: timeline tecnica del pipeline.

@@ -50,7 +50,7 @@ async function simulate(pool, client, text) {
   );
 }
 
-function create_inspector_test_app(pool) {
+function create_inspector_test_app(pool, dependencies = {}) {
   const app = express();
   const router = express.Router();
 
@@ -59,8 +59,10 @@ function create_inspector_test_app(pool) {
   app.locals.money = format_money;
   app.locals.json = json_text;
   app.locals.message_alignment = message_alignment;
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
 
-  register_inspector_routes(router, { pool });
+  register_inspector_routes(router, { pool, ...dependencies });
   app.use(router);
   app.use((error, _request, response, _next) => {
     response.status(500).send(error.message);
@@ -207,7 +209,47 @@ describe("Conversation Inspector", () => {
     const app = create_inspector_test_app(pool);
 
     await request(app).get("/inspector").expect(200).expect(/Inspector de bots y agentes/);
-    await request(app).get(`/inspector/bots/${ids.rows[0].bot_id}`).expect(200).expect(/Agente WhatsApp YoAyudo/);
+    await request(app)
+      .get(`/inspector/bots/${ids.rows[0].bot_id}?saved=1`)
+      .expect(302)
+      .expect("Location", `/inspector/bots/${ids.rows[0].bot_id}`);
+    const bot_page = await request(app).get(`/inspector/bots/${ids.rows[0].bot_id}`).expect(200).expect(/Agente WhatsApp YoAyudo/);
+    expect(bot_page.text).toContain("Identidad del agente");
+    expect(bot_page.text).toContain("Instrucciones operativas");
+    expect(bot_page.text).toContain("Knowledge");
+    expect(bot_page.text).toContain("Ir a Knowledge Center");
+    expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
+    expect(bot_page.text).toContain("Interacciones");
+    expect(bot_page.text).toContain("Restricciones");
+    expect(bot_page.text).toContain("Probar bot");
+    expect(bot_page.text).toContain("Mensaje de prueba");
+    expect(bot_page.text).toContain("run_bot_test");
+    expect(bot_page.text).toContain("Canales / accounts asignados");
+    expect(bot_page.text).toContain("Conversaciones recientes");
+    expect(bot_page.text).toContain("Ver settings JSON");
+    for (const legacy_text of [
+      "Prompt base",
+      "Capacidades",
+      "Reglas de dispatch",
+      "Steps",
+      "Intents soportados",
+      "Intents",
+      "Handoff humano",
+      "Routing",
+      "Triggers",
+      "Formato",
+      "Máximo de caracteres",
+      "Workers",
+      "Sub-agentes",
+      "Agent workers",
+      "knowledge_search",
+      "Crear texto",
+      "Subir documento",
+      "Agregar URL",
+      "Seleccionar existente",
+    ]) {
+      expect(bot_page.text).not.toContain(legacy_text);
+    }
     await request(app)
       .get(`/inspector/conversations/${ids.rows[0].conversation_id}`)
       .expect(200)
@@ -217,6 +259,289 @@ describe("Conversation Inspector", () => {
       .expect(200)
       .expect(/Operational Writes/)
       .expect(/Compra registrada/);
+  });
+
+  it("saves structured bot builder fields without editing raw JSON", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const bot_id = bot_result.rows[0].id;
+
+    const save_response = await request(app)
+      .post(`/inspector/bots/${bot_id}`)
+      .type("form")
+      .send({
+        name: "Agente WhatsApp Editado",
+        description: "Editor estructurado funcionando.",
+        goal: "Operar ventas internas desde configuración.",
+        status: "active",
+        bot_type: "custom",
+        behavior_language: "es-MX",
+        behavior_tone: "direct",
+        instrucciones_operativas: "Instrucciones actualizadas desde builder.",
+        constraints_text: "No fingir llamadas.",
+        interaction_type: ["receive_whatsapp_message"],
+        interaction_instructions: ["Atender dudas comerciales."],
+        interaction_human_group_ids: [""],
+        interaction_enabled: ["0"],
+        new_interaction_type: "consult_human",
+        new_interaction_instructions: "Consultar a humano ante alcance custom.",
+        new_interaction_human_group_ids: "founder, ventas",
+      })
+      .expect(302);
+    expect(save_response.headers.location).toBe(`/inspector/bots/${bot_id}`);
+
+    const updated = await pool.query("SELECT * FROM bots WHERE id = $1", [bot_id]);
+    expect(updated.rows[0].name).toBe("Agente WhatsApp Editado");
+    expect(updated.rows[0].definition_json.identity).toMatchObject({
+      name: "Agente WhatsApp Editado",
+      description: "Editor estructurado funcionando.",
+      goal: "Operar ventas internas desde configuración.",
+    });
+    expect(updated.rows[0].definition_json.behavior).toMatchObject({
+      language: "es-MX",
+      tone: "direct",
+      operating_instructions: "Instrucciones actualizadas desde builder.",
+      constraints: "No fingir llamadas.",
+    });
+    expect(updated.rows[0].definition_json.interactions[0]).toMatchObject({
+      key: "receive_whatsapp_message",
+      type: "receive_whatsapp_message",
+      label: "Recibir mensajes de WhatsApp",
+      enabled: true,
+      instructions: "Atender dudas comerciales.",
+    });
+    expect(updated.rows[0].definition_json.interactions[1]).toMatchObject({
+      key: "consult_human",
+      type: "consult_human",
+      label: "Consultar humano",
+      enabled: true,
+      instructions: "Consultar a humano ante alcance custom.",
+      human_group_ids: ["founder", "ventas"],
+    });
+  });
+
+  it("shows an empty interaction state and prevents duplicate interactions", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const bot = bot_result.rows[0];
+    const definition = {
+      ...bot.definition_json,
+      interactions: [],
+    };
+
+    await pool.query("UPDATE bots SET definition_json = $2::jsonb WHERE id = $1", [bot.id, JSON.stringify(definition)]);
+
+    const empty_page = await request(app).get(`/inspector/bots/${bot.id}`).expect(200);
+    expect(empty_page.text).toContain("Ninguna interacción configurada.");
+    expect(empty_page.text).toContain("Agregar interacción");
+    expect(empty_page.text).toContain("Enviar mensaje de WhatsApp");
+    expect(empty_page.text).toContain("Recibir mensajes de WhatsApp");
+    expect(empty_page.text).toContain("Consultar humano");
+
+    await request(app)
+      .post(`/inspector/bots/${bot.id}`)
+      .type("form")
+      .send({
+        name: "Agente WhatsApp YoAyudo",
+        description: "Editor estructurado funcionando.",
+        goal: "Operar ventas internas desde configuración.",
+        status: "active",
+        bot_type: "custom",
+        behavior_language: "es-MX",
+        behavior_tone: "professional",
+        instrucciones_operativas: "Instrucciones actualizadas desde builder.",
+        constraints_text: "No fingir llamadas.",
+        interaction_type: ["send_whatsapp_message"],
+        interaction_instructions: ["Enviar solo mensajes útiles."],
+        interaction_human_group_ids: [""],
+        interaction_enabled: ["0"],
+        new_interaction_type: "send_whatsapp_message",
+        new_interaction_instructions: "Intento duplicado.",
+      })
+      .expect(302);
+
+    const updated = await pool.query("SELECT definition_json FROM bots WHERE id = $1", [bot.id]);
+    const send_interactions = updated.rows[0].definition_json.interactions.filter(
+      (interaction) => interaction.type === "send_whatsapp_message",
+    );
+
+    expect(send_interactions).toHaveLength(1);
+    expect(send_interactions[0].instructions).toBe("Enviar solo mensajes útiles.");
+  });
+
+  it("serves a minimal knowledge center and lets agents assign existing knowledge", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const bot = bot_result.rows[0];
+
+    await request(app)
+      .post("/inspector/knowledge")
+      .type("form")
+      .send({
+        organization_id: bot.organization_id,
+        account_id: bot.account_id,
+        source_type: "text",
+        scope: "account",
+        name: "Knowledge Founder Test",
+        description: "Notas para ventas founder.",
+        content: "YoAyudo ayuda a negocios a operar ventas por WhatsApp.",
+      })
+      .expect(302)
+      .expect("Location", `/inspector/knowledge?organization_id=${bot.organization_id}&account_id=${bot.account_id}`);
+
+    await request(app)
+      .get("/inspector/knowledge")
+      .expect(200)
+      .expect(/Knowledge Center/)
+      .expect(/Agregar knowledge/)
+      .expect(/Knowledge existente/)
+      .expect(/Knowledge Founder Test/);
+
+    const source = await pool.query("SELECT * FROM knowledge_sources WHERE name = 'Knowledge Founder Test' LIMIT 1");
+    const knowledge_page = await request(app).get("/inspector/knowledge").expect(200);
+    expect(knowledge_page.text).toContain('id="knowledge_form_panel" hidden');
+    expect(knowledge_page.text).toContain('value="text" checked');
+    expect(knowledge_page.text).toContain('value="document"');
+    expect(knowledge_page.text).toContain('value="url"');
+    expect(knowledge_page.text).toContain('type="file"');
+    expect(knowledge_page.text).toContain("Máx 10MB");
+    expect(knowledge_page.text).toContain("Cancelar");
+    expect(knowledge_page.text).toContain("Knowledge");
+    expect(knowledge_page.text).toContain("Texto");
+    expect(knowledge_page.text).toContain(`/inspector/knowledge/${source.rows[0].id}?organization_id=`);
+
+    await request(app)
+      .get(`/inspector/knowledge/${source.rows[0].id}?organization_id=${bot.organization_id}&account_id=${bot.account_id}`)
+      .expect(200)
+      .expect(/Knowledge Founder Test/)
+      .expect(/Notas para ventas founder/)
+      .expect(/Volver/)
+      .expect(/Guardar cambios/)
+      .expect(/Tipo de knowledge/)
+      .expect(/Knowledge/)
+      .expect(/Metadata/);
+
+    await request(app)
+      .post(`/inspector/knowledge/${source.rows[0].id}`)
+      .type("form")
+      .send({
+        organization_id: bot.organization_id,
+        account_id: bot.account_id,
+        name: "Knowledge Founder Editado",
+        description: "Descripción editada.",
+        summary: "Resumen editado.",
+        status: "active",
+        summary_status: "ready",
+      })
+      .expect(302)
+      .expect("Location", `/inspector/knowledge/${source.rows[0].id}?organization_id=${bot.organization_id}&account_id=${bot.account_id}`);
+
+    const edited = await pool.query("SELECT * FROM knowledge_sources WHERE id = $1", [source.rows[0].id]);
+    expect(edited.rows[0]).toMatchObject({
+      name: "Knowledge Founder Editado",
+      description: "Descripción editada.",
+      summary: "Resumen editado.",
+      status: "active",
+      summary_status: "ready",
+    });
+
+    const definition = {
+      ...bot.definition_json,
+      knowledge_source_ids: [],
+    };
+    await pool.query("UPDATE bots SET definition_json = $2::jsonb, knowledge_base_ids_json = '[]'::jsonb WHERE id = $1", [
+      bot.id,
+      JSON.stringify(definition),
+    ]);
+
+    await request(app)
+      .post(`/inspector/bots/${bot.id}`)
+      .type("form")
+      .send({
+        name: bot.name,
+        description: bot.description,
+        goal: bot.definition_json.identity.goal,
+        status: bot.status,
+        bot_type: bot.bot_type,
+        behavior_language: "es-MX",
+        behavior_tone: "commercial",
+        instrucciones_operativas: bot.instrucciones_operativas,
+        constraints_text: bot.definition_json.behavior.constraints,
+        knowledge_source_ids: [source.rows[0].id],
+      })
+      .expect(302);
+
+    const updated = await pool.query("SELECT definition_json FROM bots WHERE id = $1", [bot.id]);
+    expect(updated.rows[0].definition_json.knowledge_source_ids).toContain(source.rows[0].id);
+  });
+
+  it("uploads document knowledge through the S3 uploader contract", async () => {
+    const uploaded_files = [];
+    const app = create_inspector_test_app(pool, {
+      knowledge_document_uploader: async (input) => {
+        uploaded_files.push(input.file);
+        return {
+          provider: "s3",
+          bucket: "yoayudo-test-knowledge",
+          key: `yoayudo/knowledge/${input.file.originalname}`,
+          region: "us-east-1",
+          original_filename: input.file.originalname,
+          mime_type: input.file.mimetype,
+          size_bytes: input.file.size,
+        };
+      },
+    });
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const bot = bot_result.rows[0];
+
+    await request(app)
+      .post("/inspector/knowledge")
+      .field("organization_id", bot.organization_id)
+      .field("account_id", bot.account_id)
+      .field("source_type", "document")
+      .field("scope", "account")
+      .field("name", "Manual de ventas")
+      .field("description", "Documento base para ventas.")
+      .attach("document_file", Buffer.from("contenido del manual"), "manual-ventas.pdf")
+      .expect(302)
+      .expect("Location", `/inspector/knowledge?organization_id=${bot.organization_id}&account_id=${bot.account_id}`);
+
+    expect(uploaded_files[0].originalname).toBe("manual-ventas.pdf");
+
+    const source = await pool.query("SELECT * FROM knowledge_sources WHERE name = 'Manual de ventas' LIMIT 1");
+
+    expect(source.rows[0].source_type).toBe("document");
+    expect(source.rows[0].summary_status).toBe("pending_ingestion");
+    expect(source.rows[0].metadata_json.file).toMatchObject({
+      provider: "s3",
+      bucket: "yoayudo-test-knowledge",
+      key: "yoayudo/knowledge/manual-ventas.pdf",
+      original_filename: "manual-ventas.pdf",
+    });
+  });
+
+  it("runs the bot tester from inspector with mocked WhatsApp and human consultation interactions", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const bot = bot_result.rows[0];
+
+    const response = await request(app)
+      .post(`/inspector/bots/${bot.id}/test-message`)
+      .send({
+        organization_id: bot.organization_id,
+        account_id: bot.account_id,
+        mensaje: "Consulta a humano si podemos prometer llamadas automáticas y crea una tarea de seguimiento.",
+      })
+      .expect(200);
+
+    expect(response.body.result.respuesta).toContain("Recibí el mensaje");
+    expect(response.body.result.interaction_trace.map((event) => event.interaction_type)).toEqual(
+      expect.arrayContaining(["receive_whatsapp_message", "consult_human", "send_whatsapp_message"]),
+    );
+    expect(response.body.result.interaction_trace.find((event) => event.interaction_type === "consult_human").status).toBe(
+      "mock_requested_and_answered",
+    );
+    expect(response.body.result.action_requests.map((action) => action.action_id)).toContain("crear_tarea");
   });
 
   it("shows review items for incomplete messages", async () => {
