@@ -77,14 +77,44 @@ function knowledge_query_from(input = {}) {
   return query;
 }
 
+async function normalize_knowledge_filters(route_pool, filters = {}) {
+  const account_id = route_value(filters.account_id);
+
+  if (!account_id) {
+    return filters;
+  }
+
+  const result = await route_pool.query(
+    `
+      SELECT id, organization_id
+      FROM accounts
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [account_id],
+  );
+
+  if (!result.rows[0]) {
+    return filters;
+  }
+
+  return {
+    ...filters,
+    account_id: result.rows[0].id,
+    organization_id: result.rows[0].organization_id,
+  };
+}
+
 async function render_knowledge_center(response, route_pool, input = {}) {
+  const filters = await normalize_knowledge_filters(route_pool, input.filters ?? {});
+
   response.status(input.status ?? 200).render("inspector/knowledge", {
     knowledge_sources: await list_knowledge_sources(route_pool, {
-      organization_id: input.filters?.organization_id,
-      account_id: input.filters?.account_id,
+      organization_id: filters.organization_id,
+      account_id: filters.account_id,
       limit: 200,
     }),
-    filters: input.filters ?? {},
+    filters,
     error_message: input.error_message,
   });
 }
@@ -190,6 +220,7 @@ export function register_inspector_routes(router, dependencies = {}) {
 
   router.post("/inspector/knowledge", inspector_auth, knowledge_upload.single("document_file"), async (request, response, next) => {
     try {
+      const filters = await normalize_knowledge_filters(route_pool, request.body ?? {});
       const source_type = route_value(request.body.source_type) || "text";
       let metadata_json = {
         url: route_value(request.body.url) || null,
@@ -209,8 +240,8 @@ export function register_inspector_routes(router, dependencies = {}) {
         }
 
         const upload_result = await knowledge_document_uploader({
-          organization_id: route_value(request.body.organization_id) || null,
-          account_id: route_value(request.body.account_id) || null,
+          organization_id: route_value(filters.organization_id) || null,
+          account_id: route_value(filters.account_id) || null,
           file: request.file,
         });
 
@@ -223,8 +254,8 @@ export function register_inspector_routes(router, dependencies = {}) {
       }
 
       await create_knowledge_source(route_pool, {
-        organization_id: route_value(request.body.organization_id) || null,
-        account_id: route_value(request.body.account_id) || null,
+        organization_id: route_value(filters.organization_id) || null,
+        account_id: route_value(filters.account_id) || null,
         scope: route_value(request.body.scope) || "account",
         source_type,
         name: route_value(request.body.name),
@@ -234,7 +265,7 @@ export function register_inspector_routes(router, dependencies = {}) {
         metadata_json,
       });
 
-      const query = knowledge_query_from(request.body);
+      const query = knowledge_query_from(filters);
 
       response.redirect(`/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`);
     } catch (error) {
@@ -260,12 +291,13 @@ export function register_inspector_routes(router, dependencies = {}) {
         return;
       }
 
-      const query = knowledge_query_from(request.query);
+      const filters = await normalize_knowledge_filters(route_pool, request.query);
+      const query = knowledge_query_from(filters);
 
       response.render("inspector/knowledge_detail", {
         source,
         back_url: `/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`,
-        filters: request.query,
+        filters,
       });
     } catch (error) {
       next(error);
@@ -298,7 +330,8 @@ export function register_inspector_routes(router, dependencies = {}) {
         summary_status: route_value(request.body.summary_status),
         metadata_json,
       });
-      const query = knowledge_query_from(request.body);
+      const filters = await normalize_knowledge_filters(route_pool, request.body ?? {});
+      const query = knowledge_query_from(filters);
 
       response.redirect(`/inspector/knowledge/${updated.id}${query.size ? `?${query.toString()}` : ""}`);
     } catch (error) {

@@ -2,6 +2,7 @@ import { execFileSync as exec_file_sync } from "node:child_process";
 import pg from "pg";
 import { z } from "zod";
 import { config } from "./config.js";
+import { ensure_local_docker_runtime } from "./local_docker.js";
 import { run_migrations } from "../db/migrate.js";
 
 const local_docker_database_url = "postgres://yoayudo:yoayudo@localhost:5433/yoayudo";
@@ -98,17 +99,22 @@ function ensure_docker_database_is_up() {
   }
 
   try {
+    ensure_local_docker_runtime({ log });
     exec_file_sync("docker", ["compose", "up", "-d", "postgres"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });
-  } catch {
-    fail("Failed to run docker compose. Make sure Docker or Colima is running.");
+  } catch (error) {
+    fail(
+      error instanceof Error
+        ? `Failed to run docker compose: ${error.message}`
+        : "Failed to run docker compose. Docker or Colima could not be repaired automatically.",
+    );
   }
 }
 
 async function wait_for_database() {
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
     if (await can_connect_to_database()) {
       log("PostgreSQL connection ok");
       return;
@@ -117,7 +123,7 @@ async function wait_for_database() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  fail("PostgreSQL did not become available within 30 seconds.");
+  fail("PostgreSQL did not become available within 60 seconds.");
 }
 
 async function ensure_database() {

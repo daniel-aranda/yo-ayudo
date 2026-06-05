@@ -410,6 +410,13 @@ describe("Conversation Inspector", () => {
     expect(knowledge_page.text).toContain("Texto");
     expect(knowledge_page.text).toContain(`/inspector/knowledge/${source.rows[0].id}?organization_id=`);
 
+    const stale_organization_page = await request(app)
+      .get(`/inspector/knowledge?organization_id=00000000-0000-0000-0000-000000000001&account_id=${bot.account_id}`)
+      .expect(200);
+
+    expect(stale_organization_page.text).toContain("Knowledge Founder Test");
+    expect(stale_organization_page.text).toContain(`name="organization_id" value="${bot.organization_id}"`);
+
     await request(app)
       .get(`/inspector/knowledge/${source.rows[0].id}?organization_id=${bot.organization_id}&account_id=${bot.account_id}`)
       .expect(200)
@@ -419,6 +426,10 @@ describe("Conversation Inspector", () => {
       .expect(/Guardar cambios/)
       .expect(/Tipo de knowledge/)
       .expect(/Knowledge/)
+      .expect(/show_knowledge_preview/)
+      .expect(/show_knowledge_source/)
+      .expect(/knowledge_preview/)
+      .expect(/knowledge_source_body/)
       .expect(/Metadata/);
 
     await request(app)

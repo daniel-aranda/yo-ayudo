@@ -51,8 +51,14 @@ block content
       label Descripción
       textarea(name="description", rows="4")= source.description || ""
 
-      label Knowledge
-      textarea(name="summary", rows="5")= source.summary || ""
+      div.markdown-editor
+        div.section-title
+          label(for="knowledge_source_body") Knowledge
+          div.segmented-control(role="tablist", aria-label="Vista de knowledge")
+            button.secondary-button#show_knowledge_preview(type="button", aria-pressed="true") Preview
+            button.secondary-button#show_knowledge_source(type="button", aria-pressed="false") Source
+        div.markdown-preview#knowledge_preview
+        textarea#knowledge_source_body.markdown-source(name="summary", rows="22", hidden)= source.summary || ""
 
       if source.source_type === "url" || metadata.url
         label URL
@@ -90,3 +96,102 @@ block content
   section.panel
     h2 Metadata
     pre= json(metadata)
+
+  script.
+    (() => {
+      const textarea = document.getElementById("knowledge_source_body");
+      const preview = document.getElementById("knowledge_preview");
+      const previewButton = document.getElementById("show_knowledge_preview");
+      const sourceButton = document.getElementById("show_knowledge_source");
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function inlineMarkdown(value) {
+        return escapeHtml(value)
+          .replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      }
+
+      function renderMarkdown(markdown) {
+        const lines = String(markdown || "").split(/\r?\n/);
+        const html = [];
+        let paragraph = [];
+        let list = [];
+
+        function flushParagraph() {
+          if (!paragraph.length) return;
+          html.push(`<p>${inlineMarkdown(paragraph.join(" "))}</p>`);
+          paragraph = [];
+        }
+
+        function flushList() {
+          if (!list.length) return;
+          html.push(`<ul>${list.map((item) => `<li>${inlineMarkdown(item)}</li>`).join("")}</ul>`);
+          list = [];
+        }
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+
+          if (!trimmed) {
+            flushParagraph();
+            flushList();
+            continue;
+          }
+
+          const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+          if (heading) {
+            flushParagraph();
+            flushList();
+            const level = heading[1].length;
+            html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+            continue;
+          }
+
+          const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+          if (bullet) {
+            flushParagraph();
+            list.push(bullet[1]);
+            continue;
+          }
+
+          flushList();
+          paragraph.push(trimmed);
+        }
+
+        flushParagraph();
+        flushList();
+        return html.join("");
+      }
+
+      function updatePreview() {
+        if (!preview || !textarea) return;
+        preview.innerHTML = renderMarkdown(textarea.value) || '<p class="meta">Sin knowledge.</p>';
+      }
+
+      function setMode(mode) {
+        const isPreview = mode === "preview";
+        preview.hidden = !isPreview;
+        textarea.hidden = isPreview;
+        previewButton.setAttribute("aria-pressed", String(isPreview));
+        sourceButton.setAttribute("aria-pressed", String(!isPreview));
+      }
+
+      previewButton?.addEventListener("click", () => {
+        updatePreview();
+        setMode("preview");
+      });
+
+      sourceButton?.addEventListener("click", () => setMode("source"));
+      textarea?.addEventListener("input", updatePreview);
+
+      updatePreview();
+      setMode("preview");
+    })();

@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "node src/app/dev_doctor.js && node --watch src/app/server.js",
     "start": "node src/app/server.js",
-    "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d postgres",
+    "db:up": "node scripts/ensure_local_docker.js && docker compose up -d postgres",
+    "db:down": "node scripts/ensure_local_docker.js && docker compose down",
+    "db:reset": "node scripts/ensure_local_docker.js && docker compose down -v && docker compose up -d postgres",
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node src/db/seed.js",
     "demo:bot-engine": "node scripts/demo_bot_engine_preflight.js",

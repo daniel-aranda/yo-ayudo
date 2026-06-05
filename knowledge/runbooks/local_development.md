@@ -18,6 +18,7 @@ PostgreSQL corre en Docker con puerto host `5433`, usuario `yoayudo`, password `
 - valida variables de entorno base
 - falla si `AI_PROVIDER=bedrock` en desarrollo, porque Bedrock es stub
 - revisa conexion PostgreSQL
+- intenta reparar Docker local si Colima no esta corriendo
 - intenta levantar `docker compose up -d postgres` si la DB local default no responde
 - aplica migraciones pendientes
 - avisa si no hay tenants sembrados
@@ -71,6 +72,8 @@ Levantar Postgres:
 ```bash
 npm run db:up
 ```
+
+Si la computadora se reinicio y Docker usa Colima, `npm run dev`, `npm run db:up`, `npm run db:down` y `npm run db:reset` intentan ejecutar `colima start` automaticamente antes de llamar a `docker compose`.
 
 ### No Se Envía WhatsApp Real
 

@@ -6,14 +6,12 @@ export async function list_knowledge_sources(pool, input = {}) {
   const filters = ["source_family = 'business_knowledge'"];
   const values = [];
 
-  if (input.organization_id) {
-    values.push(input.organization_id);
-    filters.push(`organization_id = $${values.length}`);
-  }
-
   if (input.account_id) {
     values.push(input.account_id);
     filters.push(`account_id = $${values.length}`);
+  } else if (input.organization_id) {
+    values.push(input.organization_id);
+    filters.push(`organization_id = $${values.length}`);
   }
 
   values.push(input.limit ?? 100);

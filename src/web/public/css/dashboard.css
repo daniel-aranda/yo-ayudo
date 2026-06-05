@@ -195,6 +195,75 @@ button:hover {
   text-underline-offset: 3px;
 }
 
+.segmented-control {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.segmented-control button {
+  margin-top: 0;
+}
+
+.segmented-control button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.markdown-editor {
+  margin-top: 12px;
+}
+
+.markdown-source {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  min-height: 620px;
+}
+
+.markdown-preview {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-height: 620px;
+  overflow: auto;
+  padding: 18px;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4 {
+  line-height: 1.2;
+  margin: 0 0 14px;
+}
+
+.markdown-preview h1 {
+  font-size: 26px;
+}
+
+.markdown-preview h2 {
+  font-size: 21px;
+  margin-top: 24px;
+}
+
+.markdown-preview h3 {
+  font-size: 17px;
+  margin-top: 18px;
+}
+
+.markdown-preview p,
+.markdown-preview ul {
+  margin: 0 0 14px;
+}
+
+.markdown-preview ul {
+  padding-left: 22px;
+}
+
+.markdown-preview code {
+  background: var(--surface-strong);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
 .status {
   background: #e4f4ef;
   border-radius: 999px;

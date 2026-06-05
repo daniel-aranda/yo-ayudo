@@ -28,9 +28,9 @@ npm run db:seed
 npm run dev
 ```
 
-`npm run db:up` levanta PostgreSQL en Docker con puerto host `5433`.
+`npm run db:up` levanta PostgreSQL en Docker con puerto host `5433`. Si Docker usa Colima y la computadora se reinicio, el script intenta arrancar Colima automaticamente antes de llamar a Compose.
 
-`npm run dev` ejecuta primero un doctor local: valida entorno, revisa Node.js, verifica PostgreSQL, intenta levantar `docker compose up -d postgres` si la base local no responde y aplica migraciones pendientes. No siembra datos automáticamente; usa `npm run db:seed` para cargar el cliente demo.
+`npm run dev` ejecuta primero un doctor local: valida entorno, revisa Node.js, verifica PostgreSQL, intenta reparar Docker/Colima, intenta levantar `docker compose up -d postgres` si la base local no responde y aplica migraciones pendientes. No siembra datos automáticamente; usa `npm run db:seed` para cargar el cliente demo.
 
 Servidor local:
 
