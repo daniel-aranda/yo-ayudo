@@ -94,7 +94,7 @@ export class openai_provider extends mock_provider {
     if (!response.ok) {
       const message = body.error?.message ?? `OpenAI request failed with status ${response.status}`;
       const error = new Error(message);
-      error.code = "openai_request_failed";
+      error.code = body.error?.code ? `openai_${body.error.code}` : "openai_request_failed";
       error.status = response.status;
       throw error;
     }

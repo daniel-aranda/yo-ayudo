@@ -119,6 +119,27 @@ function build_reply(message, results) {
   return parts.join(" ");
 }
 
+function build_fallback_reply(message, results) {
+  if (results.length) {
+    return build_reply(message, results);
+  }
+
+  const text = String(message ?? "").toLowerCase();
+
+  if (text.includes("dentista") || text.includes("dental") || text.includes("clínica") || text.includes("clinica")) {
+    return [
+      "Para un dentista, ofrece YoAyudo como un agente de WhatsApp para no perder pacientes potenciales.",
+      "Puede responder dudas frecuentes, capturar nombre/teléfono/motivo, registrar notas del prospecto, crear tareas de seguimiento y escalar a recepción cuando haga falta confirmar agenda, precios o tratamientos.",
+      "No prometas integraciones clínicas o agenda automática si no están configuradas; véndelo primero como orden, seguimiento y visibilidad para ventas por WhatsApp.",
+    ].join(" ");
+  }
+
+  return [
+    "Puedes ofrecer YoAyudo como una capa inteligente sobre WhatsApp para ordenar conversaciones, capturar datos, crear seguimientos, guardar notas, consultar knowledge y escalar a humanos cuando falte contexto.",
+    "Si el prospecto pregunta por integraciones, pricing o capacidades custom, valida el alcance antes de prometerlo.",
+  ].join(" ");
+}
+
 function enabled_interactions_for_bot(bot) {
   return new Map(
     (bot.definition_json?.interactions ?? [])
@@ -203,12 +224,25 @@ function build_interaction_trace(bot, message, reply, action_results) {
 }
 
 export class bot_engine_test_service {
-  constructor({ pool, provider = create_model_provider() }) {
+  constructor({ pool, provider } = {}) {
     this.pool = pool;
     this.bot_service = new bot_configuration_service({ pool });
     this.compiler = new prompt_compiler({ pool });
     this.actions = new action_execution_service({ pool });
-    this.provider = provider;
+    this.provider = provider ?? create_model_provider();
+    this.provider_was_injected = Boolean(provider);
+  }
+
+  provider_for_test(input) {
+    if (this.provider_was_injected) {
+      return this.provider;
+    }
+
+    if (input.require_real_ai === true) {
+      return create_model_provider({ prefer_openai_when_configured: true });
+    }
+
+    return this.provider;
   }
 
   async test_message(input) {
@@ -224,6 +258,14 @@ export class bot_engine_test_service {
 
     const organization_id = input.organization_id ?? bot.organization_id ?? null;
     const account_id = input.account_id ?? bot.account_id ?? null;
+    const provider = this.provider_for_test(input);
+
+    if (input.require_real_ai === true && typeof provider.decide_bot_test_message !== "function") {
+      const error = new Error("Probar bot requiere AI real. Configura AI_PROVIDER=openai y OPENAI_API_KEY.");
+      error.code = "bot_test_real_ai_required";
+      throw error;
+    }
+
     const compiled = await this.compiler.record_compilation({
       bot,
       conversation_id: input.conversation_id ?? null,
@@ -231,21 +273,26 @@ export class bot_engine_test_service {
       conversation_memory: input.conversation_memory ?? [],
     });
 
-    if (input.require_real_ai === true && typeof this.provider.decide_bot_test_message !== "function") {
-      const error = new Error("Probar bot requiere AI real. Configura AI_PROVIDER=openai y OPENAI_API_KEY.");
-      error.code = "bot_test_real_ai_required";
-      throw error;
+    let model_decision = null;
+    let model_error = null;
+
+    if (!input.action_requests && typeof provider.decide_bot_test_message === "function") {
+      try {
+        model_decision = await provider.decide_bot_test_message({
+          prompt: compiled.prompt,
+          mensaje: input.mensaje ?? input.current_message,
+          acciones_disponibles: compiled.acciones_disponibles,
+          bot,
+        });
+      } catch (error) {
+        model_error = {
+          code: error.code ?? "model_provider_error",
+          status: error.status ?? null,
+          message: error.message ?? "Model provider failed.",
+        };
+      }
     }
 
-    const model_decision =
-      input.action_requests || typeof this.provider.decide_bot_test_message !== "function"
-        ? null
-        : await this.provider.decide_bot_test_message({
-            prompt: compiled.prompt,
-            mensaje: input.mensaje ?? input.current_message,
-            acciones_disponibles: compiled.acciones_disponibles,
-            bot,
-          });
     const action_requests = (input.action_requests ?? model_decision?.action_requests ?? infer_action_requests_from_message(input.mensaje ?? input.current_message))
       .map(normalize_action_request)
       .filter((request) => request.action_id);
@@ -265,13 +312,14 @@ export class bot_engine_test_service {
       }));
     }
 
-    const respuesta = model_decision?.reply || build_reply(input.mensaje ?? input.current_message, action_results);
+    const respuesta = model_decision?.reply || build_fallback_reply(input.mensaje ?? input.current_message, action_results);
     const interaction_trace = build_interaction_trace(bot, input.mensaje ?? input.current_message, respuesta, action_results);
 
     return {
       respuesta,
       respuesta_operativa: build_reply(input.mensaje ?? input.current_message, action_results),
       model_decision,
+      model_error,
       prompt_compilation_id: compiled.compilation.id,
       acciones_disponibles: compiled.acciones_disponibles,
       action_requests,

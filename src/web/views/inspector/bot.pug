@@ -358,6 +358,15 @@ block content
       const testMessage = document.getElementById("test_bot_message");
       const testResult = document.getElementById("bot_test_result");
 
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       function renderList(title, items, mapper) {
         const rows = (items || []).map(mapper).join("");
         return `<section class="test-result-section"><h3>${title}</h3>${rows || '<p class="meta">Sin registros.</p>'}</section>`;
@@ -390,40 +399,42 @@ block content
 
           const result = payload.result;
           const modelDecision = result.model_decision
-            ? `<p class="meta">AI real: ${result.model_decision.provider} · ${result.model_decision.model || "modelo no reportado"} · ${result.model_decision.response_id || "sin response_id"}</p><p class="meta">${result.model_decision.reason || ""}</p>`
-            : '<p class="meta">AI: mock local determinístico. Configura AI_PROVIDER=openai para probar con modelo real.</p>';
+            ? `<p class="meta">AI real: ${escapeHtml(result.model_decision.provider)} · ${escapeHtml(result.model_decision.model || "modelo no reportado")} · ${escapeHtml(result.model_decision.response_id || "sin response_id")}</p><p class="meta">${escapeHtml(result.model_decision.reason || "")}</p>`
+            : result.model_error
+              ? `<p class="meta">AI real no disponible (${escapeHtml(result.model_error.code)}). Fallback local usado: ${escapeHtml(result.model_error.message)}</p>`
+              : '<p class="meta">AI: mock local determinístico. Configura AI_PROVIDER=openai para probar con modelo real.</p>';
           testResult.innerHTML = `
             <section class="test-result-section">
               <h3>Respuesta del bot</h3>
-              <p>${result.respuesta}</p>
+              <p>${escapeHtml(result.respuesta)}</p>
               ${modelDecision}
-              <p class="meta">Prompt compilation: ${result.prompt_compilation_id}</p>
+              <p class="meta">Prompt compilation: ${escapeHtml(result.prompt_compilation_id)}</p>
             </section>
             ${renderList("Interacciones", result.interaction_trace, (event) => `
               <div class="trace-card">
-                <strong>${event.label || event.interaction_type}</strong>
-                <span class="status">${event.status}</span>
-                <p class="meta">${event.reason || ""}</p>
-                ${event.output?.response ? `<p>${event.output.response}</p>` : ""}
+                <strong>${escapeHtml(event.label || event.interaction_type)}</strong>
+                <span class="status">${escapeHtml(event.status)}</span>
+                <p class="meta">${escapeHtml(event.reason || "")}</p>
+                ${event.output?.response ? `<p>${escapeHtml(event.output.response)}</p>` : ""}
               </div>
             `)}
             ${renderList("Acciones pedidas", result.action_requests, (action) => `
               <div class="trace-card">
-                <strong>${action.action_id}</strong>
-                <pre>${JSON.stringify(action.input_json || {}, null, 2)}</pre>
+                <strong>${escapeHtml(action.action_id)}</strong>
+                <pre>${escapeHtml(JSON.stringify(action.input_json || {}, null, 2))}</pre>
               </div>
             `)}
             ${renderList("Resultados", result.action_results, (action) => `
               <div class="trace-card">
-                <strong>${action.action_id}</strong>
-                <span class="status">${action.status}</span>
-                <pre>${JSON.stringify(action.output || {}, null, 2)}</pre>
+                <strong>${escapeHtml(action.action_id)}</strong>
+                <span class="status">${escapeHtml(action.status)}</span>
+                <pre>${escapeHtml(JSON.stringify(action.output || {}, null, 2))}</pre>
               </div>
             `)}
             ${renderList("Guardrails", result.guardrail_events_generados, (event) => `
               <div class="trace-card">
-                <strong>${event.tipo}</strong>
-                <p class="meta">${event.descripcion}</p>
+                <strong>${escapeHtml(event.tipo)}</strong>
+                <p class="meta">${escapeHtml(event.descripcion)}</p>
               </div>
             `)}
           `;

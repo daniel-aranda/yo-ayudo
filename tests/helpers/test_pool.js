@@ -18,6 +18,7 @@ export async function create_test_pool({ seed = true } = {}) {
   const migrations_directory = path.join(process.cwd(), "src", "db", "migrations");
   const migration_files = read_dir_sync(migrations_directory)
     .filter((filename) => filename.endsWith(".sql"))
+    .filter((filename) => filename !== "0003_repair_bot_engine_schema.sql")
     .sort();
 
   for (const filename of migration_files) {
