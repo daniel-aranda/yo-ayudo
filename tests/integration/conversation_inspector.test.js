@@ -417,7 +417,7 @@ describe("Conversation Inspector", () => {
     expect(stale_organization_page.text).toContain("Knowledge Founder Test");
     expect(stale_organization_page.text).toContain(`name="organization_id" value="${bot.organization_id}"`);
 
-    await request(app)
+    const knowledge_detail_page = await request(app)
       .get(`/inspector/knowledge/${source.rows[0].id}?organization_id=${bot.organization_id}&account_id=${bot.account_id}`)
       .expect(200)
       .expect(/Knowledge Founder Test/)
@@ -431,6 +431,8 @@ describe("Conversation Inspector", () => {
       .expect(/knowledge_preview/)
       .expect(/knowledge_source_body/)
       .expect(/Metadata/);
+    expect(knowledge_detail_page.text).toContain("trimmed.match(/^(#+)\\s+(.+)$/)");
+    expect(knowledge_detail_page.text).not.toContain("trimmed.match(/^(1)\\s+(.+)$/)");
 
     await request(app)
       .post(`/inspector/knowledge/${source.rows[0].id}`)

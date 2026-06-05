@@ -146,11 +146,11 @@ block content
             continue;
           }
 
-          const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+          const heading = trimmed.match(/^(#+)\s+(.+)$/);
           if (heading) {
             flushParagraph();
             flushList();
-            const level = heading[1].length;
+            const level = Math.min(heading[1].length, 4);
             html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
             continue;
           }
