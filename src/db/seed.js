@@ -527,7 +527,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
     tenant_id: input.tenant_id,
     name: "Agente WhatsApp YoAyudo",
     slug: "agente-whatsapp-yoayudo",
-    channel: "internal",
+    channel: "whatsapp",
     bot_type: "custom",
     status: "active",
     description: "Agente base para resolver dudas de vendedores sobre YoAyudo.",
@@ -550,6 +550,10 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
         tone: "commercial",
         operating_instructions,
         constraints,
+      },
+      ai: {
+        provider: "openai",
+        model: config.openai_model,
       },
       knowledge_source_ids: input.knowledge_source_ids ?? [],
       interactions,
@@ -629,6 +633,10 @@ function lead_capture_bot_definition() {
         "Atiende prospectos con mensajes claros y breves. Pregunta nombre, teléfono y necesidad principal cuando falten. Usa knowledge asignado para explicar servicios o siguientes pasos. Consulta a humano si preguntan por financiamiento, urgencias, excepciones o acciones no conectadas.",
       constraints:
         "No prometer acciones externas no configuradas.\nNo prometer precios finales sin validación.\nConsultar humano ante urgencias, financiamiento o excepciones comerciales.",
+    },
+    ai: {
+      provider: "openai",
+      model: config.openai_model,
     },
     knowledge_source_ids: [],
     interactions: [

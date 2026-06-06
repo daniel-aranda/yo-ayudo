@@ -46,6 +46,10 @@ function route_value(value) {
   return value;
 }
 
+function wants_json_response(request) {
+  return request.get("x-requested-with") === "XMLHttpRequest" || request.accepts(["html", "json"]) === "json";
+}
+
 function handle_bot_test_error(error, response) {
   if (error.message?.startsWith("Bot no encontrado")) {
     response.status(404).json({ ok: false, error: "bot_not_found", message: error.message });
@@ -183,7 +187,17 @@ export function register_inspector_routes(router, dependencies = {}) {
       const bot = await update_bot_builder_view(route_pool, route_value(request.params.bot_id), request.body ?? {});
 
       if (!bot) {
+        if (wants_json_response(request)) {
+          response.status(404).json({ ok: false, error: "bot_not_found", message: "Bot not found" });
+          return;
+        }
+
         response.status(404).send("Bot not found");
+        return;
+      }
+
+      if (wants_json_response(request)) {
+        response.json({ ok: true, bot: { id: bot.id, name: bot.name, updated_at: bot.updated_at } });
         return;
       }
 

@@ -6,6 +6,17 @@ block content
     const identity = definition.identity || {};
     const behavior = definition.behavior || {};
     const interactions = Array.isArray(definition.interactions) ? definition.interactions : [];
+    const ai = definition.ai || {};
+    const ai_model_options = Array.isArray(ai_models) ? ai_models : [];
+    const selected_ai_provider = ai.provider || "openai";
+    const selected_ai_model = ai.model || (ai_model_options[0] && ai_model_options[0].model) || "gpt-5.5";
+    const selected_ai_model_option = ai_model_options.find((option) => option.provider === selected_ai_provider && option.model === selected_ai_model) || ai_model_options[0] || {};
+    const selected_ai_model_option_id = selected_ai_model_option.id || `${selected_ai_provider}:${selected_ai_model}`;
+    const supported_channel_rows = Array.isArray(supported_channels) ? supported_channels : [];
+    const whatsapp_channel_rows = Array.isArray(whatsapp_channels) ? whatsapp_channels : [];
+    const primary_whatsapp_channel = whatsapp_channel_rows[0] || {};
+    const human_group_options = Array.isArray(human_groups) ? human_groups : [];
+    const human_group_options_json = JSON.stringify(human_group_options).replace(/</g, "\\u003c");
     const assigned_knowledge_sources = Array.isArray(knowledge_sources) ? knowledge_sources : [];
     const all_knowledge_sources = Array.isArray(available_knowledge_sources) ? available_knowledge_sources : [];
     const knowledge_ids = Array.isArray(definition.knowledge_source_ids) ? definition.knowledge_source_ids : [];
@@ -39,6 +50,7 @@ block content
         h1= bot_name
         p= `${bot.organization_name || "Organization"} / ${bot.account_name || "Account"}`
       div.builder-actions
+        div#autosave-indicator.autosave-indicator.hidden(aria-live="polite")
         button(type="submit", form="bot-editor") Guardar cambios
         details.json-toggle
           summary Ver settings JSON
@@ -86,6 +98,11 @@ block content
               option(value="commercial", selected=behavior_tone === "commercial") Comercial
               option(value="technical", selected=behavior_tone === "technical") Técnico
               option(value="casual", selected=behavior_tone === "casual") Casual
+          div
+            label(for="ai_model_selection") Modelo IA
+            select#ai_model_selection(name="ai_model_selection")
+              each model_option in ai_model_options
+                option(value=model_option.id, selected=selected_ai_model_option_id === model_option.id)= model_option.label
         div
           label(for="instrucciones_operativas") Instrucciones
           textarea#instrucciones_operativas(
@@ -169,13 +186,18 @@ block content
                   placeholder=system_interaction.instructions_placeholder || "Describe cuándo y cómo debe usar esta interacción."
                 )= interaction.instructions || ""
                 if interaction.type === "consult_human"
-                  label Grupos humanos
-                  input(
-                    type="text",
+                  -
+                    const selected_human_group_id = Array.isArray(interaction.human_group_ids)
+                      ? interaction.human_group_ids.find((id) => human_group_options.some((group) => group.id === id)) || ""
+                      : "";
+                  label(for=`interaction_human_group_ids_${index}`) Grupos humanos
+                  select(
+                    id=`interaction_human_group_ids_${index}`,
                     name="interaction_human_group_ids",
-                    value=Array.isArray(interaction.human_group_ids) ? interaction.human_group_ids.join(", ") : "",
-                    placeholder="Selecciona grupos humanos"
                   )
+                    option(value="") Selecciona grupo humano
+                    each group in human_group_options
+                      option(value=group.id, selected=selected_human_group_id === group.id)= group.label
                 else
                   input(type="hidden", name="interaction_human_group_ids", value="")
         else
@@ -229,20 +251,54 @@ block content
 
       div.two-column
         section.panel
-          h2 Canales / accounts asignados
-          dl.compact
-            div
-              dt Organization
-              dd= bot.organization_name || "Sin organization"
-            div
-              dt Account
-              dd= bot.account_name || "Sin account"
-            div
-              dt Número WhatsApp
-              dd= bot.display_phone_number || bot.phone_number_id || "Sin número asignado"
-            div
-              dt Canal
-              dd= bot.channel || "internal"
+          h2 Canales soportados
+          if supported_channel_rows.length
+            each channel in supported_channel_rows
+              if channel.channel === "whatsapp"
+                div.channel-config
+                  div.section-title
+                    div
+                      h3= channel.label
+                      if whatsapp_channel_rows.length
+                        p.meta Activo
+                      else
+                        p.meta Sin número asignado
+                  div.form-grid
+                    div
+                      label(for="whatsapp_display_phone_number") Número WhatsApp
+                      input#whatsapp_display_phone_number(
+                        type="tel",
+                        name="whatsapp_display_phone_number",
+                        value=primary_whatsapp_channel.display_phone_number || "",
+                        placeholder="+525555999999"
+                      )
+                    div
+                      label(for="whatsapp_phone_number_id") Meta phone_number_id
+                      input#whatsapp_phone_number_id(
+                        type="text",
+                        name="whatsapp_phone_number_id",
+                        value=primary_whatsapp_channel.phone_number_id || "",
+                        placeholder="1234567890"
+                      )
+                  if whatsapp_channel_rows.length
+                    div.table-wrap
+                      table
+                        thead
+                          tr
+                            th Canal
+                            th Número
+                            th phone_number_id
+                            th Estado
+                        tbody
+                          each whatsapp_channel in whatsapp_channel_rows
+                            tr
+                              td WhatsApp
+                              td= whatsapp_channel.display_phone_number || "Sin número"
+                              td= whatsapp_channel.phone_number_id
+                              td
+                                span.status= whatsapp_channel.status
+          else
+            div.empty Ningún canal soportado disponible.
         section.panel
           h2 Conversaciones recientes
           if conversations.length
@@ -265,6 +321,14 @@ block content
       const interactionMount = document.getElementById("new_interaction_mount");
       const interactionGrid = document.querySelector(".interaction-grid");
       const interactionEmptyState = document.getElementById("interaction_empty_state");
+      const humanGroupOptions = !{human_group_options_json};
+
+      function renderHumanGroupSelect() {
+        const options = humanGroupOptions
+          .map((group) => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`)
+          .join("");
+        return `<label>Grupos humanos</label><select name="interaction_human_group_ids"><option value="">Selecciona grupo humano</option>${options}</select>`;
+      }
 
       function syncInteractionPicker() {
         if (!interactionPicker || !addInteractionButton) return;
@@ -286,7 +350,7 @@ block content
         const placeholder = option.dataset.placeholder || "Describe cuándo y cómo debe usar esta interacción.";
         const humanField =
           type === "consult_human"
-            ? '<label>Grupos humanos</label><input type="text" name="interaction_human_group_ids" placeholder="Selecciona grupos humanos">'
+            ? renderHumanGroupSelect()
             : '<input type="hidden" name="interaction_human_group_ids" value="">';
         const card = document.createElement("div");
         card.className = "interaction-card";
@@ -318,6 +382,10 @@ block content
         option.remove();
         interactionPicker.value = "";
         syncInteractionPicker();
+        window.bot_editor_autosave?.request_save({
+          control: { name: "interaction_type", tag: "button", value: type },
+          event: { type: "add_interaction" },
+        });
       });
 
       syncInteractionPicker();
@@ -349,6 +417,10 @@ block content
         option.remove();
         knowledgePicker.value = "";
         syncKnowledgePicker();
+        window.bot_editor_autosave?.request_save({
+          control: { name: "knowledge_source_ids", tag: "button", value: hidden.value },
+          event: { type: "add_knowledge_source" },
+        });
       });
 
       syncKnowledgePicker();
@@ -445,3 +517,6 @@ block content
         }
       });
     })();
+
+  script
+    include ../../public/js/inspector/Bot_Editor_Autosave.js

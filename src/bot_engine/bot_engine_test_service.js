@@ -233,13 +233,21 @@ export class bot_engine_test_service {
     this.provider_was_injected = Boolean(provider);
   }
 
-  provider_for_test(input) {
+  provider_for_test(input, bot) {
     if (this.provider_was_injected) {
       return this.provider;
     }
 
+    const ai_config = bot?.definition_json?.ai ?? {};
+    const provider = ai_config.provider ?? "mock";
+    const model = ai_config.model;
+
     if (input.require_real_ai === true) {
-      return create_model_provider({ prefer_openai_when_configured: true });
+      return create_model_provider({
+        provider,
+        model,
+        prefer_openai_when_configured: true,
+      });
     }
 
     return this.provider;
@@ -258,7 +266,7 @@ export class bot_engine_test_service {
 
     const organization_id = input.organization_id ?? bot.organization_id ?? null;
     const account_id = input.account_id ?? bot.account_id ?? null;
-    const provider = this.provider_for_test(input);
+    const provider = this.provider_for_test(input, bot);
 
     if (input.require_real_ai === true && typeof provider.decide_bot_test_message !== "function") {
       const error = new Error("Probar bot requiere AI real. Configura AI_PROVIDER=openai y OPENAI_API_KEY.");

@@ -4,16 +4,18 @@ import { mock_provider } from "./mock_provider.js";
 import { openai_provider } from "./openai_provider.js";
 
 export function create_model_provider(options = {}) {
-  if (options.prefer_openai_when_configured && config.openai_api_key) {
-    return new openai_provider();
+  const provider = options.provider ?? config.ai_provider;
+
+  if (options.prefer_openai_when_configured && provider === "mock" && config.openai_api_key) {
+    return new openai_provider({ model: options.model });
   }
 
-  if (config.ai_provider === "bedrock") {
+  if (provider === "bedrock") {
     return new bedrock_provider();
   }
 
-  if (config.ai_provider === "openai") {
-    return new openai_provider();
+  if (provider === "openai") {
+    return new openai_provider({ model: options.model });
   }
 
   return new mock_provider();

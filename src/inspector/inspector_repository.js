@@ -1,5 +1,7 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
+import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, update_bot_configuration } from "../bots/bot_repository.js";
+import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
 
 function as_array(value) {
@@ -63,16 +65,118 @@ export const available_agent_interactions = [
   },
 ];
 
+export const supported_bot_channels = [
+  {
+    channel: "whatsapp",
+    label: "WhatsApp",
+    status: "supported",
+  },
+];
+
+export const supported_ai_model_options = [
+  {
+    id: "openai:gpt-5.5",
+    provider: "openai",
+    provider_label: "OpenAI",
+    model: "gpt-5.5",
+    label: "OpenAI -> GPT 5.5",
+  },
+  {
+    id: "openai:gpt-5.2",
+    provider: "openai",
+    provider_label: "OpenAI",
+    model: "gpt-5.2",
+    label: "OpenAI -> GPT 5.2 económico",
+  },
+];
+
+export const supported_human_groups = [
+  {
+    id: "founder",
+    label: "Founder",
+    description: "Decisiones de alcance, pricing, excepciones y criterio de producto.",
+  },
+  {
+    id: "ventas",
+    label: "Ventas",
+    description: "Seguimiento comercial, demos, propuesta y cierre.",
+  },
+  {
+    id: "soporte",
+    label: "Soporte",
+    description: "Dudas operativas, configuración y problemas de uso.",
+  },
+  {
+    id: "operaciones",
+    label: "Operaciones",
+    description: "Procesos internos, handoffs y coordinación del servicio.",
+  },
+];
+
 function available_interaction_by_type(type) {
   return available_agent_interactions.find((interaction) => interaction.type === type) ?? null;
 }
 
+function supported_human_group_by_id(id) {
+  return supported_human_groups.find((group) => group.id === id) ?? null;
+}
+
+function supported_ai_model_by_id(id) {
+  return supported_ai_model_options.find((item) => item.id === id) ?? null;
+}
+
+function supported_ai_model_by_provider_model(provider, model) {
+  return supported_ai_model_options.find((item) => item.provider === provider && item.model === model) ?? null;
+}
+
+function resolve_ai_model_selection(body, current_ai) {
+  const requested_selection = String(body.ai_model_selection ?? "").trim();
+  const selected_option = requested_selection ? supported_ai_model_by_id(requested_selection) : null;
+
+  if (selected_option) {
+    return selected_option;
+  }
+
+  const requested_provider = String(body.ai_provider ?? current_ai.provider ?? supported_ai_model_options[0].provider).trim();
+  const requested_model = String(body.ai_model ?? current_ai.model ?? supported_ai_model_options[0].model).trim();
+
+  return supported_ai_model_by_provider_model(requested_provider, requested_model) ?? supported_ai_model_options[0];
+}
+
+function normalize_whatsapp_number(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  const digits = raw.replace(/[^\d]/g, "");
+  return digits ? `+${digits}` : raw;
+}
+
+function normalize_whatsapp_phone_number_id(value, fallback_display_number) {
+  const raw = String(value ?? "").trim();
+  if (raw) {
+    return raw.replace(/[^\dA-Za-z_-]/g, "");
+  }
+
+  return String(fallback_display_number ?? "").replace(/[^\d]/g, "");
+}
+
 function parse_human_group_ids(value) {
-  return compact_strings(
+  const by_id = new Map();
+
+  for (const id of compact_strings(
     as_array(value)
       .flatMap((item) => String(item ?? "").split(","))
       .map((item) => item.trim()),
-  );
+  )) {
+    const group = supported_human_group_by_id(id);
+    if (group && !by_id.has(group.id)) {
+      by_id.set(group.id, group.id);
+    }
+  }
+
+  return [...by_id.values()];
 }
 
 function parse_interactions(current_interactions, body) {
@@ -121,12 +225,15 @@ function parse_interactions(current_interactions, body) {
 function builder_definition_from_body(current_definition, body) {
   const identity = current_definition.identity ?? {};
   const behavior = current_definition.behavior ?? {};
+  const ai = current_definition.ai ?? {};
   const operating_instructions = String(
     body.instrucciones_operativas ?? behavior.operating_instructions ?? current_definition.prompt_base ?? "",
   ).trim();
   const constraints_text = String(
     body.constraints_text ?? (Array.isArray(behavior.constraints) ? behavior.constraints.join("\n") : behavior.constraints ?? ""),
   ).trim();
+
+  const selected_ai_model = resolve_ai_model_selection(body, ai);
 
   return {
     identity: {
@@ -142,9 +249,67 @@ function builder_definition_from_body(current_definition, body) {
       operating_instructions,
       constraints: constraints_text,
     },
+    ai: {
+      provider: selected_ai_model.provider,
+      model: selected_ai_model.model,
+    },
     knowledge_source_ids: compact_strings(body.knowledge_source_ids),
     interactions: parse_interactions(current_definition.interactions, body),
   };
+}
+
+async function get_bot_whatsapp_channels(pool, bot_id) {
+  const result = await pool.query(
+    `
+      SELECT
+        whatsapp_phone_numbers.*,
+        phone_number_bot_assignments.id AS assignment_id,
+        phone_number_bot_assignments.assignment_type,
+        phone_number_bot_assignments.assigned_at
+      FROM phone_number_bot_assignments
+      JOIN whatsapp_phone_numbers
+        ON whatsapp_phone_numbers.id = phone_number_bot_assignments.whatsapp_phone_number_id
+      WHERE phone_number_bot_assignments.bot_id = $1
+        AND phone_number_bot_assignments.status = 'active'
+        AND phone_number_bot_assignments.active_key = 'active'
+        AND whatsapp_phone_numbers.status = 'active'
+      ORDER BY phone_number_bot_assignments.assigned_at DESC
+    `,
+    [bot_id],
+  );
+
+  return result.rows;
+}
+
+async function sync_whatsapp_channel_from_body(pool, bot, body) {
+  const display_phone_number = normalize_whatsapp_number(body.whatsapp_display_phone_number);
+  const phone_number_id = normalize_whatsapp_phone_number_id(body.whatsapp_phone_number_id, display_phone_number);
+
+  if (!display_phone_number && !phone_number_id) {
+    return null;
+  }
+
+  const whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
+    organization_id: bot.organization_id,
+    account_id: bot.account_id,
+    tenant_id: bot.tenant_id,
+    phone_number_id,
+    display_phone_number: display_phone_number || phone_number_id,
+    status: "active",
+  });
+
+  await assign_bot_to_whatsapp_phone_number(pool, {
+    organization_id: bot.organization_id,
+    account_id: bot.account_id,
+    whatsapp_phone_number_id: whatsapp_phone_number.id,
+    bot_id: bot.id,
+    assignment_type: "primary",
+    metadata_json: {
+      configured_from: "inspector_bot_builder",
+    },
+  });
+
+  return whatsapp_phone_number;
 }
 
 export async function get_inspector_home(pool) {
@@ -215,19 +380,11 @@ export async function get_bot_view(pool, bot_id) {
         bots.*,
         bot_profiles.name AS bot_profile_name,
         accounts.name AS account_name,
-        organizations.name AS organization_name,
-        whatsapp_phone_numbers.display_phone_number,
-        whatsapp_phone_numbers.phone_number_id
+        organizations.name AS organization_name
       FROM bots
       LEFT JOIN bot_profiles ON bot_profiles.id = bots.bot_profile_id
       JOIN accounts ON accounts.id = bots.account_id
       JOIN organizations ON organizations.id = bots.organization_id
-      LEFT JOIN phone_number_bot_assignments
-        ON phone_number_bot_assignments.bot_id = bots.id
-       AND phone_number_bot_assignments.status = 'active'
-       AND phone_number_bot_assignments.active_key = 'active'
-      LEFT JOIN whatsapp_phone_numbers
-        ON whatsapp_phone_numbers.id = phone_number_bot_assignments.whatsapp_phone_number_id
       WHERE bots.id = $1
       LIMIT 1
     `,
@@ -289,6 +446,10 @@ export async function get_bot_view(pool, bot_id) {
     stats: stats.rows[0],
     knowledge_sources,
     available_knowledge_sources,
+    supported_channels: supported_bot_channels,
+    whatsapp_channels: bot_row ? await get_bot_whatsapp_channels(pool, bot_id) : [],
+    ai_models: supported_ai_model_options,
+    human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,
     conversations: conversations.conversations,
     agent_runs: agent_runs.rows,
@@ -305,6 +466,7 @@ export async function update_bot_builder_view(pool, bot_id, body) {
   }
 
   const definition_json = builder_definition_from_body(bot.definition_json ?? {}, body);
+  await sync_whatsapp_channel_from_body(pool, bot, body);
 
   return update_bot_configuration(pool, bot_id, {
     name: definition_json.identity?.name || bot.name,

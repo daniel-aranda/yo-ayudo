@@ -5,6 +5,7 @@ import request from "supertest";
 import { afterEach as after_each, beforeEach as before_each, describe, expect, it } from "vitest";
 import { mock_provider } from "../../src/ai/mock_provider.js";
 import { create_simulated_whatsapp_payload } from "../../src/channels/whatsapp/whatsapp_message_parser.js";
+import { resolve_whatsapp_identity_by_phone_number_id } from "../../src/channels/whatsapp/whatsapp_identity_resolver.js";
 import { handle_whatsapp_webhook_payload } from "../../src/engine/message_processor.js";
 import { register_inspector_routes } from "../../src/inspector/inspector_routes.js";
 import { json_text, message_alignment } from "../../src/inspector/inspector_presenter.js";
@@ -220,13 +221,30 @@ describe("Conversation Inspector", () => {
     expect(bot_page.text).toContain("Ir a Knowledge Center");
     expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
     expect(bot_page.text).toContain("Interacciones");
+    expect(bot_page.text).toContain("Grupos humanos");
+    expect(bot_page.text).toContain("Selecciona grupo humano");
+    expect(bot_page.text).toContain("Founder");
+    expect(bot_page.text).toContain("Ventas");
+    expect(bot_page.text).toContain("Soporte");
     expect(bot_page.text).toContain("Restricciones");
     expect(bot_page.text).toContain("Probar bot");
     expect(bot_page.text).toContain("Mensaje de prueba");
     expect(bot_page.text).toContain("run_bot_test");
-    expect(bot_page.text).toContain("Canales / accounts asignados");
+    expect(bot_page.text).toContain("Canales soportados");
+    expect(bot_page.text).toContain("WhatsApp");
+    expect(bot_page.text).toContain("whatsapp_display_phone_number");
+    expect(bot_page.text).toContain("ai_model_selection");
+    expect(bot_page.text).toContain("OpenAI");
+    expect(bot_page.text).toContain("GPT 5.5");
+    expect(bot_page.text).toContain("GPT 5.2 económico");
     expect(bot_page.text).toContain("Conversaciones recientes");
     expect(bot_page.text).toContain("Ver settings JSON");
+    expect(bot_page.text).toContain("autosave-indicator");
+    expect(bot_page.text).toContain("Bot_Editor_Autosave");
+    expect(bot_page.text).not.toContain("Canales / accounts asignados");
+    expect(bot_page.text).not.toContain(">internal<");
+    expect(bot_page.text).not.toContain('name="ai_provider"');
+    expect(bot_page.text).not.toContain("Selecciona grupos humanos");
     for (const legacy_text of [
       "Prompt base",
       "Capacidades",
@@ -277,15 +295,18 @@ describe("Conversation Inspector", () => {
         bot_type: "custom",
         behavior_language: "es-MX",
         behavior_tone: "direct",
+        ai_model_selection: "openai:gpt-5.5",
         instrucciones_operativas: "Instrucciones actualizadas desde builder.",
         constraints_text: "No fingir llamadas.",
+        whatsapp_display_phone_number: "+525512345678",
+        whatsapp_phone_number_id: "155512345678",
         interaction_type: ["receive_whatsapp_message"],
         interaction_instructions: ["Atender dudas comerciales."],
         interaction_human_group_ids: [""],
         interaction_enabled: ["0"],
         new_interaction_type: "consult_human",
         new_interaction_instructions: "Consultar a humano ante alcance custom.",
-        new_interaction_human_group_ids: "founder, ventas",
+        new_interaction_human_group_ids: "ventas",
       })
       .expect(302);
     expect(save_response.headers.location).toBe(`/inspector/bots/${bot_id}`);
@@ -303,6 +324,10 @@ describe("Conversation Inspector", () => {
       operating_instructions: "Instrucciones actualizadas desde builder.",
       constraints: "No fingir llamadas.",
     });
+    expect(updated.rows[0].definition_json.ai).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.5",
+    });
     expect(updated.rows[0].definition_json.interactions[0]).toMatchObject({
       key: "receive_whatsapp_message",
       type: "receive_whatsapp_message",
@@ -316,7 +341,74 @@ describe("Conversation Inspector", () => {
       label: "Consultar humano",
       enabled: true,
       instructions: "Consultar a humano ante alcance custom.",
-      human_group_ids: ["founder", "ventas"],
+      human_group_ids: ["ventas"],
+    });
+
+    const whatsapp_assignment = await pool.query(
+      `
+        SELECT
+          whatsapp_phone_numbers.display_phone_number,
+          whatsapp_phone_numbers.phone_number_id,
+          phone_number_bot_assignments.bot_id,
+          phone_number_bot_assignments.status
+        FROM whatsapp_phone_numbers
+        JOIN phone_number_bot_assignments
+          ON phone_number_bot_assignments.whatsapp_phone_number_id = whatsapp_phone_numbers.id
+        WHERE whatsapp_phone_numbers.phone_number_id = '155512345678'
+        LIMIT 1
+      `,
+    );
+
+    expect(whatsapp_assignment.rows[0]).toMatchObject({
+      display_phone_number: "+525512345678",
+      phone_number_id: "155512345678",
+      bot_id,
+      status: "active",
+    });
+
+    const resolved_identity = await resolve_whatsapp_identity_by_phone_number_id(pool, "155512345678");
+    expect(resolved_identity.bot.id).toBe(bot_id);
+    expect(resolved_identity.whatsapp_phone_number.display_phone_number).toBe("+525512345678");
+  });
+
+  it("autosaves bot builder fields through the JSON route", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const bot_id = bot_result.rows[0].id;
+
+    const autosave_response = await request(app)
+      .post(`/inspector/bots/${bot_id}`)
+      .set("Accept", "application/json")
+      .set("X-Requested-With", "XMLHttpRequest")
+      .type("form")
+      .send({
+        name: "Agente Autosave",
+        description: "Descripcion guardada por autosave.",
+        goal: "Validar autosave en editor.",
+        status: "active",
+        bot_type: "custom",
+        behavior_language: "es-MX",
+        behavior_tone: "commercial",
+        ai_model_selection: "openai:gpt-5.2",
+        instrucciones_operativas: "Autosave actualizo instrucciones.",
+        constraints_text: "Autosave no debe romper el editor.",
+      })
+      .expect(200);
+
+    expect(autosave_response.body).toMatchObject({
+      ok: true,
+      bot: {
+        id: bot_id,
+        name: "Agente Autosave",
+      },
+    });
+
+    const updated = await pool.query("SELECT name, definition_json FROM bots WHERE id = $1", [bot_id]);
+    expect(updated.rows[0].name).toBe("Agente Autosave");
+    expect(updated.rows[0].definition_json.identity.description).toBe("Descripcion guardada por autosave.");
+    expect(updated.rows[0].definition_json.ai).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.2",
     });
   });
 
