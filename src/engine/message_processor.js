@@ -57,46 +57,82 @@ async function upsert_conversation(pool, input) {
   return result.rows[0];
 }
 
-async function store_inbound_message(pool, input) {
-  const media = extract_media_metadata(input.inbound_message);
-  const result = await pool.query(
-    `
-      INSERT INTO messages (
-        tenant_id,
-        branch_id,
-        bot_id,
-        conversation_id,
-        contact_id,
-        channel,
-        direction,
-        external_message_id,
-        message_type,
-        raw_payload_json,
-        text_body,
-        media_url,
-        media_mime_type,
-        processing_status
-      )
-      VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', $6, $7, $8::jsonb, $9, $10, $11, 'stored')
-      RETURNING *
-    `,
-    [
-      input.tenant_id,
-      input.branch_id,
-      input.bot_id,
-      input.conversation_id,
-      input.contact_id,
-      input.inbound_message.id ?? null,
-      input.inbound_message.type ?? "unknown",
-      JSON.stringify(input.raw_payload),
-      extract_text_body(input.inbound_message),
-      media.media_url,
-      media.media_mime_type,
-    ],
+async function find_inbound_message_by_external_id(pool, external_message_id) {
+  if (!external_message_id) return null;
+
+  const existing = await pool.query(
+    "SELECT * FROM messages WHERE external_message_id = $1 AND direction = 'inbound' LIMIT 1",
+    [external_message_id],
   );
 
-  logger.info({ message_id: result.rows[0].id }, "message stored");
-  return result.rows[0];
+  return existing.rows[0] ?? null;
+}
+
+async function store_inbound_message(pool, input) {
+  const media = extract_media_metadata(input.inbound_message);
+  const external_message_id = input.inbound_message.id ?? null;
+
+  // Idempotency: Meta's WhatsApp Cloud API delivers webhooks at-least-once, so a
+  // redelivered inbound message must not be stored or processed twice (which would
+  // double-count operations, e.g. record a sale twice).
+  const duplicate = await find_inbound_message_by_external_id(pool, external_message_id);
+  if (duplicate) {
+    logger.info({ message_id: duplicate.id, external_message_id }, "duplicate inbound message ignored");
+    return { ...duplicate, already_processed: true };
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        INSERT INTO messages (
+          tenant_id,
+          branch_id,
+          bot_id,
+          conversation_id,
+          contact_id,
+          channel,
+          direction,
+          external_message_id,
+          message_type,
+          raw_payload_json,
+          text_body,
+          media_url,
+          media_mime_type,
+          processing_status
+        )
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', $6, $7, $8::jsonb, $9, $10, $11, 'stored')
+        RETURNING *
+      `,
+      [
+        input.tenant_id,
+        input.branch_id,
+        input.bot_id,
+        input.conversation_id,
+        input.contact_id,
+        external_message_id,
+        input.inbound_message.type ?? "unknown",
+        JSON.stringify(input.raw_payload),
+        extract_text_body(input.inbound_message),
+        media.media_url,
+        media.media_mime_type,
+      ],
+    );
+
+    logger.info({ message_id: result.rows[0].id }, "message stored");
+    return result.rows[0];
+  } catch (error) {
+    // Lost the race against a concurrent redelivery: the unique index rejected the
+    // second insert. Treat it as an already-processed duplicate instead of crashing.
+    if (error?.code === "23505" && external_message_id) {
+      const existing = await find_inbound_message_by_external_id(pool, external_message_id);
+      if (existing) {
+        logger.info({ message_id: existing.id, external_message_id }, "duplicate inbound message ignored (race)");
+        return { ...existing, already_processed: true };
+      }
+    }
+
+    throw error;
+  }
 }
 
 async function store_parsing_result(pool, input) {
@@ -312,6 +348,19 @@ async function process_inbound_message(dependencies, input) {
       message: input.inbound_message,
     },
   });
+
+  if (stored_message.already_processed) {
+    logger.info({ message_id: stored_message.id }, "inbound message already processed; skipping pipeline");
+    return {
+      message_id: stored_message.id,
+      duplicate: true,
+      intent: stored_message.parsed_intent ?? null,
+      needs_review: stored_message.needs_review ?? false,
+      reply_text: null,
+      agent_key: null,
+    };
+  }
+
   const event_identity = {
     organization_id: resolution.organization?.id ?? null,
     account_id: resolution.account?.id ?? null,

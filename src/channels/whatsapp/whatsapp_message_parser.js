@@ -45,7 +45,7 @@ export function create_simulated_whatsapp_payload(input) {
               messages: [
                 {
                   from: input.from,
-                  id: `dev-${Date.now()}`,
+                  id: input.message_id ?? `dev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
                   timestamp: Math.floor(Date.now() / 1000).toString(),
                   type: "text",
                   text: { body: input.text },

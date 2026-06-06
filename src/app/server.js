@@ -23,7 +23,14 @@ export function create_app() {
   app.locals.json = json_text;
   app.locals.message_alignment = message_alignment;
 
-  app.use(express.json({ limit: "2mb" }));
+  app.use(
+    express.json({
+      limit: "2mb",
+      verify: (request, _response, buffer) => {
+        request.raw_body = buffer;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: false }));
   app.use("/public", express.static(path.join(process.cwd(), "src", "web", "public")));
 
@@ -44,13 +51,35 @@ export function create_app() {
 
   app.use(router);
 
-  app.use((error, _request, response, _next) => {
+  app.use((error, request, response, _next) => {
     const normalized_error = error instanceof Error ? error : new Error("Unknown error");
     logger.error({ err: normalized_error }, "request failed");
-    response.status(500).json({
-      ok: false,
-      error: config.node_env === "production" ? "internal_server_error" : normalized_error.message,
-    });
+
+    const status = Number.isInteger(error?.status) ? error.status : 500;
+    const expose_detail = config.node_env !== "production";
+    const json_error = expose_detail ? normalized_error.message : "internal_server_error";
+
+    const prefers_json =
+      request.get("x-requested-with") === "XMLHttpRequest" ||
+      request.accepts(["html", "json"]) === "json";
+
+    if (prefers_json) {
+      response.status(status).json({ ok: false, error: json_error });
+      return;
+    }
+
+    response.status(status).render(
+      "error",
+      { error_message: expose_detail ? normalized_error.message : null },
+      (render_error, html) => {
+        if (render_error) {
+          response.type("text").send("Ocurrió un error inesperado. Intenta de nuevo.");
+          return;
+        }
+
+        response.send(html);
+      },
+    );
   });
 
   return app;

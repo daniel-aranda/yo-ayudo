@@ -2,11 +2,11 @@ extends layout
 
 block content
   if !account
-    .empty Account no encontrada.
+    .empty Cuenta no encontrada.
   else
     section.page-header
       h1 #{account.business_name} / #{account.name}
-      p WhatsApp Bot Engine / Agents Engine
+      p Motor de bots y agentes de WhatsApp
 
     .metrics
       article.metric

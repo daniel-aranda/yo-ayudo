@@ -40,6 +40,7 @@ async function simulate(pool, client, text, options = {}) {
       from: "5215550000000",
       text,
       phone_number_id: options.phone_number_id,
+      message_id: options.message_id,
     }),
     {
       pool,
@@ -78,6 +79,19 @@ describe("WhatsApp inbound pipeline", () => {
     expect(messages.rows[0].raw_payload_json.message.text.body).toBe("abrimos con 1500 en caja");
     expect(messages.rows[0].parsed_intent).toBe("day_start");
     expect(client.sent_messages[0]?.body).toContain("Inicio del día registrado");
+  });
+
+  it("ignores duplicate webhook deliveries with the same message id (idempotent)", async () => {
+    const first = await simulate(pool, client, "vendimos 3200 hasta ahorita", { message_id: "wamid.DUPLICATE-1" });
+    const second = await simulate(pool, client, "vendimos 3200 hasta ahorita", { message_id: "wamid.DUPLICATE-1" });
+
+    const messages = await pool.query("SELECT * FROM messages WHERE direction = 'inbound'");
+    const sales_updates = await pool.query("SELECT * FROM op_sales_updates");
+
+    expect(first[0]?.duplicate).toBeFalsy();
+    expect(second[0]?.duplicate).toBe(true);
+    expect(messages.rowCount).toBe(1);
+    expect(sales_updates.rowCount).toBe(1);
   });
 
   it("records purchases, sales updates, daily close and deterministic report", async () => {

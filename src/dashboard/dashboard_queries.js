@@ -66,17 +66,8 @@ export async function get_account_dashboard_data(pool, input) {
   );
   const bots = await pool.query(
     `
-      SELECT
-        bots.*,
-        whatsapp_phone_numbers.display_phone_number,
-        whatsapp_phone_numbers.phone_number_id
+      SELECT bots.*
       FROM bots
-      LEFT JOIN phone_number_bot_assignments
-        ON phone_number_bot_assignments.bot_id = bots.id
-       AND phone_number_bot_assignments.status = 'active'
-       AND phone_number_bot_assignments.active_key = 'active'
-      LEFT JOIN whatsapp_phone_numbers
-        ON whatsapp_phone_numbers.id = phone_number_bot_assignments.whatsapp_phone_number_id
       WHERE bots.account_id = $1
         AND bots.status = 'active'
       ORDER BY bots.bot_type, bots.name

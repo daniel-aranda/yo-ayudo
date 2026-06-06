@@ -1,0 +1,14 @@
+extends layout
+
+block content
+  section.page-header
+    h1 Algo salió mal
+    p Ocurrió un error inesperado al procesar tu solicitud.
+  section.panel
+    p.meta El error quedó registrado en los logs del servidor. Puedes intentar de nuevo.
+    if error_message
+      details.json-toggle
+        summary Detalle técnico
+        pre= error_message
+    p
+      a.button(href="/dashboard") Volver al inicio
