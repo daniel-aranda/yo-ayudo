@@ -43,6 +43,7 @@ block content
       if (!text) return "";
       return text.length > 220 ? `${text.slice(0, 220)}...` : text;
     };
+    const last_saved_at_iso = bot?.updated_at ? new Date(bot.updated_at).toISOString() : "";
 
   if bot
     section.page-header.builder-header
@@ -50,8 +51,10 @@ block content
         h1= bot_name
         p= `${bot.organization_name || "Organization"} / ${bot.account_name || "Account"}`
       div.builder-actions
-        div#autosave-indicator.autosave-indicator.hidden(aria-live="polite")
-        button(type="submit", form="bot-editor") Guardar cambios
+        div#autosave-indicator.autosave-indicator.idle(aria-live="polite", data-saved-at=last_saved_at_iso)
+          span.autosave-dot(aria-hidden="true")
+          span.autosave-text
+          button.autosave-retry(type="button", hidden) Reintentar
         details.json-toggle
           summary Ver settings JSON
           pre= JSON.stringify(settings_json, null, 2)
@@ -237,6 +240,7 @@ block content
       section.panel
         h2 Probar bot
         div.test-bot-panel(
+          data-autosave-ignore,
           data-bot-id=bot.id,
           data-organization-id=bot.organization_id || "",
           data-account-id=bot.account_id || ""

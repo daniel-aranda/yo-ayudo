@@ -361,27 +361,41 @@ button:disabled {
 }
 
 .builder-actions {
-  align-items: start;
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
 }
 
+.builder-actions .json-toggle summary {
+  margin-top: 0;
+}
+
 .autosave-indicator {
   align-items: center;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
   display: inline-flex;
   font-size: 13px;
   font-weight: 650;
+  gap: 8px;
   min-height: 38px;
-  padding: 8px 12px;
+  padding: 8px 14px;
 }
 
 .autosave-indicator.hidden {
   display: none;
+}
+
+.autosave-dot {
+  background: #9ca3af;
+  border-radius: 999px;
+  flex: none;
+  height: 8px;
+  width: 8px;
 }
 
 .autosave-indicator.saving {
@@ -390,16 +404,66 @@ button:disabled {
   color: #9a3412;
 }
 
+.autosave-indicator.saving .autosave-dot {
+  animation: autosave-pulse 1s ease-in-out infinite;
+  background: #ea580c;
+}
+
 .autosave-indicator.saved {
   background: #ecfdf5;
   border-color: #a7f3d0;
   color: #047857;
 }
 
+.autosave-indicator.saved .autosave-dot {
+  background: #047857;
+}
+
 .autosave-indicator.error {
   background: #fef2f2;
   border-color: #fecaca;
   color: #b91c1c;
+}
+
+.autosave-indicator.error .autosave-dot {
+  background: #b91c1c;
+}
+
+.autosave-retry {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  margin: 0;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.autosave-retry:hover {
+  background: transparent;
+  color: inherit;
+}
+
+.autosave-retry[hidden] {
+  display: none;
+}
+
+@keyframes autosave-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autosave-indicator.saving .autosave-dot {
+    animation: none;
+  }
 }
 
 .json-toggle {
