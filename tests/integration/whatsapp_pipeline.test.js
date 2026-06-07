@@ -178,19 +178,21 @@ describe("WhatsApp inbound pipeline", () => {
     expect(client.sent_messages[0]?.body).toContain("costo total");
   });
 
-  it("resolves tenant from configured WhatsApp phone number id and logs mock AI calls", async () => {
+  it("resolves account and organization from configured WhatsApp phone number id and logs mock AI calls", async () => {
     await simulate(pool, client, "vendimos 3200 hasta ahorita");
 
     const messages = await pool.query(`
-      SELECT messages.*, tenants.name AS tenant_name
+      SELECT messages.*, accounts.name AS account_name, organizations.name AS organization_name
       FROM messages
-      JOIN tenants ON tenants.id = messages.tenant_id
+      JOIN accounts ON accounts.id = messages.account_id
+      JOIN organizations ON organizations.id = messages.organization_id
       WHERE messages.direction = 'inbound'
       LIMIT 1
     `);
     const ai_calls = await pool.query("SELECT * FROM ai_calls ORDER BY created_at");
 
-    expect(messages.rows[0].tenant_name).toBe("YoAyudo");
+    expect(messages.rows[0]?.account_name).toBeTruthy();
+    expect(messages.rows[0]?.organization_name).toBeTruthy();
     expect(ai_calls.rowCount).toBeGreaterThanOrEqual(3);
     expect(ai_calls.rows.some((row) => row.provider === "mock")).toBe(true);
   });

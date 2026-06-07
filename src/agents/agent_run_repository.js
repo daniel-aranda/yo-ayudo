@@ -2,8 +2,8 @@ export async function create_agent_run(pool, input) {
   const result = await pool.query(
     `
       INSERT INTO agent_runs (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         contact_id,
         conversation_id,
         message_id,
@@ -36,8 +36,8 @@ export async function create_agent_run(pool, input) {
       RETURNING *
     `,
     [
-      input.tenant_id,
-      input.branch_id ?? null,
+      input.account_id ?? null,
+      input.organization_id ?? null,
       input.contact_id ?? null,
       input.conversation_id ?? null,
       input.message_id ?? null,

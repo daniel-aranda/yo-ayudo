@@ -9,10 +9,10 @@ export async function generate_daily_report(pool, input) {
     `
       SELECT *
       FROM op_business_days
-      WHERE tenant_id = $1 AND branch_id = $2 AND operation_date = $3
+      WHERE account_id = $1 AND operation_date = $2
       LIMIT 1
     `,
-    [input.tenant_id, input.branch_id, input.operation_date],
+    [input.account_id, input.operation_date],
   );
   const operation = operation_result.rows[0];
 
@@ -30,8 +30,8 @@ export async function generate_daily_report(pool, input) {
   const report_result = await pool.query(
     `
       INSERT INTO op_daily_reports (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         business_day_id,
         report_date,
         summary_text,
@@ -43,8 +43,8 @@ export async function generate_daily_report(pool, input) {
       RETURNING id
     `,
     [
-      input.tenant_id,
-      input.branch_id,
+      input.account_id,
+      input.organization_id,
       operation.id,
       input.operation_date,
       summary_text,

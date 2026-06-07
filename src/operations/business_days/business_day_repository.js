@@ -3,13 +3,13 @@ import { money_to_database } from "../../shared/money.js";
 export async function ensure_business_day(pool, identity) {
   const result = await pool.query(
     `
-      INSERT INTO op_business_days (tenant_id, branch_id, operation_date, status)
+      INSERT INTO op_business_days (account_id, organization_id, operation_date, status)
       VALUES ($1, $2, $3, 'open')
-      ON CONFLICT (tenant_id, branch_id, operation_date)
+      ON CONFLICT (account_id, operation_date)
       DO UPDATE SET updated_at = now()
       RETURNING id
     `,
-    [identity.tenant_id, identity.branch_id, identity.operation_date],
+    [identity.account_id, identity.organization_id, identity.operation_date],
   );
 
   return result.rows[0];

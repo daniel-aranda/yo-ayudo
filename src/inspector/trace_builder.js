@@ -39,12 +39,11 @@ async function operational_writes_for_message(pool, message) {
       `
         SELECT *
         FROM op_business_days
-        WHERE tenant_id = $1
-          AND branch_id = $2
+        WHERE account_id = $1
         ORDER BY updated_at DESC
         LIMIT 1
       `,
-      [message.tenant_id, message.branch_id],
+      [message.account_id],
     );
 
     for (const business_day of business_days) {
@@ -77,20 +76,16 @@ export async function build_message_trace(pool, { message_id }) {
     `
       SELECT
         messages.*,
-        tenants.name AS tenant_name,
-        branches.name AS branch_name,
         contacts.display_name AS contact_name,
         contacts.whatsapp_phone,
         bots.name AS bot_name,
         accounts.name AS account_name,
         organizations.name AS organization_name
       FROM messages
-      JOIN tenants ON tenants.id = messages.tenant_id
-      LEFT JOIN branches ON branches.id = messages.branch_id
       JOIN contacts ON contacts.id = messages.contact_id
       LEFT JOIN bots ON bots.id = messages.bot_id
-      LEFT JOIN accounts ON accounts.id = bots.account_id
-      LEFT JOIN organizations ON organizations.id = bots.organization_id
+      LEFT JOIN accounts ON accounts.id = COALESCE(messages.account_id, bots.account_id)
+      LEFT JOIN organizations ON organizations.id = COALESCE(messages.organization_id, bots.organization_id)
       WHERE messages.id = $1
       LIMIT 1
     `,

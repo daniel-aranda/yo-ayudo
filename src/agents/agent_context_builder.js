@@ -13,8 +13,6 @@ export function conversation_memory_request_for_message(input) {
   return {
     organization_id: input.organization_id,
     account_id: input.account_id,
-    tenant_id: input.tenant_id,
-    branch_id: input.branch_id,
     contact_id: input.contact_id,
     conversation_id: input.conversation_id,
     bot_id: input.bot_id,
@@ -44,12 +42,11 @@ export function business_knowledge_request_for_message(input) {
   return {
     organization_id: input.organization_id,
     account_id: input.account_id,
-    tenant_id: input.tenant_id,
     bot_id: input.bot_id,
     solution_template_id: input.solution_template_id,
     query: context_query_for_intent(input),
     document_family: "business_knowledge",
-    scopes: ["organization", "account", "bot", "tenant"],
+    scopes: ["organization", "account", "bot"],
     document_types: [
       "business_service",
       "business_price",

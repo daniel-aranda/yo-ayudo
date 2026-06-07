@@ -5,8 +5,6 @@ export async function create_processing_event(pool, input) {
         organization_id,
         account_id,
         bot_id,
-        tenant_id,
-        branch_id,
         conversation_id,
         message_id,
         event_type,
@@ -22,9 +20,9 @@ export async function create_processing_event(pool, input) {
         duration_ms
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12, $13::jsonb,
-        $14, $15, $16, $17, $18
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10, $11::jsonb,
+        $12, $13, $14, $15, $16
       )
       RETURNING *
     `,
@@ -32,8 +30,6 @@ export async function create_processing_event(pool, input) {
       input.organization_id ?? null,
       input.account_id ?? null,
       input.bot_id ?? null,
-      input.tenant_id ?? null,
-      input.branch_id ?? null,
       input.conversation_id ?? null,
       input.message_id ?? null,
       input.event_type,

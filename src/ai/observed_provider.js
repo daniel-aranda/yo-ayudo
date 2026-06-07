@@ -12,8 +12,8 @@ export class observed_model_provider {
       await this.context.pool.query(
         `
           INSERT INTO ai_calls (
-            tenant_id,
-            branch_id,
+            account_id,
+            organization_id,
             message_id,
             provider,
             model,
@@ -26,8 +26,8 @@ export class observed_model_provider {
           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, 'completed')
         `,
         [
-          this.context.tenant_id,
-          this.context.branch_id,
+          this.context.account_id,
+          this.context.organization_id,
           this.context.message_id,
           this.context.provider_name,
           this.context.model,
@@ -42,8 +42,8 @@ export class observed_model_provider {
       await this.context.pool.query(
         `
           INSERT INTO ai_calls (
-            tenant_id,
-            branch_id,
+            account_id,
+            organization_id,
             message_id,
             provider,
             model,
@@ -56,8 +56,8 @@ export class observed_model_provider {
           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'failed', $9)
         `,
         [
-          this.context.tenant_id,
-          this.context.branch_id,
+          this.context.account_id,
+          this.context.organization_id,
           this.context.message_id,
           this.context.provider_name,
           this.context.model,

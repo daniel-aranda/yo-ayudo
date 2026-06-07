@@ -17,16 +17,16 @@ import { record_context_event, safe_record_processing_event } from "../processin
 async function upsert_contact(pool, input) {
   const result = await pool.query(
     `
-      INSERT INTO contacts (tenant_id, branch_id, whatsapp_phone, display_name, metadata_json)
+      INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, metadata_json)
       VALUES ($1, $2, $3, $4, '{}'::jsonb)
-      ON CONFLICT (tenant_id, whatsapp_phone)
+      ON CONFLICT (account_id, whatsapp_phone)
       DO UPDATE SET
-        branch_id = COALESCE(EXCLUDED.branch_id, contacts.branch_id),
+        organization_id = COALESCE(EXCLUDED.organization_id, contacts.organization_id),
         display_name = COALESCE(EXCLUDED.display_name, contacts.display_name),
         updated_at = now()
       RETURNING *
     `,
-    [input.tenant_id, input.branch_id, input.whatsapp_phone, input.display_name],
+    [input.account_id, input.organization_id, input.whatsapp_phone, input.display_name],
   );
 
   return result.rows[0];
@@ -35,18 +35,18 @@ async function upsert_contact(pool, input) {
 async function upsert_conversation(pool, input) {
   const result = await pool.query(
     `
-      INSERT INTO conversations (tenant_id, branch_id, bot_id, contact_id, channel, status, last_message_at)
+      INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at)
       VALUES ($1, $2, $4, $3, 'whatsapp', 'open', now())
-      ON CONFLICT (tenant_id, contact_id, channel)
+      ON CONFLICT (account_id, contact_id, channel)
       DO UPDATE SET
-        branch_id = COALESCE(EXCLUDED.branch_id, conversations.branch_id),
+        organization_id = COALESCE(EXCLUDED.organization_id, conversations.organization_id),
         bot_id = COALESCE($4, conversations.bot_id),
         status = 'open',
         last_message_at = now(),
         updated_at = now()
       RETURNING *
     `,
-    [input.tenant_id, input.branch_id, input.contact_id, input.bot_id],
+    [input.account_id, input.organization_id, input.contact_id, input.bot_id],
   );
 
   if (input.bot_id && !result.rows[0].bot_id) {
@@ -85,8 +85,8 @@ async function store_inbound_message(pool, input) {
     const result = await pool.query(
       `
         INSERT INTO messages (
-          tenant_id,
-          branch_id,
+          account_id,
+          organization_id,
           bot_id,
           conversation_id,
           contact_id,
@@ -104,8 +104,8 @@ async function store_inbound_message(pool, input) {
         RETURNING *
       `,
       [
-        input.tenant_id,
-        input.branch_id,
+        input.account_id,
+        input.organization_id,
         input.bot_id,
         input.conversation_id,
         input.contact_id,
@@ -139,8 +139,8 @@ async function store_parsing_result(pool, input) {
   await pool.query(
     `
       INSERT INTO parsing_results (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         message_id,
         parser_name,
         intent,
@@ -152,8 +152,8 @@ async function store_parsing_result(pool, input) {
       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb)
     `,
     [
-      input.tenant_id,
-      input.branch_id,
+      input.account_id,
+      input.organization_id,
       input.message_id,
       input.parsed.parser_name,
       input.parsed.intent,
@@ -169,8 +169,8 @@ async function create_review_item(pool, input) {
   await pool.query(
     `
       INSERT INTO review_items (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         bot_id,
         message_id,
         reason,
@@ -180,8 +180,8 @@ async function create_review_item(pool, input) {
       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
     `,
     [
-      input.tenant_id,
-      input.branch_id,
+      input.account_id,
+      input.organization_id,
       input.bot_id ?? null,
       input.message_id,
       input.reason,
@@ -219,8 +219,8 @@ async function store_outbound_message(pool, input) {
   const result = await pool.query(
     `
       INSERT INTO messages (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         bot_id,
         conversation_id,
         contact_id,
@@ -237,8 +237,8 @@ async function store_outbound_message(pool, input) {
       RETURNING *
     `,
     [
-      input.tenant_id,
-      input.branch_id,
+      input.account_id,
+      input.organization_id,
       input.bot_id ?? null,
       input.conversation_id,
       input.contact_id,
@@ -263,8 +263,6 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
   try {
     const router = new agent_router({ pool: dependencies.pool });
     const routing_result = await router.route_message({
-      tenant_id: processing_context.tenant.id,
-      branch_id: processing_context.branch?.id ?? null,
       contact_id: processing_context.contact.id,
       conversation_id: processing_context.conversation.id,
       message_id: processing_context.message.id,
@@ -323,21 +321,23 @@ async function process_inbound_message(dependencies, input) {
   const phone_number_id = input.value.metadata?.phone_number_id ?? config.whatsapp_phone_number_id;
   const resolution = await resolve_whatsapp_identity_by_phone_number_id(dependencies.pool, phone_number_id);
   const contact_profile = input.value.contacts?.find((contact) => contact.wa_id === input.inbound_message.from);
+  const account_id = resolution.account?.id ?? null;
+  const organization_id = resolution.organization?.id ?? resolution.account?.organization_id ?? null;
   const contact = await upsert_contact(dependencies.pool, {
-    tenant_id: resolution.tenant.id,
-    branch_id: resolution.branch?.id ?? null,
+    account_id,
+    organization_id,
     whatsapp_phone: input.inbound_message.from,
     display_name: contact_profile?.profile?.name ?? null,
   });
   const conversation = await upsert_conversation(dependencies.pool, {
-    tenant_id: resolution.tenant.id,
-    branch_id: resolution.branch?.id ?? null,
+    account_id,
+    organization_id,
     bot_id: resolution.bot?.id ?? null,
     contact_id: contact.id,
   });
   const stored_message = await store_inbound_message(dependencies.pool, {
-    tenant_id: resolution.tenant.id,
-    branch_id: resolution.branch?.id ?? null,
+    account_id,
+    organization_id,
     bot_id: resolution.bot?.id ?? null,
     conversation_id: conversation.id,
     contact_id: contact.id,
@@ -365,8 +365,6 @@ async function process_inbound_message(dependencies, input) {
     organization_id: resolution.organization?.id ?? null,
     account_id: resolution.account?.id ?? null,
     bot_id: resolution.bot?.id ?? null,
-    tenant_id: resolution.tenant.id,
-    branch_id: resolution.branch?.id ?? null,
     conversation_id: conversation.id,
     message_id: stored_message.id,
   };
@@ -398,22 +396,20 @@ async function process_inbound_message(dependencies, input) {
     pool: dependencies.pool,
     provider_name: config.ai_provider,
     model: config.ai_provider === "mock" ? "mock-local" : config.bedrock_model_id,
-    tenant_id: resolution.tenant.id,
-    branch_id: resolution.branch?.id ?? null,
+    account_id,
+    organization_id,
     message_id: stored_message.id,
   });
   const normalized = await observed_provider.normalize_message({ text: stored_message.text_body ?? "" });
   const operation_date = date_key_in_timezone(
     new Date(),
-    resolution.bot_profile?.timezone ?? resolution.branch?.timezone ?? resolution.tenant.timezone,
+    resolution.bot_profile?.timezone ?? resolution.account?.timezone ?? "America/Mexico_City",
   );
   const parser = new message_intent_parser(observed_provider);
   const classification = await observed_provider.classify_intent({ text: normalized.normalized_text });
   const parsed = await parser.parse(normalized.normalized_text, classification);
   const processing_context = {
     pool: dependencies.pool,
-    tenant: resolution.tenant,
-    branch: resolution.branch,
     bot_profile: resolution.bot_profile,
     solution_template: resolution.solution_template,
     organization: resolution.organization,
@@ -427,8 +423,8 @@ async function process_inbound_message(dependencies, input) {
   };
 
   await store_parsing_result(dependencies.pool, {
-    tenant_id: resolution.tenant.id,
-    branch_id: resolution.branch?.id ?? null,
+    account_id,
+    organization_id,
     message_id: stored_message.id,
     parsed,
   });
@@ -449,8 +445,8 @@ async function process_inbound_message(dependencies, input) {
 
   if (parsed.needs_review) {
     await create_review_item(dependencies.pool, {
-      tenant_id: resolution.tenant.id,
-      branch_id: resolution.branch?.id ?? null,
+      account_id,
+      organization_id,
       bot_id: resolution.bot?.id ?? null,
       message_id: stored_message.id,
       reason: parsed.validation_errors[0]?.message?.toString() ?? "low_confidence_or_missing_data",
@@ -551,8 +547,8 @@ async function process_inbound_message(dependencies, input) {
       body: reply_text,
     });
     const outbound_message = await store_outbound_message(dependencies.pool, {
-      tenant_id: resolution.tenant.id,
-      branch_id: resolution.branch?.id ?? null,
+      account_id,
+      organization_id,
       bot_id: resolution.bot?.id ?? null,
       conversation_id: conversation.id,
       contact_id: contact.id,

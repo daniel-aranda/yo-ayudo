@@ -4,8 +4,6 @@ export async function upsert_memory_document(pool, input) {
       INSERT INTO memory_documents (
         organization_id,
         account_id,
-        tenant_id,
-        branch_id,
         contact_id,
         conversation_id,
         message_id,
@@ -28,16 +26,14 @@ export async function upsert_memory_document(pool, input) {
         version
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12, $13, $14, $15, $16, $17,
-        $18, $19, $20, $21::jsonb, $22, 'pending', $23
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13, $14, $15,
+        $16, $17, $18, $19::jsonb, $20, 'pending', $21
       )
       ON CONFLICT (source_table, source_id, document_type, version)
       DO UPDATE SET
         organization_id = EXCLUDED.organization_id,
         account_id = EXCLUDED.account_id,
-        tenant_id = EXCLUDED.tenant_id,
-        branch_id = EXCLUDED.branch_id,
         contact_id = EXCLUDED.contact_id,
         conversation_id = EXCLUDED.conversation_id,
         message_id = EXCLUDED.message_id,
@@ -62,8 +58,6 @@ export async function upsert_memory_document(pool, input) {
     [
       input.organization_id ?? null,
       input.account_id ?? null,
-      input.tenant_id ?? null,
-      input.branch_id ?? null,
       input.contact_id ?? null,
       input.conversation_id ?? null,
       input.message_id ?? null,

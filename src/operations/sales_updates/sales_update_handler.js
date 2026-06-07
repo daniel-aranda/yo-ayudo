@@ -7,8 +7,8 @@ export async function record_sales_update(pool, context, data) {
   await pool.query(
     `
       INSERT INTO op_sales_updates (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         business_day_id,
         accumulated_sales,
         cash_sales,
@@ -21,8 +21,8 @@ export async function record_sales_update(pool, context, data) {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `,
     [
-      context.tenant_id,
-      context.branch_id,
+      context.account_id,
+      context.organization_id,
       business_day.id,
       money_to_database(data.accumulated_sales),
       money_to_database(data.cash_sales),

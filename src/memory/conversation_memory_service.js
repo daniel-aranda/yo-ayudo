@@ -21,8 +21,6 @@ export function build_conversation_message_memory_document(context, parsed) {
   return {
     organization_id: context.organization?.id ?? context.bot?.organization_id ?? null,
     account_id: context.account?.id ?? context.bot?.account_id ?? null,
-    tenant_id: context.tenant.id,
-    branch_id: context.branch?.id ?? null,
     contact_id: context.contact.id,
     conversation_id: context.conversation.id,
     message_id: context.message.id,
@@ -59,8 +57,6 @@ export function build_conversation_message_memory_document(context, parsed) {
       document_type: "conversation_message",
       organization_id: context.organization?.id ?? context.bot?.organization_id ?? null,
       account_id: context.account?.id ?? context.bot?.account_id ?? null,
-      tenant_id: context.tenant.id,
-      branch_id: context.branch?.id ?? null,
       contact_id: context.contact.id,
       conversation_id: context.conversation.id,
       message_id: context.message.id,
@@ -92,8 +88,6 @@ export class conversation_memory_service {
     return this.document_service.create_document({
       organization_id: input.organization_id ?? null,
       account_id: input.account_id ?? null,
-      tenant_id: input.tenant_id ?? null,
-      branch_id: input.branch_id ?? null,
       contact_id: input.contact_id ?? null,
       conversation_id: input.conversation_id ?? null,
       message_id: input.message_id ?? null,
@@ -123,7 +117,6 @@ export class conversation_memory_service {
     return this.retrieval_service.retrieve_context({
       organization_id: input.organization_id ?? null,
       account_id: input.account_id ?? null,
-      tenant_id: input.tenant_id ?? null,
       contact_id: input.contact_id ?? null,
       conversation_id: input.conversation_id ?? null,
       bot_id: input.bot_id ?? null,

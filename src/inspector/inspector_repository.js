@@ -581,17 +581,15 @@ export async function get_conversation_view(pool, conversation_id) {
         conversations.*,
         contacts.display_name,
         contacts.whatsapp_phone,
-        tenants.name AS tenant_name,
         bots.name AS bot_name,
         bots.id AS bot_id,
         accounts.name AS account_name,
         organizations.name AS organization_name
       FROM conversations
       JOIN contacts ON contacts.id = conversations.contact_id
-      JOIN tenants ON tenants.id = conversations.tenant_id
       LEFT JOIN bots ON bots.id = conversations.bot_id
-      LEFT JOIN accounts ON accounts.id = bots.account_id
-      LEFT JOIN organizations ON organizations.id = bots.organization_id
+      LEFT JOIN accounts ON accounts.id = COALESCE(conversations.account_id, bots.account_id)
+      LEFT JOIN organizations ON organizations.id = COALESCE(conversations.organization_id, bots.organization_id)
       WHERE conversations.id = $1
       LIMIT 1
     `,

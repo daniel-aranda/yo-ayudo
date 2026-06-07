@@ -18,9 +18,8 @@ async function find_routing_rule(pool, input) {
       JOIN agent_profiles ON agent_profiles.id = agent_routing_rules.agent_profile_id
       WHERE agent_routing_rules.enabled = true
         AND (agent_routing_rules.intent_key = $1 OR agent_routing_rules.intent_key IS NULL)
-        AND (agent_routing_rules.tenant_id = $2 OR agent_routing_rules.tenant_id IS NULL)
-        AND (agent_routing_rules.solution_template_id = $3 OR agent_routing_rules.solution_template_id IS NULL)
-        AND (agent_routing_rules.bot_profile_id = $4 OR agent_routing_rules.bot_profile_id IS NULL)
+        AND (agent_routing_rules.solution_template_id = $2 OR agent_routing_rules.solution_template_id IS NULL)
+        AND (agent_routing_rules.bot_profile_id = $3 OR agent_routing_rules.bot_profile_id IS NULL)
         AND agent_profiles.status = 'active'
       ORDER BY
         CASE WHEN agent_routing_rules.intent_key = $1 THEN 0 ELSE 1 END,
@@ -29,7 +28,6 @@ async function find_routing_rule(pool, input) {
     `,
     [
       input.parsed_intent,
-      input.tenant_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
     ],
@@ -106,8 +104,8 @@ export class agent_router {
     };
 
     await create_agent_run(this.pool, {
-      tenant_id: input.tenant_id,
-      branch_id: input.branch_id,
+      account_id: input.account_id,
+      organization_id: input.organization_id,
       contact_id: input.contact_id,
       conversation_id: input.conversation_id,
       message_id: input.message_id,

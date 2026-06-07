@@ -19,13 +19,13 @@ export function review_reply(parsed) {
 }
 
 function operation_context(context) {
-  if (!context.branch) {
-    throw new Error("Operational handlers require a resolved branch");
+  if (!context.account) {
+    throw new Error("Operational handlers require a resolved account");
   }
 
   return {
-    tenant_id: context.tenant.id,
-    branch_id: context.branch.id,
+    account_id: context.account.id,
+    organization_id: context.organization?.id ?? context.account?.organization_id ?? null,
     operation_date: context.operation_date,
     source_message_id: context.message.id,
   };
