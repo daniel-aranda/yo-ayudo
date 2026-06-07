@@ -4,7 +4,6 @@ export async function upsert_bot(pool, input) {
       INSERT INTO bots (
         organization_id,
         account_id,
-        tenant_id,
         bot_profile_id,
         name,
         slug,
@@ -30,15 +29,14 @@ export async function upsert_bot(pool, input) {
         memoria_habilitada
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, COALESCE($7, 'whatsapp'),
-        COALESCE($8, 'system'), COALESCE($9, 'active'), $10,
-        $11::jsonb, $12::jsonb, COALESCE($13, 1), $14,
-        $15, $16::jsonb, $17::jsonb, $18::jsonb,
-        $19, $20, $21, $22::jsonb, $23::jsonb, $24::jsonb, $25::jsonb, COALESCE($26, true)
+        $1, $2, $3, $4, $5, COALESCE($6, 'whatsapp'),
+        COALESCE($7, 'system'), COALESCE($8, 'active'), $9,
+        $10::jsonb, $11::jsonb, COALESCE($12, 1), $13,
+        $14, $15::jsonb, $16::jsonb, $17::jsonb,
+        $18, $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb, COALESCE($25, true)
       )
       ON CONFLICT (account_id, slug)
       DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
         bot_profile_id = EXCLUDED.bot_profile_id,
         name = EXCLUDED.name,
         channel = EXCLUDED.channel,
@@ -67,7 +65,6 @@ export async function upsert_bot(pool, input) {
     [
       input.organization_id,
       input.account_id,
-      input.tenant_id,
       input.bot_profile_id ?? null,
       input.name,
       input.slug,

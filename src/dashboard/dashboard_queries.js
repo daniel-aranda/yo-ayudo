@@ -93,18 +93,10 @@ export async function get_account_dashboard_data(pool, input) {
         conversations.last_message_at,
         contacts.display_name,
         contacts.whatsapp_phone,
-        bots.name AS bot_name,
-        messages.text_body AS last_message
+        bots.name AS bot_name
       FROM conversations
       JOIN bots ON bots.id = conversations.bot_id
       JOIN contacts ON contacts.id = conversations.contact_id
-      LEFT JOIN LATERAL (
-        SELECT text_body
-        FROM messages
-        WHERE messages.conversation_id = conversations.id
-        ORDER BY messages.created_at DESC
-        LIMIT 1
-      ) messages ON true
       WHERE bots.account_id = $1
       ORDER BY conversations.last_message_at DESC NULLS LAST, conversations.created_at DESC
       LIMIT 10
@@ -142,12 +134,61 @@ export async function get_account_dashboard_data(pool, input) {
     [input.account_id],
   );
 
+  const business_day_result = await pool.query(
+    `
+      SELECT *
+      FROM op_business_days
+      WHERE account_id = $1
+      ORDER BY operation_date DESC, updated_at DESC
+      LIMIT 1
+    `,
+    [input.account_id],
+  );
+  let operational_day = business_day_result.rows[0] ?? null;
+  if (operational_day) {
+    const purchases_agg = await pool.query(
+      "SELECT COALESCE(SUM(total_cost), 0) AS purchases_total, count(*)::int AS purchases_count FROM op_purchases WHERE business_day_id = $1",
+      [operational_day.id],
+    );
+    const report = await pool.query(
+      "SELECT summary_text FROM op_daily_reports WHERE business_day_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [operational_day.id],
+    );
+    operational_day = {
+      ...operational_day,
+      purchases_total: purchases_agg.rows[0]?.purchases_total ?? 0,
+      purchases_count: purchases_agg.rows[0]?.purchases_count ?? 0,
+      report_summary: report.rows[0]?.summary_text ?? null,
+    };
+  }
+  const recent_purchases = await pool.query(
+    `
+      SELECT item_name, quantity, unit, total_cost, supplier_name_raw, created_at
+      FROM op_purchases
+      WHERE account_id = $1
+      ORDER BY created_at DESC
+      LIMIT 5
+    `,
+    [input.account_id],
+  );
+
+  const conversation_rows = [];
+  for (const conversation of conversations.rows) {
+    const last_message = await pool.query(
+      "SELECT text_body FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [conversation.id],
+    );
+    conversation_rows.push({ ...conversation, last_message: last_message.rows[0]?.text_body ?? null });
+  }
+
   return {
     account: account.rows[0] ?? null,
     bots: bots.rows,
     channels: channels.rows,
-    conversations: conversations.rows,
+    conversations: conversation_rows,
     events: events.rows,
     stats: stats.rows[0] ?? {},
+    operational_day,
+    recent_purchases: recent_purchases.rows,
   };
 }

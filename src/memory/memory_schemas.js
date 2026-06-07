@@ -6,8 +6,6 @@ export const memory_scope_schema = z.enum([
   "organization",
   "account",
   "bot",
-  "tenant",
-  "branch",
   "contact",
   "conversation",
   "operational_day",
@@ -54,8 +52,6 @@ const nullable_uuid_schema = z.string().uuid().nullable().optional();
 export const memory_document_input_schema = z.object({
   organization_id: nullable_uuid_schema,
   account_id: nullable_uuid_schema,
-  tenant_id: nullable_uuid_schema,
-  branch_id: nullable_uuid_schema,
   contact_id: nullable_uuid_schema,
   conversation_id: nullable_uuid_schema,
   message_id: nullable_uuid_schema,
@@ -85,8 +81,6 @@ export const memory_store_document_schema = z.object({
 export const retrieve_context_schema = z.object({
   organization_id: z.string().uuid().nullable().optional(),
   account_id: z.string().uuid().nullable().optional(),
-  tenant_id: z.string().uuid().nullable().optional(),
-  branch_id: z.string().uuid().nullable().optional(),
   contact_id: z.string().uuid().nullable().optional(),
   conversation_id: z.string().uuid().nullable().optional(),
   bot_id: z.string().uuid().nullable().optional(),

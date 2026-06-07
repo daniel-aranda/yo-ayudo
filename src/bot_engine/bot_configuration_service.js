@@ -109,10 +109,6 @@ export class bot_configuration_service {
       throw new Error(`Account no encontrado: ${input.account_id}`);
     }
 
-    if (!account.tenant_id) {
-      throw new Error("Account necesita tenant_id legacy para crear bot compatible.");
-    }
-
     let config = input;
     let template = null;
 
@@ -130,7 +126,6 @@ export class bot_configuration_service {
     const bot = await upsert_bot(this.pool, {
       organization_id: account.organization_id,
       account_id: account.id,
-      tenant_id: account.tenant_id,
       name: config.nombre,
       slug: input.slug ?? slug_from_name(config.nombre),
       channel: "whatsapp",

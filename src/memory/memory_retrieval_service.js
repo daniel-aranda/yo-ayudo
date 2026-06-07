@@ -70,16 +70,8 @@ export class memory_retrieval_service {
 
     if (input.account_id) {
       add_filter(filters, values, "(account_id = ? OR account_id IS NULL)", input.account_id);
-    }
-
-    if (input.tenant_id) {
-      add_filter(filters, values, "(tenant_id = ? OR tenant_id IS NULL)", input.tenant_id);
     } else {
-      filters.push("tenant_id IS NULL");
-    }
-
-    if (input.branch_id) {
-      add_filter(filters, values, "(branch_id = ? OR branch_id IS NULL)", input.branch_id);
+      filters.push("account_id IS NULL");
     }
 
     if (input.contact_id) {

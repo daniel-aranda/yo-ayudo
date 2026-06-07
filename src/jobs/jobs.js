@@ -12,7 +12,7 @@ export async function send_daily_close_reminders() {
 export async function generate_daily_reports(pool) {
   const operations = await pool.query(
     `
-      SELECT tenant_id, branch_id, operation_date::text
+      SELECT account_id, organization_id, operation_date::text
       FROM op_business_days
       WHERE NOT EXISTS (
         SELECT 1
@@ -35,21 +35,21 @@ export async function generate_daily_reports(pool) {
 export async function detect_missing_daily_data(pool) {
   const result = await pool.query(
     `
-      INSERT INTO review_items (tenant_id, branch_id, message_id, reason, raw_text, extracted_json)
+      INSERT INTO review_items (account_id, organization_id, message_id, reason, raw_text, extracted_json)
       SELECT
-        op_business_days.tenant_id,
-        op_business_days.branch_id,
+        op_business_days.account_id,
+        op_business_days.organization_id,
         messages.id,
         'missing_daily_data',
         'Daily operation has missing critical data',
         jsonb_build_object('operation_date', op_business_days.operation_date)
       FROM op_business_days
-      JOIN messages ON messages.tenant_id = op_business_days.tenant_id
+      JOIN messages ON messages.account_id = op_business_days.account_id
       WHERE (op_business_days.opening_cash IS NULL OR op_business_days.total_sales IS NULL)
         AND messages.id = (
           SELECT id
           FROM messages
-          WHERE messages.tenant_id = op_business_days.tenant_id
+          WHERE messages.account_id = op_business_days.account_id
           ORDER BY created_at DESC
           LIMIT 1
         )

@@ -1,11 +1,10 @@
 export async function upsert_account(pool, input) {
   const result = await pool.query(
     `
-      INSERT INTO accounts (organization_id, tenant_id, name, slug, status)
-      VALUES ($1, $2, $3, $4, COALESCE($5, 'active'))
+      INSERT INTO accounts (organization_id, name, slug, status)
+      VALUES ($1, $2, $3, COALESCE($4, 'active'))
       ON CONFLICT (organization_id, slug)
       DO UPDATE SET
-        tenant_id = COALESCE(EXCLUDED.tenant_id, accounts.tenant_id),
         name = EXCLUDED.name,
         status = EXCLUDED.status,
         updated_at = now()
@@ -13,7 +12,6 @@ export async function upsert_account(pool, input) {
     `,
     [
       input.organization_id,
-      input.tenant_id ?? null,
       input.name,
       input.slug,
       input.status ?? "active",

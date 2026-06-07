@@ -292,7 +292,6 @@ async function sync_whatsapp_channel_from_body(pool, bot, body) {
   const whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
     organization_id: bot.organization_id,
     account_id: bot.account_id,
-    tenant_id: bot.tenant_id,
     phone_number_id,
     display_phone_number: display_phone_number || phone_number_id,
     status: "active",
@@ -499,8 +498,6 @@ export async function get_bot_conversations(pool, input) {
     `
       SELECT
         c.id,
-        c.tenant_id,
-        c.branch_id,
         c.bot_id,
         c.contact_id,
         c.channel,

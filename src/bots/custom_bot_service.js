@@ -24,10 +24,6 @@ export class custom_bot_service {
       throw new Error(`Account not found: ${input.account_id}`);
     }
 
-    if (!account.tenant_id) {
-      throw new Error(`Account ${input.account_id} must be linked to a tenant before creating bots`);
-    }
-
     const definition = parse_custom_bot_definition(input.definition_json);
     const status = bot_status_schema.parse(input.status ?? "draft");
     const name = input.name ?? definition.identity.name;
@@ -40,7 +36,6 @@ export class custom_bot_service {
     return upsert_bot(this.pool, {
       organization_id: account.organization_id,
       account_id: account.id,
-      tenant_id: account.tenant_id,
       bot_profile_id: input.bot_profile_id ?? null,
       name,
       slug,

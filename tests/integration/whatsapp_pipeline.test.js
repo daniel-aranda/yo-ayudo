@@ -202,14 +202,10 @@ describe("WhatsApp inbound pipeline", () => {
       SELECT
         organizations.id AS organization_id,
         accounts.id AS account_id,
-        tenants.id AS tenant_id,
-        bot_profiles.id AS bot_profile_id,
         whatsapp_phone_numbers.id AS whatsapp_phone_number_id,
         whatsapp_phone_numbers.phone_number_id
       FROM organizations
       JOIN accounts ON accounts.organization_id = organizations.id
-      JOIN tenants ON tenants.id = accounts.tenant_id
-      JOIN bot_profiles ON bot_profiles.tenant_id = tenants.id
       JOIN whatsapp_phone_numbers ON whatsapp_phone_numbers.account_id = accounts.id
       LIMIT 1
     `);
@@ -217,8 +213,6 @@ describe("WhatsApp inbound pipeline", () => {
     const assigned_bot = await upsert_bot(pool, {
       organization_id: row.organization_id,
       account_id: row.account_id,
-      tenant_id: row.tenant_id,
-      bot_profile_id: row.bot_profile_id,
       name: "Assigned Sales Bot",
       slug: "assigned-sales-bot",
       channel: "whatsapp",

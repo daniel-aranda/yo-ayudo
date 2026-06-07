@@ -14,7 +14,7 @@ describe("local_memory_store", () => {
     const result = await store.put_document({
       document_id: "11111111-1111-4111-8111-111111111111",
       content: "knowledge content",
-      metadata: { tenant_id: "tenant_a" },
+      metadata: { account_id: "account_a" },
     });
     const document = await store.get_document({
       document_id: "11111111-1111-4111-8111-111111111111",
@@ -23,6 +23,6 @@ describe("local_memory_store", () => {
 
     expect(result.local_path).toContain(base_dir);
     expect(document.content).toBe("knowledge content");
-    expect(document.metadata.tenant_id).toBe("tenant_a");
+    expect(document.metadata.account_id).toBe("account_a");
   });
 });

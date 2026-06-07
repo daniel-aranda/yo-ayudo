@@ -310,6 +310,12 @@ button:hover {
   padding: 18px;
 }
 
+.config-warning {
+  color: #9a3412;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
 label {
   color: var(--muted);
   display: block;
@@ -804,10 +810,13 @@ pre {
     padding-right: 16px;
   }
 
-  .metrics,
   .two-column,
   .inspector-layout {
     grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .message-bubble {

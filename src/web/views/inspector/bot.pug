@@ -201,6 +201,8 @@ block content
                     option(value="") Selecciona grupo humano
                     each group in human_group_options
                       option(value=group.id, selected=selected_human_group_id === group.id)= group.label
+                  if !selected_human_group_id
+                    p.config-warning Sin grupo humano asignado: el agente no sabrá a quién escalar.
                 else
                   input(type="hidden", name="interaction_human_group_ids", value="")
         else

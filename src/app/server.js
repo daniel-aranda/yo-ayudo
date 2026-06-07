@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { pool } from "../db/client.js";
 import { logger } from "../shared/logger.js";
 import { format_money } from "../shared/money.js";
+import { format_date_es, format_datetime_es } from "../shared/dates.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { register_dashboard_routes } from "../dashboard/dashboard_routes.js";
 import { register_commercial_routes } from "../commercial/commercial_routes.js";
@@ -20,6 +21,8 @@ export function create_app() {
   app.set("view engine", "pug");
   app.set("views", path.join(process.cwd(), "src", "web", "views"));
   app.locals.money = format_money;
+  app.locals.date = format_date_es;
+  app.locals.datetime = format_datetime_es;
   app.locals.json = json_text;
   app.locals.message_alignment = message_alignment;
 

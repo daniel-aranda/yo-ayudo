@@ -75,30 +75,29 @@ function create_inspector_test_app(pool, dependencies = {}) {
 async function seed_minimal_message(pool) {
   const context = await pool.query(`
     SELECT
-      tenants.id AS tenant_id,
-      branches.id AS branch_id,
+      accounts.id AS account_id,
+      accounts.organization_id AS organization_id,
       contacts.id AS contact_id,
       bots.id AS bot_id
-    FROM tenants
-    JOIN branches ON branches.tenant_id = tenants.id
-    JOIN contacts ON contacts.tenant_id = tenants.id
-    JOIN bots ON bots.tenant_id = tenants.id
+    FROM accounts
+    JOIN contacts ON contacts.account_id = accounts.id
+    JOIN bots ON bots.account_id = accounts.id
     LIMIT 1
   `);
   const row = context.rows[0];
   const conversation = await pool.query(
     `
-      INSERT INTO conversations (tenant_id, branch_id, bot_id, contact_id, channel, last_message_at)
+      INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, last_message_at)
       VALUES ($1, $2, $3, $4, 'whatsapp', now())
       RETURNING *
     `,
-    [row.tenant_id, row.branch_id, row.bot_id, row.contact_id],
+    [row.account_id, row.organization_id, row.bot_id, row.contact_id],
   );
   const message = await pool.query(
     `
       INSERT INTO messages (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         bot_id,
         conversation_id,
         contact_id,
@@ -112,8 +111,8 @@ async function seed_minimal_message(pool) {
       RETURNING *
     `,
     [
-      row.tenant_id,
-      row.branch_id,
+      row.account_id,
+      row.organization_id,
       row.bot_id,
       conversation.rows[0].id,
       row.contact_id,

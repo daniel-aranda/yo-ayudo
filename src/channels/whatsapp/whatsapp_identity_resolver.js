@@ -16,24 +16,6 @@ function row_to_identity(row) {
           status: row.assignment_status,
         }
       : null,
-    tenant: {
-      id: row.tenant_id,
-      name: row.tenant_name,
-      slug: row.tenant_slug,
-      status: row.tenant_status,
-      timezone: row.tenant_timezone,
-    },
-    branch: row.branch_id
-      ? {
-          id: row.branch_id,
-          tenant_id: row.tenant_id,
-          name: row.branch_name,
-          address: row.branch_address,
-          phone: row.branch_phone,
-          timezone: row.branch_timezone,
-          status: row.branch_status,
-        }
-      : null,
     bot_profile: row.bot_profile_id
       ? {
           id: row.bot_profile_id,
@@ -60,9 +42,9 @@ function row_to_identity(row) {
       ? {
           id: row.account_id,
           organization_id: row.organization_id,
-          tenant_id: row.account_tenant_id,
           name: row.account_name,
           slug: row.account_slug,
+          timezone: row.account_timezone,
         }
       : null,
     bot: row.bot_id
@@ -70,7 +52,6 @@ function row_to_identity(row) {
           id: row.bot_id,
           organization_id: row.organization_id,
           account_id: row.account_id,
-          tenant_id: row.tenant_id,
           bot_profile_id: row.bot_profile_id,
           name: row.bot_name,
           slug: row.bot_slug,
@@ -95,17 +76,6 @@ async function resolve_from_active_assignment(pool, phone_number_id) {
         whatsapp_phone_numbers.status AS whatsapp_phone_number_status,
         phone_number_bot_assignments.id AS assignment_id,
         phone_number_bot_assignments.status AS assignment_status,
-        tenants.id AS tenant_id,
-        tenants.name AS tenant_name,
-        tenants.slug AS tenant_slug,
-        tenants.status AS tenant_status,
-        tenants.timezone AS tenant_timezone,
-        branches.id AS branch_id,
-        branches.name AS branch_name,
-        branches.address AS branch_address,
-        branches.phone AS branch_phone,
-        branches.timezone AS branch_timezone,
-        branches.status AS branch_status,
         bot_profiles.id AS bot_profile_id,
         bot_profiles.name AS bot_profile_name,
         bot_profiles.timezone AS bot_profile_timezone,
@@ -125,9 +95,9 @@ async function resolve_from_active_assignment(pool, phone_number_id) {
         organizations.name AS organization_name,
         organizations.slug AS organization_slug,
         accounts.id AS account_id,
-        accounts.tenant_id AS account_tenant_id,
         accounts.name AS account_name,
-        accounts.slug AS account_slug
+        accounts.slug AS account_slug,
+        accounts.timezone AS account_timezone
       FROM whatsapp_phone_numbers
       JOIN phone_number_bot_assignments
         ON phone_number_bot_assignments.whatsapp_phone_number_id = whatsapp_phone_numbers.id
@@ -137,8 +107,6 @@ async function resolve_from_active_assignment(pool, phone_number_id) {
        AND bots.status = 'active'
       JOIN accounts ON accounts.id = bots.account_id
       JOIN organizations ON organizations.id = bots.organization_id
-      JOIN tenants ON tenants.id = COALESCE(accounts.tenant_id, bots.tenant_id, whatsapp_phone_numbers.tenant_id)
-      LEFT JOIN branches ON branches.id = whatsapp_phone_numbers.branch_id
       LEFT JOIN bot_profiles ON bot_profiles.id = bots.bot_profile_id
         AND bot_profiles.status = 'active'
       LEFT JOIN solution_templates ON solution_templates.id = bot_profiles.solution_template_id
@@ -162,17 +130,6 @@ async function resolve_legacy_identity(pool, phone_number_id) {
         whatsapp_phone_numbers.status AS whatsapp_phone_number_status,
         NULL AS assignment_id,
         NULL AS assignment_status,
-        tenants.id AS tenant_id,
-        tenants.name AS tenant_name,
-        tenants.slug AS tenant_slug,
-        tenants.status AS tenant_status,
-        tenants.timezone AS tenant_timezone,
-        branches.id AS branch_id,
-        branches.name AS branch_name,
-        branches.address AS branch_address,
-        branches.phone AS branch_phone,
-        branches.timezone AS branch_timezone,
-        branches.status AS branch_status,
         bot_profiles.id AS bot_profile_id,
         bot_profiles.name AS bot_profile_name,
         bot_profiles.timezone AS bot_profile_timezone,
@@ -192,24 +149,21 @@ async function resolve_legacy_identity(pool, phone_number_id) {
         organizations.name AS organization_name,
         organizations.slug AS organization_slug,
         accounts.id AS account_id,
-        accounts.tenant_id AS account_tenant_id,
         accounts.name AS account_name,
-        accounts.slug AS account_slug
+        accounts.slug AS account_slug,
+        accounts.timezone AS account_timezone
       FROM whatsapp_phone_numbers
-      JOIN tenants ON tenants.id = whatsapp_phone_numbers.tenant_id
-      LEFT JOIN branches ON branches.id = whatsapp_phone_numbers.branch_id
-      LEFT JOIN bot_profiles ON bot_profiles.tenant_id = tenants.id
-        AND (bot_profiles.branch_id = branches.id OR bot_profiles.branch_id IS NULL)
+      LEFT JOIN accounts ON accounts.id = whatsapp_phone_numbers.account_id
+      LEFT JOIN organizations
+        ON organizations.id = COALESCE(whatsapp_phone_numbers.organization_id, accounts.organization_id)
+      LEFT JOIN bots ON bots.account_id = accounts.id
+        AND bots.status = 'active'
+      LEFT JOIN bot_profiles ON bot_profiles.id = bots.bot_profile_id
         AND bot_profiles.status = 'active'
       LEFT JOIN solution_templates ON solution_templates.id = bot_profiles.solution_template_id
-      LEFT JOIN bots ON bots.tenant_id = tenants.id
-        AND (bots.bot_profile_id = bot_profiles.id OR bots.bot_profile_id IS NULL)
-        AND bots.status = 'active'
-      LEFT JOIN organizations ON organizations.id = COALESCE(bots.organization_id, whatsapp_phone_numbers.organization_id)
-      LEFT JOIN accounts ON accounts.id = COALESCE(bots.account_id, whatsapp_phone_numbers.account_id)
       WHERE whatsapp_phone_numbers.phone_number_id = $1
         AND whatsapp_phone_numbers.status = 'active'
-      ORDER BY bot_profiles.branch_id NULLS LAST
+      ORDER BY bots.created_at NULLS LAST
       LIMIT 1
     `,
     [phone_number_id],
@@ -228,7 +182,7 @@ export async function resolve_whatsapp_identity_by_phone_number_id(pool, phone_n
   const legacy_identity = await resolve_legacy_identity(pool, phone_number_id);
 
   if (!legacy_identity) {
-    throw new Error(`No tenant configured for WhatsApp phone_number_id ${phone_number_id}`);
+    throw new Error(`No account configured for WhatsApp phone_number_id ${phone_number_id}`);
   }
 
   return legacy_identity;

@@ -14,27 +14,31 @@ describe("conversation_memory_service", () => {
 
   it("retrieves conversation memory for one conversation without returning business knowledge", async () => {
     const pool = await create_test_pool();
+    await pool.query(`
+      UPDATE contacts
+      SET account_id = accounts.id, organization_id = accounts.organization_id
+      FROM accounts
+      WHERE accounts.slug = 'yoayudo-ventas' AND contacts.account_id IS NULL
+    `);
     const ids = await pool.query(`
       SELECT
         organizations.id AS organization_id,
         accounts.id AS account_id,
-        tenants.id AS tenant_id,
         contacts.id AS contact_id,
         bots.id AS bot_id
       FROM organizations
       JOIN accounts ON accounts.organization_id = organizations.id
-      JOIN tenants ON tenants.id = accounts.tenant_id
-      JOIN contacts ON contacts.tenant_id = tenants.id
+      JOIN contacts ON contacts.account_id = accounts.id
       JOIN bots ON bots.account_id = accounts.id
       LIMIT 1
     `);
     const conversation = await pool.query(
       `
-        INSERT INTO conversations (tenant_id, bot_id, contact_id, channel, status, last_message_at)
-        VALUES ($1, $2, $3, 'whatsapp', 'open', now())
+        INSERT INTO conversations (organization_id, account_id, bot_id, contact_id, channel, status, last_message_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', now())
         RETURNING id
       `,
-      [ids.rows[0].tenant_id, ids.rows[0].bot_id, ids.rows[0].contact_id],
+      [ids.rows[0].organization_id, ids.rows[0].account_id, ids.rows[0].bot_id, ids.rows[0].contact_id],
     );
     const row = { ...ids.rows[0], conversation_id: conversation.rows[0].id };
     const service = new conversation_memory_service({
@@ -48,7 +52,6 @@ describe("conversation_memory_service", () => {
     await service.record_document({
       organization_id: row.organization_id,
       account_id: row.account_id,
-      tenant_id: row.tenant_id,
       contact_id: row.contact_id,
       conversation_id: row.conversation_id,
       bot_id: row.bot_id,
@@ -64,7 +67,6 @@ describe("conversation_memory_service", () => {
     const result = await service.retrieve_relevant_memory({
       organization_id: row.organization_id,
       account_id: row.account_id,
-      tenant_id: row.tenant_id,
       contact_id: row.contact_id,
       conversation_id: row.conversation_id,
       bot_id: row.bot_id,

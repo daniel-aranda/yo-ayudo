@@ -141,10 +141,10 @@ async function ensure_database() {
     await run_migrations(pool);
     log("Database migrations ok");
 
-    const tenant_count = await pool.query("SELECT COUNT(*) AS count FROM tenants");
+    const organization_count = await pool.query("SELECT COUNT(*) AS count FROM organizations");
 
-    if (Number(tenant_count.rows[0]?.count ?? 0) === 0) {
-      log("No tenants found. Run npm run db:seed if you want demo data.");
+    if (Number(organization_count.rows[0]?.count ?? 0) === 0) {
+      log("No organizations found. Run npm run db:seed if you want demo data.");
     }
   } finally {
     await pool.end();

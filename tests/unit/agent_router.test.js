@@ -81,28 +81,34 @@ class fake_conversation_memory_service {
 }
 
 async function route_intent(pool, intent) {
+  await pool.query(`
+    UPDATE contacts
+    SET account_id = accounts.id, organization_id = accounts.organization_id
+    FROM accounts
+    WHERE accounts.slug = 'yoayudo-ventas' AND contacts.account_id IS NULL
+  `);
   const context = await pool.query(`
     SELECT
-      tenants.id AS tenant_id,
-      branches.id AS branch_id,
+      organizations.id AS organization_id,
+      accounts.id AS account_id,
       contacts.id AS contact_id,
       conversations.id AS conversation_id,
       bot_profiles.id AS bot_profile_id,
       bot_profiles.solution_template_id AS solution_template_id
-    FROM tenants
-    JOIN branches ON branches.tenant_id = tenants.id
-    JOIN contacts ON contacts.tenant_id = tenants.id
+    FROM organizations
+    JOIN accounts ON accounts.organization_id = organizations.id
+    JOIN bots ON bots.account_id = accounts.id
+    JOIN bot_profiles ON bot_profiles.id = bots.bot_profile_id
+    JOIN contacts ON contacts.account_id = accounts.id
     LEFT JOIN conversations ON conversations.contact_id = contacts.id
-    JOIN bot_profiles ON bot_profiles.tenant_id = tenants.id
-    WHERE tenants.slug = 'yoayudo'
     LIMIT 1
   `);
   const row = context.rows[0];
   const router = new agent_router({ pool });
 
   return router.route_message({
-    tenant_id: row.tenant_id,
-    branch_id: row.branch_id,
+    organization_id: row.organization_id,
+    account_id: row.account_id,
     contact_id: row.contact_id,
     conversation_id: row.conversation_id,
     bot_profile_id: row.bot_profile_id,
@@ -115,21 +121,23 @@ async function route_intent(pool, intent) {
 }
 
 async function custom_route(pool, overrides = {}) {
+  await pool.query(`
+    UPDATE contacts
+    SET account_id = accounts.id, organization_id = accounts.organization_id
+    FROM accounts
+    WHERE accounts.slug = 'yoayudo-ventas' AND contacts.account_id IS NULL
+  `);
   const context = await pool.query(`
     SELECT
       organizations.id AS organization_id,
       accounts.id AS account_id,
-      tenants.id AS tenant_id,
-      branches.id AS branch_id,
       contacts.id AS contact_id,
       conversations.id AS conversation_id,
       bots.id AS bot_id,
       bots.bot_type
     FROM organizations
     JOIN accounts ON accounts.organization_id = organizations.id
-    JOIN tenants ON tenants.id = accounts.tenant_id
-    JOIN branches ON branches.tenant_id = tenants.id
-    JOIN contacts ON contacts.tenant_id = tenants.id
+    JOIN contacts ON contacts.account_id = accounts.id
     LEFT JOIN conversations ON conversations.contact_id = contacts.id
     JOIN bots ON bots.account_id = accounts.id
     WHERE bots.bot_type = 'custom'
@@ -145,8 +153,6 @@ async function custom_route(pool, overrides = {}) {
   return router.route_message({
     organization_id: row.organization_id,
     account_id: row.account_id,
-    tenant_id: row.tenant_id,
-    branch_id: row.branch_id,
     contact_id: row.contact_id,
     conversation_id: row.conversation_id,
     bot_id: row.bot_id,

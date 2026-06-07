@@ -25,8 +25,6 @@ export class business_knowledge_service {
           organization_id,
           account_id,
           bot_id,
-          tenant_id,
-          branch_id,
           solution_template_id,
           bot_profile_id,
           source_family,
@@ -38,15 +36,13 @@ export class business_knowledge_service {
           metadata_json,
           status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'business_knowledge', $8, $9, $10, $11, $12, $13::jsonb, COALESCE($14, 'active'))
+        VALUES ($1, $2, $3, $4, $5, 'business_knowledge', $6, $7, $8, $9, $10, $11::jsonb, COALESCE($12, 'active'))
         RETURNING *
       `,
       [
         input.organization_id ?? null,
         input.account_id ?? null,
         input.bot_id ?? null,
-        input.tenant_id ?? null,
-        input.branch_id ?? null,
         input.solution_template_id ?? null,
         input.bot_profile_id ?? null,
         input.scope,
@@ -70,8 +66,6 @@ export class business_knowledge_service {
             organization_id: input.organization_id,
             account_id: input.account_id,
             bot_id: input.bot_id,
-            tenant_id: input.tenant_id,
-            branch_id: input.branch_id,
             solution_template_id: input.solution_template_id,
             bot_profile_id: input.bot_profile_id,
             scope: input.scope,
@@ -85,8 +79,6 @@ export class business_knowledge_service {
     return this.document_service.create_document({
       organization_id: input.organization_id ?? null,
       account_id: input.account_id ?? null,
-      tenant_id: input.tenant_id ?? null,
-      branch_id: input.branch_id ?? null,
       bot_id: input.bot_id ?? null,
       solution_template_id: input.solution_template_id ?? null,
       bot_profile_id: input.bot_profile_id ?? null,
@@ -111,7 +103,6 @@ export class business_knowledge_service {
     return this.retrieval_service.retrieve_context({
       organization_id: input.organization_id ?? null,
       account_id: input.account_id ?? null,
-      tenant_id: input.tenant_id ?? null,
       bot_id: input.bot_id ?? null,
       query: input.query ?? "",
       document_family: "business_knowledge",

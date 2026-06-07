@@ -3,7 +3,7 @@ function clean_string(value) {
 }
 
 export async function list_knowledge_sources(pool, input = {}) {
-  const filters = ["source_family = 'business_knowledge'"];
+  const filters = ["source_family = 'business_knowledge'", "status != 'archived'"];
   const values = [];
 
   if (input.account_id) {
@@ -94,8 +94,6 @@ export async function create_knowledge_source(pool, input) {
         organization_id,
         account_id,
         bot_id,
-        tenant_id,
-        branch_id,
         source_family,
         scope,
         source_type,
@@ -108,15 +106,13 @@ export async function create_knowledge_source(pool, input) {
         metadata_json,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, 'business_knowledge', $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, 'ready')
+      VALUES ($1, $2, $3, 'business_knowledge', $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12::jsonb, 'ready')
       RETURNING *
     `,
     [
       input.organization_id ?? null,
       input.account_id ?? null,
       input.bot_id ?? null,
-      input.tenant_id ?? null,
-      input.branch_id ?? null,
       input.scope ?? "account",
       input.source_type,
       name,

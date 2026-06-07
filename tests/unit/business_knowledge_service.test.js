@@ -18,11 +18,9 @@ describe("business_knowledge_service", () => {
       SELECT
         organizations.id AS organization_id,
         accounts.id AS account_id,
-        tenants.id AS tenant_id,
         bots.id AS bot_id
       FROM organizations
       JOIN accounts ON accounts.organization_id = organizations.id
-      JOIN tenants ON tenants.id = accounts.tenant_id
       JOIN bots ON bots.account_id = accounts.id
       WHERE bots.bot_type = 'custom'
       LIMIT 1
@@ -40,7 +38,6 @@ describe("business_knowledge_service", () => {
       organization_id: row.organization_id,
       account_id: row.account_id,
       bot_id: row.bot_id,
-      tenant_id: row.tenant_id,
       scope: "bot",
       document_type: "business_price",
       title: "Precios dentales",
@@ -53,7 +50,6 @@ describe("business_knowledge_service", () => {
       organization_id: row.organization_id,
       account_id: row.account_id,
       bot_id: row.bot_id,
-      tenant_id: row.tenant_id,
       query: "cuanto cuesta limpieza dental",
       limit: 5,
     });

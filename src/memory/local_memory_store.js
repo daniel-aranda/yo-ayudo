@@ -3,7 +3,7 @@ import path from "node:path";
 import { memory_store_document_schema } from "./memory_schemas.js";
 
 function safe_scope_dir(metadata) {
-  return metadata.tenant_id ?? metadata.scope ?? "global";
+  return metadata.account_id ?? metadata.scope ?? "global";
 }
 
 export class local_memory_store {

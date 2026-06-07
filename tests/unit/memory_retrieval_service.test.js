@@ -14,10 +14,22 @@ describe("memory_retrieval_service", () => {
 
   it("does not cross tenants and respects limit", async () => {
     const pool = await create_test_pool();
-    const tenant = await pool.query("SELECT id FROM tenants WHERE slug = 'yoayudo' LIMIT 1");
-    const tenant_id = tenant.rows[0].id;
-    const other_tenant = await pool.query(
-      "INSERT INTO tenants (name, slug, status, timezone) VALUES ('Otro', 'otro', 'active', 'America/Mexico_City') RETURNING id",
+    const account = await pool.query(
+      `
+        SELECT accounts.id AS account_id, accounts.organization_id AS organization_id
+        FROM accounts
+        JOIN organizations ON organizations.id = accounts.organization_id
+        WHERE accounts.slug = 'yoayudo-ventas'
+        LIMIT 1
+      `,
+    );
+    const account_id = account.rows[0].account_id;
+    const other_organization = await pool.query(
+      "INSERT INTO organizations (name, slug, status) VALUES ('Otro', 'otro', 'active') RETURNING id",
+    );
+    const other_account = await pool.query(
+      "INSERT INTO accounts (organization_id, name, slug, status, timezone) VALUES ($1, 'Otro', 'otro', 'active', 'America/Mexico_City') RETURNING id",
+      [other_organization.rows[0].id],
     );
     const service = new memory_document_service({
       pool,
@@ -25,8 +37,8 @@ describe("memory_retrieval_service", () => {
     });
 
     await service.create_document({
-      tenant_id,
-      scope: "tenant",
+      account_id,
+      scope: "account",
       document_type: "client_knowledge",
       title: "Preferencia demo",
       content: "respuesta corta para compras",
@@ -35,8 +47,8 @@ describe("memory_retrieval_service", () => {
       metadata_json: { intent: "purchase" },
     });
     await service.create_document({
-      tenant_id: other_tenant.rows[0].id,
-      scope: "tenant",
+      account_id: other_account.rows[0].id,
+      scope: "account",
       document_type: "client_knowledge",
       title: "Otro tenant",
       content: "dato privado de otro tenant",
@@ -47,9 +59,9 @@ describe("memory_retrieval_service", () => {
 
     const retrieval = new memory_retrieval_service({ pool });
     const result = await retrieval.retrieve_context({
-      tenant_id,
+      account_id,
       query: "purchase compras respuesta corta",
-      scopes: ["tenant"],
+      scopes: ["account"],
       document_types: ["client_knowledge"],
       limit: 1,
     });

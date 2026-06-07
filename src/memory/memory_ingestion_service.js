@@ -94,8 +94,8 @@ export async function summarize_conversation_memory({ pool, conversation_id, ser
   const result = await pool.query(
     `
       SELECT
-        conversations.tenant_id,
-        conversations.branch_id,
+        conversations.account_id,
+        conversations.organization_id,
         conversations.contact_id,
         messages.conversation_id,
         string_agg(messages.text_body, E'\n' ORDER BY messages.created_at) AS summary_text
@@ -104,7 +104,7 @@ export async function summarize_conversation_memory({ pool, conversation_id, ser
       WHERE conversations.id = $1
         AND messages.direction = 'inbound'
         AND messages.text_body IS NOT NULL
-      GROUP BY conversations.tenant_id, conversations.branch_id, conversations.contact_id, messages.conversation_id
+      GROUP BY conversations.account_id, conversations.organization_id, conversations.contact_id, messages.conversation_id
     `,
     [conversation_id],
   );
@@ -115,8 +115,8 @@ export async function summarize_conversation_memory({ pool, conversation_id, ser
   }
 
   return service.create_document({
-    tenant_id: row.tenant_id,
-    branch_id: row.branch_id,
+    account_id: row.account_id,
+    organization_id: row.organization_id,
     contact_id: row.contact_id,
     conversation_id: row.conversation_id,
     document_family: "conversation_memory",
@@ -135,8 +135,8 @@ export async function summarize_daily_memory({ pool, business_day_id, service })
     `
       SELECT
         id,
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         operation_date,
         total_sales,
         closing_cash,
@@ -153,8 +153,8 @@ export async function summarize_daily_memory({ pool, business_day_id, service })
   }
 
   return service.create_document({
-    tenant_id: row.tenant_id,
-    branch_id: row.branch_id,
+    account_id: row.account_id,
+    organization_id: row.organization_id,
     business_day_id: row.id,
     document_family: "conversation_memory",
     scope: "operational_day",

@@ -51,7 +51,7 @@ export function register_whatsapp_routes(router) {
     response.status(403).send();
   });
 
-  router.post("/webhooks/whatsapp", async (request, response, next) => {
+  router.post("/webhooks/whatsapp", (request, response) => {
     const verification = verify_meta_signature(request);
     if (!verification.ok) {
       logger.warn({ reason: verification.reason }, "rejected WhatsApp webhook with invalid signature");
@@ -59,11 +59,14 @@ export function register_whatsapp_routes(router) {
       return;
     }
 
-    try {
-      const results = await handle_whatsapp_webhook_payload(request.body, { pool });
-      response.status(200).json({ ok: true, results });
-    } catch (error) {
-      next(error);
-    }
+    // Acknowledge immediately: Meta's WhatsApp Cloud API expects a fast 200 or it
+    // retries (and eventually disables the webhook). Heavy work — AI calls, DB writes,
+    // the outbound reply — runs after the ack. Re-delivery is safe because inbound
+    // messages are idempotent on external_message_id. (A durable queue is the next step
+    // so processing survives a crash between ack and completion.)
+    response.status(200).json({ ok: true });
+    Promise.resolve()
+      .then(() => handle_whatsapp_webhook_payload(request.body, { pool }))
+      .catch((error) => logger.error({ err: error }, "async WhatsApp webhook processing failed"));
   });
 }

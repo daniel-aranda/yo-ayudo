@@ -9,7 +9,7 @@ block content
       p= business.slug
 
     if !accounts || accounts.length === 0
-      .empty Sin cuentas configuradas.
+      .empty Este negocio aún no tiene cuentas. Crea una cuenta para conectar canales de WhatsApp y asignar bots.
     else
       .grid
         each account in accounts

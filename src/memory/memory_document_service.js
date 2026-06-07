@@ -41,7 +41,6 @@ export class memory_document_service {
           document_type: parsed.document_type,
           organization_id: parsed.organization_id ?? null,
           account_id: parsed.account_id ?? null,
-          tenant_id: parsed.tenant_id ?? null,
           bot_id: parsed.bot_id ?? null,
         },
       });

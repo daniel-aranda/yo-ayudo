@@ -266,50 +266,10 @@ async function upsert_solution_template(pool) {
   return result.rows[0].id;
 }
 
-async function upsert_tenant(pool) {
-  const result = await pool.query(
-    `
-      INSERT INTO tenants (name, slug, status, timezone)
-      VALUES ('YoAyudo', 'yoayudo', 'active', 'America/Mexico_City')
-      ON CONFLICT (slug)
-      DO UPDATE SET
-        name = EXCLUDED.name,
-        status = EXCLUDED.status,
-        timezone = EXCLUDED.timezone,
-        updated_at = now()
-      RETURNING id
-    `,
-  );
-
-  return result.rows[0].id;
-}
-
-async function get_or_create_branch(pool, tenant_id) {
+async function upsert_bot_profile(pool, account_id, organization_id, solution_template_id) {
   const existing = await pool.query(
-    "SELECT id FROM branches WHERE tenant_id = $1 AND name = 'Account principal' LIMIT 1",
-    [tenant_id],
-  );
-
-  if (existing.rows[0]) {
-    return existing.rows[0].id;
-  }
-
-  const inserted = await pool.query(
-    `
-      INSERT INTO branches (tenant_id, name, address, phone, timezone, status)
-      VALUES ($1, 'Account principal', 'YoAyudo', '+525555000000', 'America/Mexico_City', 'active')
-      RETURNING id
-    `,
-    [tenant_id],
-  );
-
-  return inserted.rows[0].id;
-}
-
-async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_id) {
-  const existing = await pool.query(
-    "SELECT id FROM bot_profiles WHERE tenant_id = $1 AND branch_id = $2 AND name = 'YoAyudo Engine Profile' LIMIT 1",
-    [tenant_id, branch_id],
+    "SELECT id FROM bot_profiles WHERE account_id = $1 AND name = 'YoAyudo Engine Profile' LIMIT 1",
+    [account_id],
   );
 
   let bot_profile_id = existing.rows[0]?.id;
@@ -318,8 +278,8 @@ async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_
     const inserted = await pool.query(
       `
         INSERT INTO bot_profiles (
-          tenant_id,
-          branch_id,
+          account_id,
+          organization_id,
           name,
           solution_template_id,
           language,
@@ -330,7 +290,7 @@ async function upsert_bot_profile(pool, tenant_id, branch_id, solution_template_
         VALUES ($1, $2, 'YoAyudo Engine Profile', $3, 'es-MX', 'America/Mexico_City', '{}'::jsonb, 'active')
         RETURNING id
       `,
-      [tenant_id, branch_id, solution_template_id],
+      [account_id, organization_id, solution_template_id],
     );
     bot_profile_id = inserted.rows[0].id;
   }
@@ -373,7 +333,6 @@ async function upsert_organization(pool) {
       UPDATE organizations
       SET status = 'archived', updated_at = now()
       WHERE slug = 'yoayudo'
-        AND NOT EXISTS (SELECT 1 FROM organizations WHERE slug = 'yoayudo-demo')
     `,
   );
 
@@ -410,17 +369,16 @@ async function archive_legacy_demo_entities(pool, organization_id) {
   );
 }
 
-async function upsert_account(pool, organization_id, tenant_id) {
+async function upsert_account(pool, organization_id) {
   const existing = await pool.query(
     `
       SELECT *
       FROM accounts
-      WHERE (organization_id = $1 AND slug = 'yoayudo-ventas')
-         OR tenant_id = $2
+      WHERE organization_id = $1 AND slug = 'yoayudo-ventas'
       ORDER BY updated_at DESC
       LIMIT 1
     `,
-    [organization_id, tenant_id],
+    [organization_id],
   );
 
   if (existing.rows[0]) {
@@ -429,7 +387,6 @@ async function upsert_account(pool, organization_id, tenant_id) {
         UPDATE accounts
         SET
           organization_id = $2,
-          tenant_id = $3,
           name = 'YoAyudo Ventas',
           slug = 'yoayudo-ventas',
           status = 'active',
@@ -437,7 +394,7 @@ async function upsert_account(pool, organization_id, tenant_id) {
         WHERE id = $1
         RETURNING id
       `,
-      [existing.rows[0].id, organization_id, tenant_id],
+      [existing.rows[0].id, organization_id],
     );
 
     return updated.rows[0].id;
@@ -445,7 +402,6 @@ async function upsert_account(pool, organization_id, tenant_id) {
 
   const account = await upsert_account_record(pool, {
     organization_id,
-    tenant_id,
     name: "YoAyudo Ventas",
     slug: "yoayudo-ventas",
     status: "active",
@@ -458,7 +414,6 @@ async function upsert_bot(pool, input) {
   const bot = await upsert_bot_record(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
-    tenant_id: input.tenant_id,
     bot_profile_id: input.bot_profile_id,
     name: "Bot WhatsApp Legacy YoAyudo",
     slug: "bot-whatsapp-legacy-yoayudo",
@@ -469,22 +424,22 @@ async function upsert_bot(pool, input) {
     settings_json: {},
   });
 
-  await pool.query("UPDATE conversations SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+  await pool.query("UPDATE conversations SET bot_id = $1 WHERE account_id = $2 AND bot_id IS NULL", [
     bot.id,
-    input.tenant_id,
+    input.account_id,
   ]);
-  await pool.query("UPDATE messages SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [bot.id, input.tenant_id]);
-  await pool.query("UPDATE agent_runs SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+  await pool.query("UPDATE messages SET bot_id = $1 WHERE account_id = $2 AND bot_id IS NULL", [bot.id, input.account_id]);
+  await pool.query("UPDATE agent_runs SET bot_id = $1 WHERE account_id = $2 AND bot_id IS NULL", [
     bot.id,
-    input.tenant_id,
+    input.account_id,
   ]);
-  await pool.query("UPDATE memory_documents SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+  await pool.query("UPDATE memory_documents SET bot_id = $1 WHERE account_id = $2 AND bot_id IS NULL", [
     bot.id,
-    input.tenant_id,
+    input.account_id,
   ]);
-  await pool.query("UPDATE review_items SET bot_id = $1 WHERE tenant_id = $2 AND bot_id IS NULL", [
+  await pool.query("UPDATE review_items SET bot_id = $1 WHERE account_id = $2 AND bot_id IS NULL", [
     bot.id,
-    input.tenant_id,
+    input.account_id,
   ]);
 
   return bot.id;
@@ -524,7 +479,6 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
   const bot = await upsert_bot_record(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
-    tenant_id: input.tenant_id,
     name: "Agente WhatsApp YoAyudo",
     slug: "agente-whatsapp-yoayudo",
     channel: "whatsapp",
@@ -589,19 +543,19 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
   return bot.id;
 }
 
-async function upsert_contact(pool, tenant_id, branch_id) {
+async function upsert_contact(pool, account_id, organization_id) {
   await pool.query(
     `
-      INSERT INTO contacts (tenant_id, branch_id, whatsapp_phone, display_name, role_label, metadata_json)
+      INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
       VALUES ($1, $2, '5215550000000', 'Operador Demo', 'encargado', '{}'::jsonb)
-      ON CONFLICT (tenant_id, whatsapp_phone)
+      ON CONFLICT (account_id, whatsapp_phone)
       DO UPDATE SET
-        branch_id = EXCLUDED.branch_id,
+        organization_id = EXCLUDED.organization_id,
         display_name = EXCLUDED.display_name,
         role_label = EXCLUDED.role_label,
         updated_at = now()
     `,
-    [tenant_id, branch_id],
+    [account_id, organization_id],
   );
 }
 
@@ -609,8 +563,6 @@ async function upsert_whatsapp_number(pool, input) {
   return upsert_whatsapp_phone_number(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
-    tenant_id: input.tenant_id,
-    branch_id: input.branch_id,
     phone_number_id: input.phone_number_id ?? config.whatsapp_phone_number_id,
     display_phone_number: input.display_phone_number ?? "+525555999999",
     status: input.status ?? "active",
@@ -666,10 +618,10 @@ function lead_capture_bot_definition() {
   };
 }
 
-async function upsert_business_settings(pool, tenant_id, branch_id) {
+async function upsert_business_settings(pool, account_id, organization_id) {
   const existing = await pool.query(
-    "SELECT id FROM business_settings WHERE tenant_id = $1 AND branch_id = $2 LIMIT 1",
-    [tenant_id, branch_id],
+    "SELECT id FROM business_settings WHERE account_id = $1 LIMIT 1",
+    [account_id],
   );
 
   if (existing.rows[0]) {
@@ -679,8 +631,8 @@ async function upsert_business_settings(pool, tenant_id, branch_id) {
   await pool.query(
     `
       INSERT INTO business_settings (
-        tenant_id,
-        branch_id,
+        account_id,
+        organization_id,
         opening_days_json,
         opening_hours_json,
         strong_days_json,
@@ -705,15 +657,15 @@ async function upsert_business_settings(pool, tenant_id, branch_id) {
         '{"internet": 600}'::jsonb
       )
     `,
-    [tenant_id, branch_id],
+    [account_id, organization_id],
   );
 }
 
-async function insert_named_rows(pool, table, tenant_id, branch_id, rows) {
+async function insert_named_rows(pool, table, account_id, organization_id, rows) {
   for (const row of rows) {
     const existing = await pool.query(
-      `SELECT id FROM ${table} WHERE tenant_id = $1 AND branch_id = $2 AND name = $3 LIMIT 1`,
-      [tenant_id, branch_id, row.name],
+      `SELECT id FROM ${table} WHERE account_id = $1 AND name = $2 LIMIT 1`,
+      [account_id, row.name],
     );
 
     if (existing.rows[0]) {
@@ -726,10 +678,10 @@ async function insert_named_rows(pool, table, tenant_id, branch_id, rows) {
 
     await pool.query(
       `
-        INSERT INTO ${table} (tenant_id, branch_id, ${keys.join(", ")})
+        INSERT INTO ${table} (account_id, organization_id, ${keys.join(", ")})
         VALUES ($1, $2, ${placeholders})
       `,
-      [tenant_id, branch_id, ...values],
+      [account_id, organization_id, ...values],
     );
   }
 }
@@ -740,14 +692,12 @@ async function upsert_agent_profile(pool, input) {
       SELECT id
       FROM agent_profiles
       WHERE key = $1
-        AND COALESCE(tenant_id::text, '') = COALESCE($2::text, '')
-        AND COALESCE(solution_template_id::text, '') = COALESCE($3::text, '')
-        AND COALESCE(bot_profile_id::text, '') = COALESCE($4::text, '')
+        AND COALESCE(solution_template_id::text, '') = COALESCE($2::text, '')
+        AND COALESCE(bot_profile_id::text, '') = COALESCE($3::text, '')
       LIMIT 1
     `,
     [
       input.key,
-      input.tenant_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
     ],
@@ -794,7 +744,6 @@ async function upsert_agent_profile(pool, input) {
         description,
         agent_type,
         scope,
-        tenant_id,
         solution_template_id,
         bot_profile_id,
         system_instructions,
@@ -803,7 +752,7 @@ async function upsert_agent_profile(pool, input) {
         retrieval_config_json,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, 'active')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, 'active')
       RETURNING id
     `,
     [
@@ -812,7 +761,6 @@ async function upsert_agent_profile(pool, input) {
       input.description,
       input.agent_type,
       input.scope,
-      input.tenant_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
       input.system_instructions,
@@ -832,15 +780,13 @@ async function upsert_routing_rule(pool, input) {
       FROM agent_routing_rules
       WHERE COALESCE(intent_key, '') = COALESCE($1, '')
         AND agent_profile_id = $2
-        AND COALESCE(tenant_id::text, '') = COALESCE($3::text, '')
-        AND COALESCE(solution_template_id::text, '') = COALESCE($4::text, '')
-        AND COALESCE(bot_profile_id::text, '') = COALESCE($5::text, '')
+        AND COALESCE(solution_template_id::text, '') = COALESCE($3::text, '')
+        AND COALESCE(bot_profile_id::text, '') = COALESCE($4::text, '')
       LIMIT 1
     `,
     [
       input.intent_key ?? null,
       input.agent_profile_id,
-      input.tenant_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
     ],
@@ -861,7 +807,6 @@ async function upsert_routing_rule(pool, input) {
   const inserted = await pool.query(
     `
       INSERT INTO agent_routing_rules (
-        tenant_id,
         solution_template_id,
         bot_profile_id,
         priority,
@@ -870,11 +815,10 @@ async function upsert_routing_rule(pool, input) {
         condition_json,
         enabled
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, true)
       RETURNING id
     `,
     [
-      input.tenant_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
       input.priority ?? 100,
@@ -911,7 +855,7 @@ async function seed_agent_profiles(pool, solution_template_id, bot_profile_id) {
       system_instructions: "Delegar en handlers operativos existentes y no inventar hechos.",
       allowed_intents_json: agent.intents,
       allowed_tools_json: ["operation_handlers"],
-      retrieval_config_json: { scopes: ["tenant", "conversation", "operational_day"] },
+      retrieval_config_json: { scopes: ["account", "conversation", "operational_day"] },
     });
     profile_ids.set(agent.key, agent_profile_id);
   }
@@ -947,15 +891,13 @@ async function upsert_knowledge_source(pool, input) {
       WHERE name = $1
         AND scope = $2
         AND source_type = $3
-        AND COALESCE(tenant_id::text, '') = COALESCE($4::text, '')
-        AND COALESCE(solution_template_id::text, '') = COALESCE($5::text, '')
+        AND COALESCE(solution_template_id::text, '') = COALESCE($4::text, '')
       LIMIT 1
     `,
     [
       input.name,
       input.scope,
       input.source_type,
-      input.tenant_id ?? null,
       input.solution_template_id ?? null,
     ],
   );
@@ -1001,8 +943,6 @@ async function upsert_knowledge_source(pool, input) {
         organization_id,
         account_id,
         bot_id,
-        tenant_id,
-        branch_id,
         solution_template_id,
         bot_profile_id,
         source_family,
@@ -1018,15 +958,13 @@ async function upsert_knowledge_source(pool, input) {
         metadata_json,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, COALESCE($15, 'draft'), $16, $17, $18::jsonb, COALESCE($19, 'active'))
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, COALESCE($13, 'draft'), $14, $15, $16::jsonb, COALESCE($17, 'active'))
       RETURNING id
     `,
     [
       input.organization_id ?? null,
       input.account_id ?? null,
       input.bot_id ?? null,
-      input.tenant_id ?? null,
-      input.branch_id ?? null,
       input.solution_template_id ?? null,
       input.bot_profile_id ?? null,
       input.source_family ?? "business_knowledge",
@@ -1051,8 +989,6 @@ async function upsert_yoayudo_sales_knowledge_source(pool, input) {
   return upsert_knowledge_source(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
-    tenant_id: input.tenant_id,
-    branch_id: input.branch_id,
     source_family: "business_knowledge",
     scope: "account",
     source_type: "text",
@@ -1131,8 +1067,6 @@ async function seed_knowledge_documents(pool, input) {
       name: "YoAyudo account knowledge",
       organization_id: input.organization_id,
       account_id: input.account_id,
-      tenant_id: input.tenant_id,
-      branch_id: input.branch_id,
       bot_id: input.bot_id,
       bot_profile_id: input.bot_profile_id,
       content: yoayudo_sales_knowledge,
@@ -1144,8 +1078,6 @@ async function seed_knowledge_documents(pool, input) {
       organization_id: document.organization_id,
       account_id: document.account_id,
       bot_id: document.bot_id,
-      tenant_id: document.tenant_id,
-      branch_id: document.branch_id,
       solution_template_id: document.solution_template_id,
       bot_profile_id: document.bot_profile_id,
       source_family: document.source_family,
@@ -1163,8 +1095,6 @@ async function seed_knowledge_documents(pool, input) {
     await service.create_document({
       organization_id: document.organization_id ?? null,
       account_id: document.account_id ?? null,
-      tenant_id: document.tenant_id ?? null,
-      branch_id: document.branch_id ?? null,
       bot_id: document.bot_id ?? null,
       solution_template_id: document.solution_template_id ?? null,
       bot_profile_id: document.bot_profile_id ?? null,
@@ -1185,39 +1115,86 @@ async function seed_knowledge_documents(pool, input) {
   }
 }
 
+async function seed_operational_demo_day(pool, account_id, organization_id) {
+  // Demo-only convenience data. Skipped under tests so deterministic pipeline tests
+  // start with empty operational tables.
+  if (config.node_env === "test") {
+    return null;
+  }
+
+  const existing = await pool.query(
+    "SELECT id FROM op_business_days WHERE account_id = $1 ORDER BY operation_date DESC LIMIT 1",
+    [account_id],
+  );
+  if (existing.rows[0]) {
+    return existing.rows[0].id;
+  }
+
+  const day = await pool.query(
+    `
+      INSERT INTO op_business_days (
+        account_id, organization_id, operation_date, status,
+        opening_cash, total_sales, cash_sales, card_sales, transfer_sales, closing_cash,
+        opened_at, closed_at
+      )
+      VALUES ($1, $2, CURRENT_DATE, 'closed', 1500, 8500, 3000, 4000, 1500, 4500, now(), now())
+      RETURNING id
+    `,
+    [account_id, organization_id],
+  );
+  const business_day_id = day.rows[0].id;
+
+  await pool.query(
+    `
+      INSERT INTO op_purchases (account_id, organization_id, business_day_id, item_name, quantity, unit, total_cost, supplier_name_raw)
+      VALUES
+        ($1, $2, $3, 'pastor', 12, 'kg', 1680, 'Carnicería Don Juan'),
+        ($1, $2, $3, 'tortilla', 20, 'kg', 600, 'Tortillería La Esquina')
+    `,
+    [account_id, organization_id, business_day_id],
+  );
+
+  await pool.query(
+    `
+      INSERT INTO op_daily_reports (account_id, organization_id, business_day_id, report_date, summary_text, metrics_json, alerts_json, recommendations_json)
+      VALUES ($1, $2, $3, CURRENT_DATE, $4, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)
+    `,
+    [
+      account_id,
+      organization_id,
+      business_day_id,
+      "Ventas del día $8,500 (efectivo $3,000, tarjeta $4,000, transferencia $1,500). Compras $2,280. Caja final $4,500.",
+    ],
+  );
+
+  return business_day_id;
+}
+
 export async function seed_development_data(pool) {
   await ensure_seed_schema(pool);
   const solution_template_id = await upsert_solution_template(pool);
-  const tenant_id = await upsert_tenant(pool);
-  const branch_id = await get_or_create_branch(pool, tenant_id);
-  const bot_profile_id = await upsert_bot_profile(pool, tenant_id, branch_id, solution_template_id);
   const organization_id = await upsert_organization(pool);
   await archive_legacy_demo_entities(pool, organization_id);
-  const account_id = await upsert_account(pool, organization_id, tenant_id);
+  const account_id = await upsert_account(pool, organization_id);
+  const bot_profile_id = await upsert_bot_profile(pool, account_id, organization_id, solution_template_id);
   await update_legacy_yoayudo_seed_knowledge(pool, { organization_id, account_id });
   const yoayudo_knowledge_source_id = await upsert_yoayudo_sales_knowledge_source(pool, {
     organization_id,
     account_id,
-    tenant_id,
-    branch_id,
   });
   const bot_id = await upsert_bot(pool, {
     organization_id,
     account_id,
-    tenant_id,
     bot_profile_id,
   });
   const whatsapp_phone_number = await upsert_whatsapp_number(pool, {
     organization_id,
     account_id,
-    tenant_id,
-    branch_id,
   });
   const prospect_bot_definition = lead_capture_bot_definition();
   const custom_bot = await upsert_bot_record(pool, {
     organization_id,
     account_id,
-    tenant_id,
     name: "Agente de Prospectos",
     slug: "agente-de-prospectos",
     channel: "whatsapp",
@@ -1236,8 +1213,6 @@ export async function seed_development_data(pool) {
   const custom_whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
     organization_id,
     account_id,
-    tenant_id,
-    branch_id,
     phone_number_id: "demo-prospectos-phone-number-id",
     display_phone_number: "+525555888888",
     status: "active",
@@ -1252,7 +1227,6 @@ export async function seed_development_data(pool) {
   const yoayudo_commercial_bot_id = await upsert_yoayudo_commercial_operator_bot(pool, {
     organization_id,
     account_id,
-    tenant_id,
     knowledge_source_ids: [yoayudo_knowledge_source_id],
   });
   await assign_bot_to_whatsapp_phone_number(pool, {
@@ -1263,27 +1237,26 @@ export async function seed_development_data(pool) {
     metadata_json: { source: "seed", purpose: "main_configurable_agent" },
   });
 
-  await upsert_contact(pool, tenant_id, branch_id);
-  await upsert_business_settings(pool, tenant_id, branch_id);
+  await upsert_contact(pool, account_id, organization_id);
+  await upsert_business_settings(pool, account_id, organization_id);
+  await seed_operational_demo_day(pool, account_id, organization_id);
 
-  await insert_named_rows(pool, "catalog_items", tenant_id, branch_id, [
+  await insert_named_rows(pool, "catalog_items", account_id, organization_id, [
     { name: "plan starter", category: "planes", price: 0, active: true, metadata_json: "{}" },
     { name: "plan business", category: "planes", price: 0, active: true, metadata_json: "{}" },
   ]);
 
-  await insert_named_rows(pool, "inventory_items", tenant_id, branch_id, [
+  await insert_named_rows(pool, "inventory_items", account_id, organization_id, [
     { name: "whatsapp_channel", default_unit: "unidad", category: "canal", approximate_unit_cost: 0, yield_notes: null, active: true },
     { name: "bot_agent", default_unit: "unidad", category: "engine", approximate_unit_cost: 0, yield_notes: null, active: true },
   ]);
 
-  await insert_named_rows(pool, "suppliers", tenant_id, branch_id, [
+  await insert_named_rows(pool, "suppliers", account_id, organization_id, [
     { name: "Proveedor de WhatsApp", contact_name: "Soporte", phone: "+525555111111", notes: "Canal demo" },
   ]);
 
   await seed_agent_profiles(pool, solution_template_id, bot_profile_id);
   await seed_knowledge_documents(pool, {
-    tenant_id,
-    branch_id,
     organization_id,
     account_id,
     solution_template_id,
@@ -1291,8 +1264,20 @@ export async function seed_development_data(pool) {
     bot_id,
   });
 
-  logger.info({ tenant_id, branch_id, bot_id, yoayudo_commercial_bot_id }, "development seed complete");
-  return { tenant_id, branch_id, solution_template_id, bot_profile_id, organization_id, account_id, bot_id, yoayudo_commercial_bot_id };
+  // Archive legacy/empty business-knowledge stubs so the Knowledge Center demo
+  // shows only real, populated sources.
+  await pool.query(
+    `
+      UPDATE knowledge_sources
+      SET status = 'archived', updated_at = now()
+      WHERE source_family = 'business_knowledge'
+        AND status = 'active'
+        AND (summary IS NULL OR summary = '')
+    `,
+  );
+
+  logger.info({ organization_id, account_id, bot_id, yoayudo_commercial_bot_id }, "development seed complete");
+  return { solution_template_id, bot_profile_id, organization_id, account_id, bot_id, yoayudo_commercial_bot_id };
 }
 
 if (is_entrypoint(import.meta.url)) {
