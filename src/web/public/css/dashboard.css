@@ -505,6 +505,47 @@ button:disabled {
   display: none;
 }
 
+.bot-editor-tab-shell {
+  margin: 0 0 16px;
+}
+
+.tabs {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px;
+}
+
+.tab {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  flex: none;
+  margin-top: 0;
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.tab:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.tab.active,
+.tab[aria-selected="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tab-section[hidden] {
+  display: none;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;

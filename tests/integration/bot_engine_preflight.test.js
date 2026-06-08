@@ -41,7 +41,7 @@ describe("bot engine founder preflight", () => {
     expect(account.name).toBe("YoAyudo Ventas");
     expect(bot.bot_type).toBe("custom");
     expect(bot.acciones_habilitadas_json).toEqual(
-      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"]),
+      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "buscar_negocios", "solicitar_aprobacion_humana"]),
     );
     expect(bot.definition_json.identity.name).toBe("Agente WhatsApp YoAyudo");
     expect(bot.definition_json.knowledge_source_ids.length).toBeGreaterThan(0);
@@ -58,7 +58,7 @@ describe("bot engine founder preflight", () => {
       .expect(200);
 
     expect(compile_response.body.compiled.acciones_disponibles.map((action) => action.action_id)).toEqual(
-      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen"]),
+      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "buscar_negocios"]),
     );
 
     const test_response = await request(app)
@@ -93,6 +93,42 @@ describe("bot engine founder preflight", () => {
     expect(tasks.rows).toHaveLength(1);
     expect(audit_logs.body.logs.filter((log) => log.status === "executed")).toHaveLength(3);
     expect(audit_logs.body.logs.some((log) => log.action_id === "programar_llamada" && log.status === "blocked")).toBe(true);
+  });
+
+  it("supports the buscar_negocios prospecting action and blocks cleanly without API keys", async () => {
+    const account_result = await pool.query("SELECT * FROM accounts WHERE slug = 'yoayudo-ventas' LIMIT 1");
+    const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
+    const account = account_result.rows[0];
+    const bot = bot_result.rows[0];
+
+    const response = await request(app)
+      .post(`/internal/bots/${bot.id}/test-message`)
+      .send({
+        organization_id: account.organization_id,
+        account_id: account.id,
+        modo_test: true,
+        mensaje: "Busca negocios de dentistas en Roma Norte CDMX para prospectar YoAyudo.",
+      })
+      .expect(200);
+
+    expect(response.body.result.action_requests).toEqual([
+      expect.objectContaining({
+        action_id: "buscar_negocios",
+        input_json: expect.objectContaining({
+          query: expect.stringContaining("dentistas"),
+          location: expect.stringContaining("Roma Norte CDMX"),
+        }),
+      }),
+    ]);
+    expect(response.body.result.action_results[0]).toMatchObject({
+      action_id: "buscar_negocios",
+      status: "pending_provider",
+      output: {
+        negocios: [],
+        proveedores_usados: [],
+      },
+    });
+    expect(response.body.result.guardrail_events_generados.map((event) => event.tipo)).toContain("proveedor_no_configurado");
   });
 
   it("uses a real model provider decision when the bot tester receives one", async () => {

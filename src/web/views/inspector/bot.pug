@@ -25,6 +25,8 @@ block content
     const system_interactions = Array.isArray(available_interactions) ? available_interactions : [];
     const configured_types = new Set(interactions.map((interaction) => interaction.type));
     const addable_interactions = system_interactions.filter((interaction) => !configured_types.has(interaction.type));
+    const action_options = Array.isArray(available_actions) ? available_actions : [];
+    const enabled_action_ids = new Set(Array.isArray(bot?.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : (bot?.enabled_actions_json || []));
     const settings_json = Object.keys(definition).length ? definition : (bot?.settings_json || {});
     const bot_name = identity.name || bot?.name || "Agente no encontrado";
     const bot_description = identity.description || bot?.description || "";
@@ -60,7 +62,15 @@ block content
           pre= JSON.stringify(settings_json, null, 2)
 
     form(method="post", action=`/inspector/bots/${bot.id}`, id="bot-editor")
-      section.panel
+      div.bot-editor-tab-shell.wamy-tabs
+        div#bot-editor-tabs.tabs(data-initial-tab="identidad", role="tablist", aria-label="Editor de bot")
+          button.tab.active(type="button", data-section="identidad", role="tab", aria-selected="true") Identidad
+          button.tab(type="button", data-section="probar", role="tab", aria-selected="false") Probar
+          button.tab(type="button", data-section="knowledge", role="tab", aria-selected="false") Knowledge
+          button.tab(type="button", data-section="interacciones", role="tab", aria-selected="false") Interacciones
+          button.tab(type="button", data-section="restricciones", role="tab", aria-selected="false") Restricciones
+
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="identidad")
         h2 Identidad del agente
         div.form-grid
           div
@@ -84,7 +94,7 @@ block content
             label(for="goal") Objetivo
             textarea#goal(name="goal", rows="3")= bot_goal
 
-      section.panel
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="identidad")
         h2 Instrucciones operativas
         div.form-grid
           div
@@ -114,7 +124,7 @@ block content
             placeholder="Describe cómo debe operar este agente, qué debe priorizar, cuándo debe preguntar, cómo debe usar knowledge y cuándo debe consultar humanos."
           )= operating_instructions
 
-      section.panel
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="knowledge", hidden)
         div.section-title
           div
             h2 Knowledge
@@ -162,7 +172,7 @@ block content
             each knowledge_id in knowledge_ids
               input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
 
-      section.panel
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="interacciones", hidden)
         div.section-title
           div
             h2 Interacciones
@@ -231,7 +241,35 @@ block content
         else
           p.meta Todas las interacciones disponibles ya están configuradas.
 
-      section.panel
+        div.section-title
+          div
+            h3 Acciones del bot
+            p.meta APIs y operaciones que el agente puede ejecutar cuando el modelo las solicite.
+        input(type="hidden", name="actions_catalog_present", value="1")
+        if action_options.length
+          div.interaction-grid
+            each action in action_options
+              div.interaction-card
+                div.section-title
+                  div
+                    h3= action.nombre
+                    if action.descripcion
+                      p.meta= action.descripcion
+                  label.checkbox-line
+                    input(
+                      type="checkbox",
+                      name="enabled_action_id",
+                      value=action.action_id,
+                      checked=enabled_action_ids.has(action.action_id)
+                    )
+                    | Habilitada
+                p.meta= `${action.categoria} · ${action.nivel_riesgo}`
+                if action.action_id === "buscar_negocios"
+                  p.field-hint Usa Google Places como proveedor principal. Opcional: Yelp Fusion y SerpApi Google Local.
+        else
+          div.empty No hay acciones disponibles en el catálogo.
+
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="restricciones", hidden)
         h2 Restricciones
         textarea(
           name="constraints_text",
@@ -239,7 +277,7 @@ block content
           placeholder="Describe las restricciones del agente: qué no debe prometer, cuándo debe detenerse y cuándo debe consultar a un humano."
         )= constraints_text
 
-      section.panel
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="probar", hidden)
         h2 Probar bot
         div.test-bot-panel(
           data-autosave-ignore,
@@ -255,7 +293,7 @@ block content
           button#run_bot_test(type="button") Probar bot
           div#bot_test_result.test-result(hidden)
 
-      div.two-column
+      div.two-column.tab-section(data-parent-tab="bot-editor-tabs", data-section="identidad")
         section.panel
           h2 Canales soportados
           if supported_channel_rows.length
@@ -528,6 +566,12 @@ block content
         }
       });
     })();
+
+  script
+    include ../../public/js/core/Tab_Navigator.js
+
+  script.
+    window.TabNavigator?.render("#bot-editor-tabs");
 
   script
     include ../../public/js/inspector/Bot_Editor_Autosave.js

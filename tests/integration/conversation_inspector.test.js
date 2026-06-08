@@ -216,6 +216,15 @@ describe("Conversation Inspector", () => {
     const bot_page = await request(app).get(`/inspector/bots/${ids.rows[0].bot_id}`).expect(200).expect(/Agente WhatsApp YoAyudo/);
     expect(bot_page.text).toContain("Identidad del agente");
     expect(bot_page.text).toContain("Instrucciones operativas");
+    expect(bot_page.text).toContain("bot-editor-tabs");
+    expect(bot_page.text).toContain('data-section="identidad"');
+    expect(bot_page.text).toContain('data-section="probar"');
+    expect(bot_page.text).toContain('data-section="knowledge"');
+    expect(bot_page.text).toContain('data-section="interacciones"');
+    expect(bot_page.text).toContain('data-section="restricciones"');
+    expect(bot_page.text).toContain("TabNavigator");
+    expect(bot_page.text).toContain("Acciones del bot");
+    expect(bot_page.text).toContain("Buscar negocios");
     expect(bot_page.text).toContain("Knowledge");
     expect(bot_page.text).toContain("Ir a Knowledge Center");
     expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
@@ -306,6 +315,8 @@ describe("Conversation Inspector", () => {
         new_interaction_type: "consult_human",
         new_interaction_instructions: "Consultar a humano ante alcance custom.",
         new_interaction_human_group_ids: "ventas",
+        actions_catalog_present: "1",
+        enabled_action_id: ["guardar_nota", "buscar_negocios"],
       })
       .expect(302);
     expect(save_response.headers.location).toBe(`/inspector/bots/${bot_id}`);
@@ -342,6 +353,7 @@ describe("Conversation Inspector", () => {
       instructions: "Consultar a humano ante alcance custom.",
       human_group_ids: ["ventas"],
     });
+    expect(updated.rows[0].acciones_habilitadas_json).toEqual(["guardar_nota", "buscar_negocios"]);
 
     const whatsapp_assignment = await pool.query(
       `
@@ -428,6 +440,7 @@ describe("Conversation Inspector", () => {
     expect(empty_page.text).toContain("Enviar mensaje de WhatsApp");
     expect(empty_page.text).toContain("Recibir mensajes de WhatsApp");
     expect(empty_page.text).toContain("Consultar humano");
+    expect(empty_page.text).toContain("Buscar negocios");
 
     await request(app)
       .post(`/inspector/bots/${bot.id}`)

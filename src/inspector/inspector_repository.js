@@ -1,4 +1,5 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
+import { list_actions } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, update_bot_configuration } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
@@ -220,6 +221,15 @@ function parse_interactions(current_interactions, body) {
   }
 
   return [...by_type.values()];
+}
+
+function parse_enabled_actions(current_actions, body) {
+  if (body.actions_catalog_present === undefined) {
+    return Array.isArray(current_actions) ? current_actions : [];
+  }
+
+  const available_action_ids = new Set(list_actions().filter((action) => action.habilitada !== false).map((action) => action.action_id));
+  return compact_strings(body.enabled_action_id).filter((action_id) => available_action_ids.has(action_id));
 }
 
 function builder_definition_from_body(current_definition, body) {
@@ -450,6 +460,7 @@ export async function get_bot_view(pool, bot_id) {
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,
+    available_actions: list_actions().filter((action) => action.habilitada !== false),
     conversations: conversations.conversations,
     agent_runs: agent_runs.rows,
     memory_documents: memory_documents.rows,
@@ -475,6 +486,7 @@ export async function update_bot_builder_view(pool, bot_id, body) {
     instrucciones_operativas: definition_json.behavior?.operating_instructions ?? bot.instrucciones_operativas,
     tono: definition_json.behavior?.tone ?? bot.tono,
     knowledge_base_ids_json: definition_json.knowledge_source_ids ?? bot.knowledge_base_ids_json ?? [],
+    acciones_habilitadas_json: parse_enabled_actions(bot.acciones_habilitadas_json ?? bot.enabled_actions_json, body),
     definition_json,
   });
 }

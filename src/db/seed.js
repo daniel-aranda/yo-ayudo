@@ -533,6 +533,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       source: "seed",
       purpose: "founder_preflight",
       future_actions: ["enviar_email", "extraer_datos_de_imagen", "programar_llamada", "llamar_y_conectar"],
+      prospecting_providers: ["google_places", "yelp_fusion", "serpapi_google_local"],
     },
     definition_json: {
       identity: {
@@ -568,12 +569,25 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       "Detectar acciones o integraciones faltantes para roadmap.",
     ],
     knowledge_base_ids_json: input.knowledge_source_ids ?? [],
-    acciones_habilitadas_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
-    enabled_actions_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
+    acciones_habilitadas_json: [
+      "guardar_nota",
+      "crear_tarea",
+      "generar_resumen",
+      "buscar_negocios",
+      "solicitar_aprobacion_humana",
+    ],
+    enabled_actions_json: [
+      "guardar_nota",
+      "crear_tarea",
+      "generar_resumen",
+      "buscar_negocios",
+      "solicitar_aprobacion_humana",
+    ],
     reglas_guardrail_json: [
       "No ejecutar acciones no habilitadas.",
       "No fingir integraciones externas.",
       "Registrar guardrail cuando el proveedor no esté configurado.",
+      "Buscar prospectos solo con proveedores API configurados y respetando permisos.",
     ],
     reglas_escalamiento_json: [
       "Escalar si el founder pide enviar email real.",

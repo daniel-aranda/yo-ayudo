@@ -1,3 +1,5 @@
+import { search_business_prospects } from "../prospecting/business_search_service.js";
+
 function normalize_due_at(value) {
   if (!value) {
     return null;
@@ -132,10 +134,26 @@ async function generar_resumen(_pool, context) {
   };
 }
 
+async function buscar_negocios(_pool, context) {
+  const result = await search_business_prospects(context.input_json ?? {});
+
+  return {
+    status: result.status,
+    confirmation_required: false,
+    output: {
+      mensaje: result.message,
+      proveedores_usados: result.providers_used,
+      errores_proveedor: result.provider_errors,
+      negocios: result.businesses,
+    },
+  };
+}
+
 const handlers = {
   guardar_nota,
   crear_tarea,
   generar_resumen,
+  buscar_negocios,
 };
 
 export async function execute_internal_action_handler(pool, action, context) {

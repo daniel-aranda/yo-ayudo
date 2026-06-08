@@ -26,4 +26,7 @@ block content
               td= business.account_count
               td= business.bot_count
               td
-                a.button(href=`/dashboard/business/${business.id}`) Abrir
+                if business.primary_account_id
+                  a.button(href=`/dashboard/business/${business.id}/accounts/${business.primary_account_id}`) Abrir
+                else
+                  a.button(href=`/dashboard/business/${business.id}`) Abrir

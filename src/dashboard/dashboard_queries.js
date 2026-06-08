@@ -5,19 +5,45 @@ export async function get_dashboard_home(pool) {
         organizations.id,
         organizations.name,
         organizations.slug,
-        organizations.status,
-        COUNT(DISTINCT accounts.id)::int AS account_count,
-        COUNT(DISTINCT bots.id)::int AS bot_count
+        organizations.status
       FROM organizations
-      LEFT JOIN accounts ON accounts.organization_id = organizations.id
-      LEFT JOIN bots ON bots.organization_id = organizations.id AND bots.status = 'active'
       WHERE organizations.status = 'active'
-      GROUP BY organizations.id
       ORDER BY organizations.created_at DESC
     `,
   );
 
-  return { businesses: businesses.rows };
+  const business_rows = [];
+  for (const business of businesses.rows) {
+    const [primary_account, account_count, bot_count] = await Promise.all([
+      get_primary_account_for_business(pool, business.id),
+      pool.query("SELECT count(*)::int AS count FROM accounts WHERE organization_id = $1", [business.id]),
+      pool.query("SELECT count(*)::int AS count FROM bots WHERE organization_id = $1 AND status = 'active'", [business.id]),
+    ]);
+    business_rows.push({
+      ...business,
+      primary_account_id: primary_account?.id ?? null,
+      account_count: account_count.rows[0]?.count ?? 0,
+      bot_count: bot_count.rows[0]?.count ?? 0,
+    });
+  }
+
+  return { businesses: business_rows };
+}
+
+export async function get_primary_account_for_business(pool, business_id) {
+  const result = await pool.query(
+    `
+      SELECT id
+      FROM accounts
+      WHERE organization_id = $1
+        AND status = 'active'
+      ORDER BY created_at, name
+      LIMIT 1
+    `,
+    [business_id],
+  );
+
+  return result.rows[0] ?? null;
 }
 
 export async function get_business_dashboard_data(pool, business_id) {

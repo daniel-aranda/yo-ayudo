@@ -92,6 +92,26 @@ describe("Operational dashboard", () => {
     expect(response.text).not.toContain("Standard Time");
   });
 
+  it("routes a business dashboard URL directly to the primary account dashboard", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const app = create_dashboard_test_app(pool);
+
+    await request(app)
+      .get(`/dashboard/business/${organization_id}`)
+      .expect(302)
+      .expect("Location", `/dashboard/business/${organization_id}/accounts/${account_id}`);
+  });
+
+  it("links businesses directly to account dashboards from the dashboard home", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const app = create_dashboard_test_app(pool);
+
+    const response = await request(app).get("/dashboard").expect(200);
+
+    expect(response.text).toContain(`/dashboard/business/${organization_id}/accounts/${account_id}`);
+    expect(response.text).not.toContain(`href="/dashboard/business/${organization_id}"`);
+  });
+
   it("shows the empty operational state when there is no business day", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);

@@ -4,6 +4,7 @@ import {
   get_account_dashboard_data,
   get_business_dashboard_data,
   get_dashboard_home,
+  get_primary_account_for_business,
 } from "./dashboard_queries.js";
 
 function require_param(value, name) {
@@ -34,10 +35,15 @@ export function register_dashboard_routes(router, dependencies = {}) {
 
   router.get("/dashboard/business/:business_id", dashboard_auth, async (request, response, next) => {
     try {
-      response.render(
-        "business",
-        await get_business_dashboard_data(pool, require_param(request.params.business_id, "business_id")),
-      );
+      const business_id = require_param(request.params.business_id, "business_id");
+      const primary_account = await get_primary_account_for_business(pool, business_id);
+
+      if (primary_account) {
+        response.redirect(`/dashboard/business/${business_id}/accounts/${primary_account.id}`);
+        return;
+      }
+
+      response.render("business", await get_business_dashboard_data(pool, business_id));
     } catch (error) {
       next(error);
     }

@@ -22,6 +22,18 @@ function normalize_action_request(request) {
   };
 }
 
+function infer_business_search_input(message) {
+  const text = String(message ?? "");
+  const location_match = text.match(/\b(?:en|cerca de|por)\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .,-]+?)(?:\s+\b(?:para|con|que|y)\b|[.!?]|$)/i);
+  const query_match = text.match(/\b(?:busca|buscar|encuentra|encontrar)\s+(?:negocios|prospectos|leads)?\s*(?:de|para|tipo)?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .,-]+?)(?:\s+\b(?:en|cerca de|por)\b|$)/i);
+
+  return {
+    query: (query_match?.[1] ?? "negocios con potencial para YoAyudo").trim(),
+    location: (location_match?.[1] ?? "México").trim(),
+    max_results: 10,
+  };
+}
+
 function infer_action_requests_from_message(message) {
   const text = String(message ?? "");
   const requests = [];
@@ -54,6 +66,24 @@ function infer_action_requests_from_message(message) {
         contexto: { mensaje: text },
         formato: "bullets",
       },
+    });
+  }
+
+  if (
+    includes_any(text, [
+      "buscar negocios",
+      "busca negocios",
+      "encuentra negocios",
+      "encontrar negocios",
+      "buscar prospectos",
+      "busca prospectos",
+      "buscar leads",
+      "busca leads",
+    ])
+  ) {
+    requests.push({
+      action_id: "buscar_negocios",
+      input_json: infer_business_search_input(message),
     });
   }
 
