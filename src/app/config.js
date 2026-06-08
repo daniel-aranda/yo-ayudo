@@ -9,7 +9,10 @@ const env_schema = z.object({
   DATABASE_URL: z
     .string()
     .url()
-    .default("postgres://yoayudo:yoayudo@localhost:5433/yoayudo"),
+    // Use 127.0.0.1 (IPv4) rather than "localhost": Node 18+ resolves "localhost"
+    // to IPv6 (::1) first, but the local Docker Postgres binds 127.0.0.1:5433,
+    // which otherwise yields ECONNREFUSED ::1:5433.
+    .default("postgres://yoayudo:yoayudo@127.0.0.1:5433/yoayudo"),
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
   WHATSAPP_VERIFY_TOKEN: z.string().default("dev_verify_token"),
   WHATSAPP_APP_SECRET: z.string().default(""),

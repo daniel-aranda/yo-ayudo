@@ -40,17 +40,32 @@ describe("bot engine founder preflight", () => {
 
     expect(account.name).toBe("YoAyudo Ventas");
     expect(bot.bot_type).toBe("custom");
+    // The 4 supported capabilities are configured as interactions; the unsupported
+    // "solicitar_aprobacion_humana" stub was retired in the actions→interactions unification.
     expect(bot.acciones_habilitadas_json).toEqual(
-      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "buscar_negocios", "solicitar_aprobacion_humana"]),
+      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "buscar_negocios"]),
     );
+    expect(bot.acciones_habilitadas_json).not.toContain("solicitar_aprobacion_humana");
     expect(bot.definition_json.identity.name).toBe("Agente WhatsApp YoAyudo");
     expect(bot.definition_json.knowledge_source_ids.length).toBeGreaterThan(0);
     expect(bot.definition_json.behavior).not.toHaveProperty("base_prompt");
     expect(bot.definition_json).not.toHaveProperty("capabilities");
     expect(bot.definition_json).not.toHaveProperty("dispatch_rules");
     expect(bot.definition_json.interactions.map((interaction) => interaction.type)).toEqual(
-      expect.arrayContaining(["receive_whatsapp_message", "send_whatsapp_message", "consult_human"]),
+      expect.arrayContaining([
+        "receive_whatsapp_message",
+        "send_whatsapp_message",
+        "consult_human",
+        "buscar_negocios",
+        "guardar_nota",
+        "crear_tarea",
+        "generar_resumen",
+      ]),
     );
+    // Executable interactions carry an action_id so the engine can run them.
+    const buscar_interaction = bot.definition_json.interactions.find((i) => i.type === "buscar_negocios");
+    expect(buscar_interaction.action_id).toBe("buscar_negocios");
+    expect(buscar_interaction.instructions.length).toBeGreaterThan(0);
 
     const compile_response = await request(app)
       .post(`/internal/bots/${bot.id}/compile-prompt`)

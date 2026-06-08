@@ -513,22 +513,30 @@ button:disabled {
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
   display: flex;
   gap: 4px;
   overflow-x: auto;
-  padding: 4px;
+  padding: 6px;
 }
 
 .tab {
+  align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--muted);
+  display: inline-flex;
   flex: none;
+  font-weight: 650;
+  gap: 8px;
   margin-top: 0;
-  min-height: 36px;
-  padding: 8px 12px;
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
+.tab .ui-icon {
+  color: var(--muted);
 }
 
 .tab:hover {
@@ -536,14 +544,140 @@ button:disabled {
   color: var(--text);
 }
 
+.tab:hover .ui-icon {
+  color: var(--text);
+}
+
 .tab.active,
 .tab[aria-selected="true"] {
-  background: var(--accent);
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.tab.active .ui-icon,
+.tab[aria-selected="true"] .ui-icon {
   color: #fff;
 }
 
 .tab-section[hidden] {
   display: none;
+}
+
+/* ── Bot editor design system (icons, section heads, field affordances) ── */
+.ui-icon {
+  flex: none;
+  height: 18px;
+  width: 18px;
+}
+
+.section-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.section-badge {
+  align-items: center;
+  background: #e4f4ef;
+  border-radius: 10px;
+  color: var(--accent-dark);
+  display: inline-flex;
+  flex: none;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.section-badge .ui-icon {
+  height: 20px;
+  width: 20px;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+.section-sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 2px 0 0;
+}
+
+.field-control {
+  position: relative;
+}
+
+.field-control select,
+.field-control input {
+  width: 100%;
+}
+
+.field-control.has-leading .field-lead-icon,
+.field-control.has-leading .status-dot {
+  left: 12px;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.field-control.has-leading .field-lead-icon {
+  color: var(--muted);
+  display: inline-flex;
+}
+
+.field-control.has-leading select,
+.field-control.has-leading input {
+  padding-left: 38px;
+}
+
+.field-control.has-trailing input {
+  padding-right: 42px;
+}
+
+.field-trailing-icon {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.status-dot {
+  background: #9ca3af;
+  border-radius: 999px;
+  flex: none;
+  height: 9px;
+  width: 9px;
+}
+
+.status-dot.is-active {
+  background: #16a34a;
+}
+
+.status-dot.is-draft {
+  background: #d97706;
+}
+
+.status-dot.is-archived {
+  background: #9ca3af;
+}
+
+.field-with-counter {
+  position: relative;
+}
+
+.char-counter {
+  bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+  position: absolute;
+  right: 14px;
 }
 
 .form-grid {

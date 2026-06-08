@@ -519,6 +519,42 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
         "Consulta a un humano cuando el knowledge no tenga información suficiente, cuando exista riesgo sensible o cuando el vendedor pregunte por un alcance custom.",
       human_group_ids: [],
     },
+    {
+      key: "buscar_negocios",
+      type: "buscar_negocios",
+      label: "Buscar negocios",
+      enabled: true,
+      action_id: "buscar_negocios",
+      instructions:
+        "Úsalo para prospectar clientes potenciales. Busca negocios por giro y zona, prioriza (cherry-pick) los que mejor encajen con el perfil ideal, y excluye los que ya fueron contactados antes de proponerlos. Guarda los prospectos relevantes como nota para darles seguimiento.",
+    },
+    {
+      key: "guardar_nota",
+      type: "guardar_nota",
+      label: "Guardar nota",
+      enabled: true,
+      action_id: "guardar_nota",
+      instructions:
+        "Guarda como nota el contexto comercial relevante de cada prospecto: cómo llegó, qué necesita y cualquier dato útil para el seguimiento.",
+    },
+    {
+      key: "crear_tarea",
+      type: "crear_tarea",
+      label: "Crear tarea",
+      enabled: true,
+      action_id: "crear_tarea",
+      instructions:
+        "Crea tareas de seguimiento cuando se acuerde un próximo paso (una llamada, un envío de información o un recordatorio). Incluye qué hay que hacer y para cuándo.",
+    },
+    {
+      key: "generar_resumen",
+      type: "generar_resumen",
+      label: "Generar resumen",
+      enabled: true,
+      action_id: "generar_resumen",
+      instructions:
+        "Genera un resumen operativo cuando el vendedor lo pida o al cerrar una conversación: puntos clave, datos del prospecto y próximos pasos.",
+    },
   ];
   const bot = await upsert_bot_record(pool, {
     organization_id: input.organization_id,
@@ -569,20 +605,8 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       "Detectar acciones o integraciones faltantes para roadmap.",
     ],
     knowledge_base_ids_json: input.knowledge_source_ids ?? [],
-    acciones_habilitadas_json: [
-      "guardar_nota",
-      "crear_tarea",
-      "generar_resumen",
-      "buscar_negocios",
-      "solicitar_aprobacion_humana",
-    ],
-    enabled_actions_json: [
-      "guardar_nota",
-      "crear_tarea",
-      "generar_resumen",
-      "buscar_negocios",
-      "solicitar_aprobacion_humana",
-    ],
+    acciones_habilitadas_json: ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
+    enabled_actions_json: ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
     reglas_guardrail_json: [
       "No ejecutar acciones no habilitadas.",
       "No fingir integraciones externas.",
@@ -671,6 +695,39 @@ function lead_capture_bot_definition() {
         enabled: true,
         instructions: "Consulta a humano si el prospecto pide financiamiento, una excepción, urgencia o hablar con una persona.",
         human_group_ids: [],
+      },
+      {
+        key: "buscar_negocios",
+        type: "buscar_negocios",
+        label: "Buscar negocios",
+        enabled: true,
+        action_id: "buscar_negocios",
+        instructions:
+          "Úsalo para prospectar. Busca negocios por giro y zona, prioriza (cherry-pick) los que mejor encajen con el cliente ideal y excluye los que ya fueron contactados. Guarda los prospectos relevantes para darles seguimiento.",
+      },
+      {
+        key: "guardar_nota",
+        type: "guardar_nota",
+        label: "Guardar nota",
+        enabled: true,
+        action_id: "guardar_nota",
+        instructions: "Guarda el contexto de cada prospecto: cómo llegó, qué busca y datos útiles para el seguimiento.",
+      },
+      {
+        key: "crear_tarea",
+        type: "crear_tarea",
+        label: "Crear tarea",
+        enabled: true,
+        action_id: "crear_tarea",
+        instructions: "Crea tareas de seguimiento cuando se acuerde un próximo paso. Incluye qué hacer y para cuándo.",
+      },
+      {
+        key: "generar_resumen",
+        type: "generar_resumen",
+        label: "Generar resumen",
+        enabled: true,
+        action_id: "generar_resumen",
+        instructions: "Genera un resumen con los puntos clave, los datos del prospecto y los próximos pasos.",
       },
     ],
   };
@@ -1264,8 +1321,8 @@ export async function seed_development_data(pool) {
     instrucciones_operativas: prospect_bot_definition.behavior.operating_instructions,
     tono: prospect_bot_definition.behavior.tone,
     reglas_guardrail_json: prospect_bot_definition.behavior.constraints.split("\n"),
-    acciones_habilitadas_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
-    enabled_actions_json: ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
+    acciones_habilitadas_json: ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
+    enabled_actions_json: ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
     settings_json: { source: "seed" },
   });
   const custom_whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {

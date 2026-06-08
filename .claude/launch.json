@@ -12,7 +12,10 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 4000,
-      "autoPort": true
+      "autoPort": true,
+      "env": {
+        "DATABASE_URL": "postgres://yoayudo:yoayudo@127.0.0.1:5433/yoayudo"
+      }
     }
   ]
 }

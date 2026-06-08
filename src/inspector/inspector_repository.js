@@ -1,5 +1,4 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
-import { list_actions } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, update_bot_configuration } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
@@ -63,6 +62,42 @@ export const available_agent_interactions = [
       "Permite que el agente consulte a humanos cuando tenga dudas, falte knowledge o se requiera criterio humano.",
     instructions_placeholder:
       "Describe cuándo debe consultar a un humano, qué información debe incluir y qué casos no debe escalar.",
+  },
+  {
+    type: "buscar_negocios",
+    key: "buscar_negocios",
+    label: "Buscar negocios",
+    description: "Permite que el agente busque negocios reales con proveedores externos (Google Places y otros).",
+    instructions_placeholder:
+      "Describe para qué y cómo buscar negocios. Ej: prospección de clientes, cómo elegir los mejores (cherry-pick), y cómo guardar o excluir los que ya contactaste.",
+    action_id: "buscar_negocios",
+  },
+  {
+    type: "guardar_nota",
+    key: "guardar_nota",
+    label: "Guardar nota",
+    description: "Permite que el agente guarde una nota interna asociada al contacto o a la conversación.",
+    instructions_placeholder:
+      "Describe qué información vale la pena guardar como nota y en qué momento de la conversación hacerlo.",
+    action_id: "guardar_nota",
+  },
+  {
+    type: "crear_tarea",
+    key: "crear_tarea",
+    label: "Crear tarea",
+    description: "Permite que el agente cree una tarea interna de seguimiento.",
+    instructions_placeholder:
+      "Describe cuándo crear una tarea de seguimiento y qué debe incluir (responsable, fecha límite, contexto).",
+    action_id: "crear_tarea",
+  },
+  {
+    type: "generar_resumen",
+    key: "generar_resumen",
+    label: "Generar resumen",
+    description: "Permite que el agente genere un resumen operativo o comercial de la conversación.",
+    instructions_placeholder:
+      "Describe cuándo generar un resumen y qué debe contener (puntos clave, próximos pasos, datos del prospecto).",
+    action_id: "generar_resumen",
   },
 ];
 
@@ -215,6 +250,7 @@ function parse_interactions(current_interactions, body) {
         label: available.label,
         enabled: row.enabled,
         instructions: row.instructions,
+        ...(available.action_id ? { action_id: available.action_id } : {}),
         ...(row.type === "consult_human" ? { human_group_ids: row.human_group_ids } : {}),
       });
     }
@@ -223,13 +259,14 @@ function parse_interactions(current_interactions, body) {
   return [...by_type.values()];
 }
 
-function parse_enabled_actions(current_actions, body) {
-  if (body.actions_catalog_present === undefined) {
-    return Array.isArray(current_actions) ? current_actions : [];
-  }
-
-  const available_action_ids = new Set(list_actions().filter((action) => action.habilitada !== false).map((action) => action.action_id));
-  return compact_strings(body.enabled_action_id).filter((action_id) => available_action_ids.has(action_id));
+// Executable capabilities are now modeled as interactions (each with its own
+// prompt). The engine still gates execution on `acciones_habilitadas_json`, so
+// we derive it from the enabled interactions that carry an `action_id`.
+function enabled_action_ids_from_interactions(interactions) {
+  const ids = (Array.isArray(interactions) ? interactions : [])
+    .filter((interaction) => interaction && interaction.enabled !== false && interaction.action_id)
+    .map((interaction) => interaction.action_id);
+  return [...new Set(ids)];
 }
 
 function builder_definition_from_body(current_definition, body) {
@@ -460,11 +497,6 @@ export async function get_bot_view(pool, bot_id) {
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,
-    // Only surface actions the engine actually supports (real handlers, not "stub_*"
-    // placeholders). The full registry stays intact for engine guardrails.
-    available_actions: list_actions().filter(
-      (action) => action.habilitada !== false && !String(action.handler ?? "").startsWith("stub_"),
-    ),
     conversations: conversations.conversations,
     agent_runs: agent_runs.rows,
     memory_documents: memory_documents.rows,
@@ -490,7 +522,7 @@ export async function update_bot_builder_view(pool, bot_id, body) {
     instrucciones_operativas: definition_json.behavior?.operating_instructions ?? bot.instrucciones_operativas,
     tono: definition_json.behavior?.tone ?? bot.tono,
     knowledge_base_ids_json: definition_json.knowledge_source_ids ?? bot.knowledge_base_ids_json ?? [],
-    acciones_habilitadas_json: parse_enabled_actions(bot.acciones_habilitadas_json ?? bot.enabled_actions_json, body),
+    acciones_habilitadas_json: enabled_action_ids_from_interactions(definition_json.interactions),
     definition_json,
   });
 }

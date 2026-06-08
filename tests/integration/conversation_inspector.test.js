@@ -223,7 +223,9 @@ describe("Conversation Inspector", () => {
     expect(bot_page.text).toContain('data-section="interacciones"');
     expect(bot_page.text).toContain('data-section="restricciones"');
     expect(bot_page.text).toContain("TabNavigator");
-    expect(bot_page.text).toContain("Acciones del bot");
+    // "Acciones del bot" was unified into Interacciones; the standalone section is gone.
+    expect(bot_page.text).not.toContain("Acciones del bot");
+    // Executable capabilities now render as interactions (each with its own prompt).
     expect(bot_page.text).toContain("Buscar negocios");
     expect(bot_page.text).toContain("Knowledge");
     expect(bot_page.text).toContain("Ir a Knowledge Center");
@@ -308,15 +310,13 @@ describe("Conversation Inspector", () => {
         constraints_text: "No fingir llamadas.",
         whatsapp_display_phone_number: "+525512345678",
         whatsapp_phone_number_id: "155512345678",
-        interaction_type: ["receive_whatsapp_message"],
-        interaction_instructions: ["Atender dudas comerciales."],
-        interaction_human_group_ids: [""],
-        interaction_enabled: ["0"],
+        interaction_type: ["receive_whatsapp_message", "buscar_negocios"],
+        interaction_instructions: ["Atender dudas comerciales.", "Prospecta clientes ideales y excluye los ya contactados."],
+        interaction_human_group_ids: ["", ""],
+        interaction_enabled: ["0", "1"],
         new_interaction_type: "consult_human",
         new_interaction_instructions: "Consultar a humano ante alcance custom.",
         new_interaction_human_group_ids: "ventas",
-        actions_catalog_present: "1",
-        enabled_action_id: ["guardar_nota", "buscar_negocios"],
       })
       .expect(302);
     expect(save_response.headers.location).toBe(`/inspector/bots/${bot_id}`);
@@ -346,6 +346,14 @@ describe("Conversation Inspector", () => {
       instructions: "Atender dudas comerciales.",
     });
     expect(updated.rows[0].definition_json.interactions[1]).toMatchObject({
+      key: "buscar_negocios",
+      type: "buscar_negocios",
+      label: "Buscar negocios",
+      enabled: true,
+      action_id: "buscar_negocios",
+      instructions: "Prospecta clientes ideales y excluye los ya contactados.",
+    });
+    expect(updated.rows[0].definition_json.interactions[2]).toMatchObject({
       key: "consult_human",
       type: "consult_human",
       label: "Consultar humano",
@@ -353,7 +361,8 @@ describe("Conversation Inspector", () => {
       instructions: "Consultar a humano ante alcance custom.",
       human_group_ids: ["ventas"],
     });
-    expect(updated.rows[0].acciones_habilitadas_json).toEqual(["guardar_nota", "buscar_negocios"]);
+    // acciones_habilitadas is derived from the enabled interactions that carry an action_id.
+    expect(updated.rows[0].acciones_habilitadas_json).toEqual(["buscar_negocios"]);
 
     const whatsapp_assignment = await pool.query(
       `
