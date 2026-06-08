@@ -24,8 +24,6 @@ Business knowledge y conversation memory pueden vivir en `memory_documents`, per
 - `organization`
 - `account`
 - `bot`
-- `tenant`
-- `branch`
 - `contact`
 - `conversation`
 - `operational_day`
@@ -78,7 +76,7 @@ La ingesta de conversacion ocurre mediante `conversation_memory_service` despué
 Local:
 
 ```text
-.storage/memory/{tenant_id}/{document_id}.json
+.storage/memory/{account_id|scope|global}/{document_id}.json
 ```
 
 S3:
@@ -93,7 +91,7 @@ El adapter S3 está preparado, pero no es requerido para desarrollo local.
 
 ## Retrieval
 
-`memory_retrieval_service` busca en `memory_documents`, filtra por `document_family`, organization/account/tenant/bot/scope/type y rankea de forma simple:
+`memory_retrieval_service` busca en `memory_documents`, filtra por `document_family`, organization/account/contact/conversation/bot/scope/type y rankea de forma simple:
 
 - match de palabras del query
 - prioridad de `document_type`
@@ -101,7 +99,7 @@ El adapter S3 está preparado, pero no es requerido para desarrollo local.
 - metadata de intent
 - recencia por query SQL
 
-La regla crítica: no exponer knowledge o memoria de otro account/tenant/conversation.
+La regla crítica: no exponer knowledge o memoria de otro account/conversation.
 
 ## Futuro
 

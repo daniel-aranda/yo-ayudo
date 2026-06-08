@@ -27,7 +27,7 @@ El producto está en MVP local. Todavía no hay ambientes formales.
 - `/health` responde.
 - Webhook de WhatsApp verifica con Meta.
 - Simulación de mensaje funciona en staging.
-- Dashboard muestra tenant demo o tenant real esperado.
+- Dashboard muestra el negocio demo o el negocio real esperado.
 
 ## Migraciones
 

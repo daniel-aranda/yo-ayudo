@@ -7,7 +7,8 @@ La frase guia:
 ```text
 El codigo es el motor.
 Los bots son configuracion.
-Las acciones son capacidades.
+Las interacciones son la superficie de configuracion (cada una con su prompt).
+Las acciones son capacidades ejecutables en codigo; las interacciones ejecutables las conectan via action_id.
 Los guardrails son el radar de seguridad y roadmap.
 ```
 
@@ -39,6 +40,8 @@ Tambien utiles:
 - Bots viven en DB/configuracion.
 - Actions si pueden y deben vivir en codigo.
 - Si una capacidad modifica el mundo, debe ser Action.
+- En la UI no hay lista separada de "Acciones del bot": todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`.
+- No usar `tenant` ni `branch`: el modelo es organization (negocio) -> account (cuenta) -> bot.
 - Si una accion no existe, no esta habilitada, no tiene proveedor o no puede ejecutarse, registrar guardrail event.
 - No fingir ejecuciones de AI.
 - No duplicar reglas de negocio dentro de subagentes.

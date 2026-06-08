@@ -26,9 +26,20 @@ Capacidad ejecutable del Bot Engine. Vive en codigo porque requiere validacion, 
 
 Si modifica el mundo, debe ser Action.
 
+En la UI no se habilita una Action por separado: se configura la **interaccion ejecutable** correspondiente, que ademas le da su prompt. `acciones_habilitadas_json` se deriva de las interacciones habilitadas que tienen `action_id`.
+
 ## Action Registry
 
 Catalogo de acciones disponibles en codigo. Declara metadata, schemas, permisos, nivel de riesgo, handler y version.
+
+## Interaction
+
+Lo que un bot puede hacer, configurado en el editor. Es la superficie de configuracion unica del bot: ya no existe una lista separada de "Acciones del bot". Cada interaccion tiene su propio prompt (instrucciones). Hay dos tipos:
+
+- De comportamiento: recibir mensajes de WhatsApp, enviar mensajes de WhatsApp, consultar humano.
+- Ejecutables: llevan un `action_id` y conectan con una Action del engine. Hoy las reales son `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen`.
+
+Al guardar, `acciones_habilitadas_json` se deriva de las interacciones habilitadas con `action_id`, y el prompt compiler inyecta el prompt de cada interaccion en el prompt final.
 
 ## Guardrail Event
 
@@ -62,17 +73,17 @@ Compatibilidad/demo legacy del runtime anterior. Ejemplo: `taqueria_control`.
 
 No debe ser el centro del futuro. Para configuracion editable actual, usar `bot_templates` y bots configurables.
 
-## Tenant
+## Tenant / Branch (retirado)
 
-Boundary tecnico legacy del runtime actual. `accounts.tenant_id` mantiene compatibilidad.
+Vocabulario tecnico legacy ya eliminado. La migracion `0010_drop_tenant_branch.sql` borro las tablas/columnas de tenant y branch; `accounts.tenant_id` ya no existe. El boundary tecnico actual es organization/account. No usar tenant ni branch en codigo nuevo.
 
-## Organization
+## Organization (Negocio)
 
-Duenho o grupo empresarial.
+El negocio del cliente. En la DB es la tabla `organizations`; en la UI se muestra como "Negocio". El dashboard lista los negocios con su numero de cuentas y bots.
 
-## Account
+## Account (Cuenta)
 
-Negocio dentro de una organization.
+Unidad operativa ("cuenta") dentro de un negocio/organization. Un bot pertenece a una account y a su organization. El aislamiento de conversaciones es por bot y contacto, no por tenant.
 
 ## WhatsApp Phone Number
 

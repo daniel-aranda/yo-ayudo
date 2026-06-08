@@ -4,7 +4,7 @@
 
 Probar que YoAyudo ya puede operar un bot configurable interno sin WhatsApp real ni integraciones externas.
 
-El caso base es `agente-whatsapp-yoayudo`: un bot configurable para registrar prospectos, crear tareas de seguimiento, generar resúmenes y mostrar guardrails cuando se pide algo que el engine todavía no puede ejecutar.
+El caso base es `agente-whatsapp-yoayudo`: un bot configurable para buscar negocios (prospección), registrar prospectos, crear tareas de seguimiento, generar resúmenes y mostrar guardrails cuando se pide algo que el engine todavía no puede ejecutar.
 
 ## Preparacion Local
 
@@ -125,6 +125,7 @@ GET /internal/diagnosticos-ai/:diagnostico_id
 - Crear/listar/editar bots configurables por endpoints internos.
 - Compilar prompt auditable.
 - Probar mensaje sin WhatsApp real.
+- Ejecutar `buscar_negocios`.
 - Ejecutar `guardar_nota`.
 - Ejecutar `crear_tarea`.
 - Ejecutar `generar_resumen`.

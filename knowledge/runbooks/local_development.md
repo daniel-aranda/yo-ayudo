@@ -21,7 +21,7 @@ PostgreSQL corre en Docker con puerto host `5433`, usuario `yoayudo`, password `
 - intenta reparar Docker local si Colima no esta corriendo
 - intenta levantar `docker compose up -d postgres` si la DB local default no responde
 - aplica migraciones pendientes
-- avisa si no hay tenants sembrados
+- avisa si no hay organizations sembradas
 
 Para reiniciar la base local desde cero:
 
@@ -65,13 +65,17 @@ curl -X POST http://localhost:3000/dev/simulate-whatsapp-message \
 
 ## Problemas Comunes
 
-### `ECONNREFUSED localhost:5433`
+### `ECONNREFUSED 127.0.0.1:5433`
 
 Levantar Postgres:
 
 ```bash
 npm run db:up
 ```
+
+### `ECONNREFUSED ::1:5433`
+
+Pasa cuando `DATABASE_URL` usa `localhost`. Node 18+ resuelve `localhost` a IPv6 (`::1`) primero, pero el Postgres de Docker escucha en IPv4 `127.0.0.1:5433`. El default ya usa `127.0.0.1`; si un `.env` define `DATABASE_URL`, usar tambien `127.0.0.1` en lugar de `localhost`.
 
 Si la computadora se reinicio y Docker usa Colima, `npm run dev`, `npm run db:up`, `npm run db:down` y `npm run db:reset` intentan ejecutar `colima start` automaticamente antes de llamar a `docker compose`.
 

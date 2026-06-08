@@ -26,7 +26,8 @@ YoAyudo no construye agentes comerciales en codigo. El codigo ejecuta un motor c
 - Tono.
 - Objetivos.
 - Knowledge base ids.
-- Acciones habilitadas.
+- Interacciones (cada una con su prompt; las ejecutables llevan `action_id`).
+- Acciones habilitadas (se derivan de las interacciones ejecutables habilitadas).
 - Reglas de guardrail.
 - Reglas de escalamiento.
 - Campos a capturar.
@@ -64,9 +65,13 @@ Describe como opera el negocio: servicios, precios, reglas, politicas, procesos,
 
 Describe que ha pasado con este contacto, conversacion o caso: mensajes relevantes, pendientes, datos capturados, objeciones, decisiones, estado y resumen operativo.
 
+### Interacciones
+
+Superficie de configuracion del bot: lo que puede hacer y como, cada interaccion con su propio prompt. Las de comportamiento cubren recibir/enviar WhatsApp y consultar humano; las ejecutables llevan un `action_id` que las conecta con una Action del engine. Ya no hay una lista separada de "Acciones del bot": `acciones_habilitadas_json` se deriva de las interacciones ejecutables habilitadas.
+
 ### Actions
 
-Capacidades ejecutables del engine. Si algo modifica el mundo, debe ser una accion.
+Capacidades ejecutables del engine. Si algo modifica el mundo, debe ser una accion. En la UI se habilitan configurando la interaccion ejecutable correspondiente.
 
 ### Guardrails
 
@@ -81,7 +86,8 @@ El compilador de prompt recibe:
 - contexto de conversacion.
 - business knowledge relevante.
 - conversation memory relevante.
-- acciones disponibles.
+- interacciones habilitadas (cada una con su prompt).
+- acciones disponibles (con el prompt de su interaccion, no una descripcion estatica).
 - reglas de seguridad.
 - formato esperado de respuesta/accion.
 
@@ -98,5 +104,6 @@ Debe ser auditable y evitar guardar informacion sensible innecesaria. Guardar me
 
 - El codigo es el motor.
 - Los bots son configuracion.
-- Las acciones son capacidades.
+- Las interacciones son la superficie de configuracion (cada una con su prompt).
+- Las acciones son capacidades ejecutables; las interacciones ejecutables las conectan via `action_id`.
 - Los guardrails reportan riesgos o capacidades faltantes.

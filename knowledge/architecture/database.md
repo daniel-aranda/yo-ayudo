@@ -17,7 +17,7 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `solution_templates.key = "taqueria_control"` es el template operativo del demo. No existe como clase runtime.
 
-`bots` conecta organization/account con tenant, bot profile y canal.
+`bots` conecta organization/account con bot profile y canal. Un `bot` pertenece a un account y a su organization.
 
 `bots.bot_type` distingue:
 
@@ -33,7 +33,7 @@ Desde Fase 5, un bot configurable puede guardar:
 - `tono`: estilo de respuesta.
 - `objetivos_json`: objetivos configurables.
 - `knowledge_base_ids_json`: knowledge bases asociadas.
-- `acciones_habilitadas_json`: acciones que el bot puede solicitar.
+- `acciones_habilitadas_json`: acciones que el bot puede solicitar. Se deriva de las interacciones habilitadas que llevan un `action_id`; las acciones reales son `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen`.
 - `reglas_guardrail_json`: reglas de seguridad.
 - `reglas_escalamiento_json`: reglas base de escalamiento.
 - `campos_requeridos_json`: campos sugeridos/requeridos.
@@ -41,14 +41,14 @@ Desde Fase 5, un bot configurable puede guardar:
 
 `paquete_id` queda como compatibilidad de Fase 5 inicial y se usa como referencia de `template_id` de origen cuando existe.
 
-`accounts.tenant_id` mantiene la compatibilidad explicita entre el modelo SaaS vendible y el runtime legacy basado en tenants.
+En producto/UI una fila de `organizations` es un "Negocio"; el dashboard lista Negocios con su conteo de Cuentas (accounts) y Bots. Un `account` es la unidad operativa ("cuenta") dentro de una organization.
 
 `phone_number_bot_assignments` asigna un bot activo a un numero de WhatsApp. En fase 1 la regla de producto es un bot activo por numero; las asignaciones inactivas conservan historial.
 
-### Core Multi-Tenant
+### Core Negocio
 
-- `tenants`
-- `branches`
+- `organizations`
+- `accounts`
 - `users`
 - `contacts`
 - `whatsapp_phone_numbers`
@@ -105,7 +105,7 @@ Desde Fase 5, un bot configurable puede guardar:
 
 `knowledge_sources` registra fuentes administrables de business/system knowledge. La memoria conversacional no debe crear `knowledge_sources`.
 
-`organization_id`, `account_id` y `bot_id` en `knowledge_sources` y `memory_documents` permiten retrieval por el modelo SaaS nuevo sin depender solo de `tenant`.
+`organization_id`, `account_id` y `bot_id` en `knowledge_sources` y `memory_documents` permiten retrieval por el modelo organization/account/bot.
 
 ### Agents
 
@@ -190,12 +190,12 @@ Las acciones futuras de voz y OCR real no escriben proveedores externos todavía
 
 ## Business Day
 
-`op_business_days` tiene una fila por tenant/sucursal/día.
+`op_business_days` tiene una fila por account/día.
 
 Constraint clave:
 
 ```text
-tenant_id + branch_id + operation_date
+account_id + operation_date
 ```
 
 Esto permite que varios mensajes actualicen el mismo día sin duplicarlo.
@@ -217,7 +217,23 @@ Las migraciones son SQL explícito en:
 src/db/migrations
 ```
 
-Como el proyecto sigue prelaunch, el esquema actual esta consolidado en `0001_initial.sql`. El runner registra archivos aplicados en `schema_migrations`.
+`npm run db:migrate` aplica en orden las once migraciones actuales:
+
+```text
+0001_initial
+0002_repair_business_account_schema
+0003_repair_bot_engine_schema
+0004_message_idempotency
+0005_unify_operational_account
+0006_account_prep
+0007_account_lookup_tables
+0008_loosen_remaining_tenant
+0009_account_remaining_tables
+0010_drop_tenant_branch
+0011_sync_bot_organization
+```
+
+Las migraciones 0005 a 0011 siguen un enfoque expand-migrate-contract: agregan `account_id`/`organization_id`, migran los datos y finalmente eliminan tenant/branch (`0010_drop_tenant_branch` elimina fisicamente las tablas y columnas) hasta unificar todo en organization/account. El runner registra archivos aplicados en `schema_migrations`.
 
 ## Cambios Futuros
 

@@ -49,7 +49,7 @@ Datos demo esperados:
 - Organization: `YoAyudo Demo`
 - Account: `YoAyudo Ventas`
 - Bot configurable: `agente-whatsapp-yoayudo`
-- Actions reales habilitadas: `guardar_nota`, `crear_tarea`, `generar_resumen`, `solicitar_aprobacion_humana`
+- Actions reales habilitadas: `buscar_negocios`, `guardar_nota`, `crear_tarea`, `generar_resumen`
 - Actions futuras/stub visibles pero no productivas: `programar_llamada`, `llamar_y_conectar`, `extraer_datos_de_imagen`, `enviar_email`
 
 ## Prueba Rápida Por Script
@@ -137,7 +137,7 @@ curl -X POST http://localhost:3000/internal/bots \
     "status": "active",
     "instrucciones_operativas": "Usa solo actions habilitadas. Si falta una capacidad, registra guardrail y responde de forma segura.",
     "tono": "directo, práctico y comercial",
-    "acciones_habilitadas": ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"],
+    "acciones_habilitadas": ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
     "reglas_guardrail": ["No fingir llamadas, emails, OCR ni integraciones externas."],
     "reglas_escalamiento": ["Escalar si piden email real, llamada real, OCR real o descuento no autorizado."],
     "campos_a_capturar": ["negocio_nombre", "contacto", "interes", "siguiente_accion"]
@@ -151,7 +151,7 @@ curl -X PATCH http://localhost:3000/internal/bots/<bot_id> \
   -H "Content-Type: application/json" \
   -d '{
     "instrucciones_operativas": "Responde breve. Ejecuta solo actions habilitadas. No prometas integraciones no conectadas.",
-    "acciones_habilitadas_json": ["guardar_nota", "crear_tarea", "generar_resumen", "solicitar_aprobacion_humana"]
+    "acciones_habilitadas_json": ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"]
   }'
 ```
 
@@ -346,6 +346,7 @@ http://localhost:3000/inspector
 - Habilitar/deshabilitar actions.
 - Compilar prompt.
 - Probar mensaje sin WhatsApp real.
+- Ejecutar `buscar_negocios`.
 - Ejecutar `guardar_nota`.
 - Ejecutar `crear_tarea`.
 - Ejecutar `generar_resumen`.

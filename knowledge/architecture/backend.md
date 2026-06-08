@@ -61,10 +61,10 @@ Ubicación: `src/channels/whatsapp`
 El resolver nuevo prioriza `phone_number_bot_assignments`:
 
 ```text
-phone_number_id -> whatsapp_phone_numbers -> active assignment -> bot -> account -> organization -> tenant
+phone_number_id -> whatsapp_phone_numbers -> active assignment -> bot -> account -> organization
 ```
 
-Si un numero todavia no tiene assignment activo, el resolver conserva fallback legacy por `tenant`, `branch`, `bot_profile` y `bot` para no romper datos existentes.
+Si un numero todavia no tiene assignment activo, el resolver conserva fallback legacy por `bot_profile` y `bot` para no romper datos existentes.
 
 ### AI
 
@@ -133,7 +133,7 @@ Estos eventos alimentan el Conversation Inspector.
 Ubicación: `src/inspector`
 
 - `inspector_routes.js`: rutas internas server-rendered.
-- `inspector_repository.js`: queries para organizations, accounts, bots y conversaciones.
+- `inspector_repository.js`: queries para organizations, accounts, bots y conversaciones, mas el guardado/autosave del editor de bot. Deriva `acciones_habilitadas_json` desde las interacciones habilitadas que tienen `action_id`.
 - `trace_builder.js`: arma el trace completo de un mensaje.
 - `inspector_presenter.js`: helpers compactos para UI.
 
@@ -158,7 +158,7 @@ Ubicación: `src/bot_engine`
 
 - `bot_configuration_service.js`: crea/lista/actualiza bots configurables desde input directo o `bot_templates`.
 - `bot_template_repository.js`: lee templates editables desde DB.
-- `prompt_compiler.js`: compila prompt final desde bot config, knowledge, memoria y acciones disponibles.
+- `prompt_compiler.js`: compila prompt final desde bot config, knowledge, memoria, acciones disponibles e inyecta el prompt de cada interaccion habilitada.
 - `bot_guardrail_event_repository.js`: registra capability gaps y bloqueos de guardrail.
 - `discovery_question_repository.js`: lee entrevista de descubrimiento versionada desde DB.
 
@@ -208,8 +208,8 @@ Ubicación: `src/voice`
 
 ## Flujo Inbound
 
-1. `POST /webhooks/whatsapp`.
-2. Resolver `whatsapp_phone_number`, assignment activo, `bot`, `account`, `organization`, `tenant`, `branch` y `bot_profile` desde `phone_number_id`.
+1. `POST /webhooks/whatsapp` verifica `X-Hub-Signature-256`, responde `200 {ok:true}` de inmediato y procesa el mensaje async despues del ack. La re-entrega de Meta es segura por idempotencia inbound (dedupe por external message id).
+2. Resolver `whatsapp_phone_number`, assignment activo, `bot`, `account`, `organization` y `bot_profile` desde `phone_number_id`.
 3. Upsert de `contact`.
 4. Upsert de `conversation` con `bot_id`.
 5. Guardar `message` inbound con `raw_payload_json` y `bot_id`.

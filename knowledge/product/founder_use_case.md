@@ -51,7 +51,7 @@ en bots operativos capaces de atender, vender, dar seguimiento, organizar trabaj
 organization -> account -> whatsapp_phone_number -> active bot assignment -> bot configurable
 ```
 
-`tenant`, `branch`, `bot_profile`, `solution_template` y `src/agents` siguen vivos como compatibilidad tecnica/transicional, pero no deben ser la ruta mental principal para vender ni para construir nuevas features.
+`bot_profile`, `solution_template` y `src/agents` siguen vivos como compatibilidad tecnica/transicional, pero no deben ser la ruta mental principal para vender ni para construir nuevas features.
 
 ## Que Debe Poder Definir Un Bot
 

@@ -10,15 +10,13 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
    - Mantener fallback de `src/agents`.
    - Empezar con bots opt-in.
 
-2. Implementar 2-3 actions internas reales antes de integraciones externas.
-   - `guardar_nota`
-   - `crear_tarea`
-   - `crear_solicitud_facturacion`
+2. Implementar mas handlers reales para las actions `stub_*`.
+   - Hoy solo `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecucion interna real.
+   - Priorizar el resto sin venderlas como reales hasta tener handler o proveedor.
 
-3. Crear UI minima de builder interno.
-   - Crear/editar bot configurable.
-   - Habilitar/deshabilitar actions.
-   - Editar prompt, reglas y campos.
+3. Builder LLM de bots desde lenguaje natural.
+   - El editor interno ya permite editar bot configurable, habilitar/deshabilitar actions y editar prompt, reglas y campos.
+   - Siguiente paso: generar y ajustar esa configuracion desde una descripcion en lenguaje natural.
 
 4. Crear vista interna de guardrail events/capability gaps.
    - Filtrar por bot/account/action/tipo.

@@ -8,9 +8,9 @@ Conversation Inspector es una herramienta interna para depurar conversaciones de
 
 El inspector agrega una capa minima sobre el modelo existente:
 
-- `organizations`: agrupacion interna o cliente de alto nivel.
+- `organizations`: negocio de alto nivel. En producto/UI un `organizations` es un "Negocio".
 - `accounts`: cuenta dentro de una organization.
-- `bots`: instancia operativa conectada a un tenant, bot profile y canal.
+- `bots`: instancia operativa conectada a un account, bot profile y canal.
 
 Relaciones actuales:
 
@@ -18,13 +18,12 @@ Relaciones actuales:
 organization
   -> accounts
     -> bots
-      -> tenant
       -> bot_profile
       -> conversations
         -> messages
 ```
 
-`conversations`, `messages`, `agent_runs`, `memory_documents` y `review_items` tienen `bot_id` nullable. Los registros legacy pueden resolverse por tenant, pero el inspector prefiere `bot_id` para evitar magia en queries.
+`conversations`, `messages`, `agent_runs`, `memory_documents` y `review_items` tienen `bot_id` nullable. El inspector prefiere `bot_id` para evitar magia en queries. El aislamiento de conversacion es por `bot_id + contact_id (+ channel)`.
 
 ## Rutas
 
@@ -33,11 +32,26 @@ organization
 - `GET /inspector/organizations/:organization_id`
 - `GET /inspector/accounts/:account_id`
 - `GET /inspector/bots/:bot_id`
+- `POST /inspector/bots/:bot_id` (guardado/autosave del editor de bot)
+- `POST /inspector/bots/:bot_id/test-message`
 - `GET /inspector/bots/:bot_id/conversations`
 - `GET /inspector/conversations/:conversation_id`
 - `GET /inspector/messages/:message_id`
+- `GET` / `POST /inspector/knowledge` (POST con upload a S3)
+- `GET` / `POST /inspector/knowledge/:source_id`
 
 Todas son server-rendered con Pug. No hay SPA ni librerias pesadas.
+
+## Editor De Bot
+
+`GET /inspector/bots/:bot_id` renderiza el editor del bot (`src/web/views/inspector/bot.pug`). Es Pug server-rendered con un Tab Navigator (`src/web/public/js/core/Tab_Navigator.js`) y 7 tabs en este orden: Identidad, Conversaciones, Probar, Knowledge, Canales, Interacciones, Restricciones.
+
+- Los tabs usan `data-section` y los paneles `.tab-section[data-parent-tab][data-section]` se muestran u ocultan via `hidden`.
+- Hay un sistema de iconos SVG inline con mixins de Pug (`+icon(name)`, `+section_head(icon, title, subtitle)`).
+- Autosave: el form se postea a `POST /inspector/bots/:bot_id` en `input`/`change`/`blur` y muestra un timestamp proactivo tipo "Guardado 3:58pm" o "Guardado 5 jun, 4pm" (es-MX 12h). No hay boton "Guardar cambios".
+- `Probar` postea a `POST /inspector/bots/:bot_id/test-message`.
+
+Las capacidades ejecutables se configuran como interacciones, cada una con su propio prompt. Los tipos ejecutables cargan un `action_id` (`buscar_negocios`, `guardar_nota`, `crear_tarea`, `generar_resumen` son los handlers reales; el resto son `stub_*`). Al guardar, `acciones_habilitadas_json` se deriva de las interacciones habilitadas que tienen `action_id`.
 
 ## Trace De Mensaje
 
@@ -95,7 +109,7 @@ Seed crea:
 
 - organization `YoAyudo Demo`
 - account `YoAyudo Ventas`
-- bot demo conectado al tenant demo
+- bot demo conectado al account demo
 
 ## Pendiente Para Produccion
 

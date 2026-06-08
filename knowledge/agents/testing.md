@@ -1,5 +1,11 @@
 # Estrategia De Testing
 
+## Runner
+
+- `npm test` corre Vitest (`vitest run`).
+- Hoy son 17 archivos de test / 57 tests, todos en verde.
+- Los archivos viven en `tests/unit/` y `tests/integration/`.
+
 ## Filosofía
 
 Nos gustan los unit tests cuando protegen lógica que realmente puede romperse:
@@ -53,7 +59,14 @@ Usar cuando una clase o módulo encapsula comportamiento:
 
 ### Integration Tests Con DB
 
-Usar `pg-mem` cuando el objetivo sea rapidez local.
+Usar `pg-mem` (un Postgres en memoria) cuando el objetivo sea rapidez local. Los tests de integracion aplican las migraciones reales sobre `pg-mem` antes de correr.
+
+`pg-mem` soporta lo que el schema necesita hoy: `UPDATE ... FROM`, `DROP COLUMN`, `DROP TABLE`, `ALTER ... SET/DROP NOT NULL` e indices unicos parciales.
+
+Limitaciones conocidas con las que choco el equipo:
+
+- No soporta subconsultas correlacionadas dentro de `UPDATE ... SET` (usar `UPDATE ... FROM`).
+- No soporta `trim()`.
 
 Usar PostgreSQL real cuando:
 

@@ -1,6 +1,6 @@
 # Implementation Status
 
-Fecha de auditoria: 2026-05-27.
+Fecha de auditoria: 2026-06-08.
 
 ## Resumen Actual
 
@@ -22,15 +22,15 @@ La direccion actual es Bot Engine configurable:
 - Configuracion por env vars con Zod.
 - PostgreSQL con migraciones SQL explicitas.
 - Seed demo local.
-- Webhook WhatsApp con verificacion e inbound.
+- Webhook WhatsApp con verificacion `X-Hub-Signature-256`, ack rapido (200) y procesamiento async tras el ack.
+- Idempotencia inbound at-least-once por id externo de mensaje (migracion `0004`).
+- Aislamiento de conversation por `bot_id` + `contact_id` (+ canal), sin tenant.
 - Resolver por `phone_number_id`:
   - `whatsapp_phone_numbers`
   - active `phone_number_bot_assignments`
   - bot
   - account
   - organization
-  - tenant legacy
-- Fallback legacy por tenant/branch/bot_profile.
 - Modelo SaaS base:
   - `organizations`
   - `accounts`
@@ -56,7 +56,9 @@ La direccion actual es Bot Engine configurable:
 - `prompt_compiler` para prompt final auditable.
 - Action Registry en codigo.
 - Action Executor con validacion de schema, permiso por bot, riesgo, confirmacion, audit log y guardrails.
-- Actions internas reales iniciales: `guardar_nota`, `crear_tarea`, `generar_resumen`.
+- Actions con handler real: `buscar_negocios` (prospeccion via Google Places), `guardar_nota`, `crear_tarea`, `generar_resumen`. El resto del registry son stubs `stub_*` de roadmap.
+- Capacidades unificadas como interacciones: el editor ya no tiene una lista separada de "Acciones del bot". Todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`. El prompt compiler inyecta el prompt de cada interaccion en "# Acciones disponibles".
+- Editor de bot server-rendered con tab navigator (Identidad, Conversaciones, Probar, Knowledge, Canales, Interacciones, Restricciones), iconos SVG inline via mixins de Pug y autosave proactivo (`POST /inspector/bots/:bot_id`, indicador "Guardado 3:58pm").
 - `action_audit_logs`.
 - `bot_guardrail_events`.
 - `internal_notes` e `internal_tasks` para preflight founder sin integraciones externas.
@@ -73,9 +75,14 @@ La direccion actual es Bot Engine configurable:
 
 ## Migraciones
 
-El proyecto esta prelaunch, asi que las migraciones historicas se consolidaron en una sola migracion inicial:
+Migraciones SQL explicitas aplicadas en orden por `npm run db:migrate` (registradas en `schema_migrations`):
 
-- `0001_initial.sql`: esquema completo actual, incluyendo modelo operativo legacy, SaaS base, memory/knowledge, routing transicional, Bot Engine configurable, diagnósticos, action audit, guardrails, templates, notas y tareas internas.
+- `0001_initial.sql`: esquema base (modelo operativo legacy, SaaS base, memory/knowledge, routing transicional, Bot Engine configurable, diagnosticos, action audit, guardrails, templates, notas y tareas internas).
+- `0002_repair_business_account_schema.sql`, `0003_repair_bot_engine_schema.sql`: reparaciones de esquema.
+- `0004_message_idempotency.sql`: idempotencia inbound (dedupe por id externo de mensaje).
+- `0005`–`0011`: patron expand-migrate-contract para retirar `tenant`/`branch` y unificar en organization/account (`0005_unify_operational_account`, `0006_account_prep`, `0007_account_lookup_tables`, `0008_loosen_remaining_tenant`, `0009_account_remaining_tables`, `0010_drop_tenant_branch` borra fisicamente tenant/branch, `0011_sync_bot_organization` alinea `bots.organization_id` con su account).
+
+El modelo de datos ya no tiene `tenant` ni `branch`: organization (negocio) -> account (cuenta) -> bot.
 
 ## Endpoints Actuales
 
@@ -99,6 +106,12 @@ Dashboard/review/inspector:
 - `GET /inspector/organizations/:organization_id`
 - `GET /inspector/accounts/:account_id`
 - `GET /inspector/bots/:bot_id`
+- `POST /inspector/bots/:bot_id` (guardado del builder / autosave)
+- `POST /inspector/bots/:bot_id/test-message`
+- `GET /inspector/knowledge`
+- `POST /inspector/knowledge` (texto, URL o upload a S3)
+- `GET /inspector/knowledge/:source_id`
+- `POST /inspector/knowledge/:source_id`
 - `GET /inspector/bots/:bot_id/conversations`
 - `GET /inspector/conversations/:conversation_id`
 - `GET /inspector/messages/:message_id`
@@ -146,7 +159,7 @@ No hay clases ni branches de codigo para estos templates.
 - `bot_profiles` y `bot_intents`: runtime legacy.
 - `src/agents`, `agent_router`, `agent_runs`, `subagents`: routing/orquestacion actual, no centro del futuro.
 - `agent_routing_rules`: fallback legacy.
-- `tenant` y `branch`: boundary tecnico legacy; `accounts.tenant_id` mantiene compatibilidad.
+- `tenant` y `branch`: eliminados (migracion `0010_drop_tenant_branch.sql`). El modelo es organization -> account -> bot.
 
 ## No Funciona Todavia
 
@@ -162,9 +175,7 @@ No hay clases ni branches de codigo para estos templates.
 - S3 productivo probado sin credenciales reales.
 - Vector DB real.
 - Generacion PDF de propuesta.
-- Handlers reales para la mayoria de actions; hoy solo `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecución interna real.
-- Idempotencia robusta por `external_message_id`.
-- Aislamiento de conversation por numero/bot; hoy sigue basado en tenant/contact/channel.
+- Handlers reales para la mayoria de actions; hoy solo `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen` tienen ejecución real. El resto son stubs.
 
 ## Riesgos Tecnicos
 
@@ -177,8 +188,8 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 15 archivos, 47 tests.
-- `npm run db:migrate`: aplica una sola migracion inicial, `0001_initial.sql`.
+- `npm test`: OK, 17 archivos, 57 tests (Vitest).
+- `npm run db:migrate`: aplica las migraciones `0001`–`0011` en orden.
 
 Comandos locales disponibles:
 
