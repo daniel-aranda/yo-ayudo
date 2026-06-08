@@ -65,8 +65,10 @@ block content
       div.bot-editor-tab-shell.wamy-tabs
         div#bot-editor-tabs.tabs(data-initial-tab="identidad", role="tablist", aria-label="Editor de bot")
           button.tab.active(type="button", data-section="identidad", role="tab", aria-selected="true") Identidad
+          button.tab(type="button", data-section="conversaciones", role="tab", aria-selected="false") Conversaciones
           button.tab(type="button", data-section="probar", role="tab", aria-selected="false") Probar
           button.tab(type="button", data-section="knowledge", role="tab", aria-selected="false") Knowledge
+          button.tab(type="button", data-section="canales", role="tab", aria-selected="false") Canales
           button.tab(type="button", data-section="interacciones", role="tab", aria-selected="false") Interacciones
           button.tab(type="button", data-section="restricciones", role="tab", aria-selected="false") Restricciones
 
@@ -171,6 +173,61 @@ block content
           div#assigned_knowledge_hidden
             each knowledge_id in knowledge_ids
               input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
+
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="canales", hidden)
+        h2 Canales soportados
+        if supported_channel_rows.length
+          each channel in supported_channel_rows
+            if channel.channel === "whatsapp"
+              div.channel-config
+                div.channel-header
+                  div.channel-title
+                    span.channel-icon(aria-hidden="true") WA
+                    div
+                      h3= channel.label
+                      p.meta El número por donde tus clientes le escriben a este agente.
+                  if whatsapp_channel_rows.length
+                    span.channel-status.is-connected Conectado
+                  else
+                    span.channel-status.is-idle Sin conectar
+                div.form-grid
+                  div
+                    label(for="whatsapp_display_phone_number") Número de WhatsApp
+                    input#whatsapp_display_phone_number(
+                      type="tel",
+                      name="whatsapp_display_phone_number",
+                      value=primary_whatsapp_channel.display_phone_number || "",
+                      placeholder="+52 55 1234 5678"
+                    )
+                    p.field-hint El número con lada que ven tus clientes.
+                  div
+                    label(for="whatsapp_phone_number_id") ID del número en Meta
+                    input#whatsapp_phone_number_id(
+                      type="text",
+                      name="whatsapp_phone_number_id",
+                      value=primary_whatsapp_channel.phone_number_id || "",
+                      placeholder="1234567890"
+                    )
+                    p.field-hint En Meta WhatsApp Manager → Configuración de la API (phone_number_id).
+                if whatsapp_channel_rows.length
+                  div.table-wrap
+                    table
+                      thead
+                        tr
+                          th Número
+                          th ID Meta
+                          th Estado
+                      tbody
+                        each whatsapp_channel in whatsapp_channel_rows
+                          tr
+                            td= whatsapp_channel.display_phone_number || "Sin número"
+                            td= whatsapp_channel.phone_number_id
+                            td
+                              span.status= whatsapp_channel.status
+                else
+                  p.channel-hint Llena ambos campos para conectar el número. Los cambios se guardan automáticamente.
+        else
+          div.empty Ningún canal soportado disponible.
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="interacciones", hidden)
         div.section-title
@@ -293,71 +350,16 @@ block content
           button#run_bot_test(type="button") Probar bot
           div#bot_test_result.test-result(hidden)
 
-      div.two-column.tab-section(data-parent-tab="bot-editor-tabs", data-section="identidad")
-        section.panel
-          h2 Canales soportados
-          if supported_channel_rows.length
-            each channel in supported_channel_rows
-              if channel.channel === "whatsapp"
-                div.channel-config
-                  div.channel-header
-                    div.channel-title
-                      span.channel-icon(aria-hidden="true") WA
-                      div
-                        h3= channel.label
-                        p.meta El número por donde tus clientes le escriben a este agente.
-                    if whatsapp_channel_rows.length
-                      span.channel-status.is-connected Conectado
-                    else
-                      span.channel-status.is-idle Sin conectar
-                  div.form-grid
-                    div
-                      label(for="whatsapp_display_phone_number") Número de WhatsApp
-                      input#whatsapp_display_phone_number(
-                        type="tel",
-                        name="whatsapp_display_phone_number",
-                        value=primary_whatsapp_channel.display_phone_number || "",
-                        placeholder="+52 55 1234 5678"
-                      )
-                      p.field-hint El número con lada que ven tus clientes.
-                    div
-                      label(for="whatsapp_phone_number_id") ID del número en Meta
-                      input#whatsapp_phone_number_id(
-                        type="text",
-                        name="whatsapp_phone_number_id",
-                        value=primary_whatsapp_channel.phone_number_id || "",
-                        placeholder="1234567890"
-                      )
-                      p.field-hint En Meta WhatsApp Manager → Configuración de la API (phone_number_id).
-                  if whatsapp_channel_rows.length
-                    div.table-wrap
-                      table
-                        thead
-                          tr
-                            th Número
-                            th ID Meta
-                            th Estado
-                        tbody
-                          each whatsapp_channel in whatsapp_channel_rows
-                            tr
-                              td= whatsapp_channel.display_phone_number || "Sin número"
-                              td= whatsapp_channel.phone_number_id
-                              td
-                                span.status= whatsapp_channel.status
-                  else
-                    p.channel-hint Llena ambos campos para conectar el número. Los cambios se guardan automáticamente.
-          else
-            div.empty Ningún canal soportado disponible.
-        section.panel
-          h2 Conversaciones recientes
-          if conversations.length
-            ul.clean-list
-              each conversation in conversations
-                li
-                  a(href=`/inspector/conversations/${conversation.id}`)= conversation.contact_display_name || conversation.contact_phone || conversation.id
-                  span.meta= ` · ${conversation.status || "active"}`
-          else
-            div.empty Sin conversaciones recientes.
+      section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="conversaciones", hidden)
+        h2 Conversaciones recientes
+        if conversations.length
+          ul.clean-list
+            each conversation in conversations
+              li
+                a(href=`/inspector/conversations/${conversation.id}`)= conversation.contact_display_name || conversation.contact_phone || conversation.id
+                span.meta= ` · ${conversation.status || "active"}`
+        else
+          div.empty Sin conversaciones recientes.
   else
     section.page-header
       h1 Agente no encontrado

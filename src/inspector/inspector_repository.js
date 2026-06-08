@@ -460,7 +460,11 @@ export async function get_bot_view(pool, bot_id) {
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,
-    available_actions: list_actions().filter((action) => action.habilitada !== false),
+    // Only surface actions the engine actually supports (real handlers, not "stub_*"
+    // placeholders). The full registry stays intact for engine guardrails.
+    available_actions: list_actions().filter(
+      (action) => action.habilitada !== false && !String(action.handler ?? "").startsWith("stub_"),
+    ),
     conversations: conversations.conversations,
     agent_runs: agent_runs.rows,
     memory_documents: memory_documents.rows,
