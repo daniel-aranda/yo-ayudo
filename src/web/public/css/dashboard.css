@@ -834,14 +834,111 @@ td input {
 }
 
 .interaction-card {
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 16px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
 
-.interaction-card h3 {
+.interaction-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px rgba(17, 106, 91, 0.08);
+}
+
+.interaction-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.interaction-icon {
+  align-items: center;
+  background: #e4f4ef;
+  border-radius: 10px;
+  color: var(--accent-dark);
+  display: inline-flex;
+  flex: none;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.interaction-icon .ui-icon {
+  height: 19px;
+  width: 19px;
+}
+
+.interaction-card-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.interaction-card-titles h3 {
   font-size: 15px;
-  margin: 0 0 12px;
+  margin: 0 0 3px;
+}
+
+.interaction-card-titles .meta {
+  margin: 0;
+}
+
+.interaction-card-controls {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.interaction-remove {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  width: 32px;
+}
+
+.interaction-remove .ui-icon {
+  height: 17px;
+  width: 17px;
+}
+
+.interaction-remove:hover {
+  background: #fcecec;
+  border-color: #f0c8c8;
+  color: #b0322a;
+}
+
+.interaction-field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.interaction-card.is-disabled {
+  background: var(--surface-strong);
+  opacity: 0.7;
+}
+
+.interaction-card.is-disabled:hover {
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.interaction-card.is-disabled .interaction-icon {
+  background: #e7e6df;
+  color: var(--muted);
 }
 
 .channel-header {

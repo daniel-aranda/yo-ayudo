@@ -216,7 +216,11 @@ function parse_human_group_ids(value) {
 }
 
 function parse_interactions(current_interactions, body) {
-  if (body.interaction_type === undefined && !body.new_interaction_type) {
+  // When the editor renders the interactions section it always posts
+  // `interactions_present`. Its presence means "this form fully describes the
+  // interactions" — so an absent interaction_type means the user removed them
+  // all and we persist an empty list (instead of keeping the previous set).
+  if (body.interactions_present === undefined && body.interaction_type === undefined && !body.new_interaction_type) {
     return Array.isArray(current_interactions) ? current_interactions : [];
   }
 
