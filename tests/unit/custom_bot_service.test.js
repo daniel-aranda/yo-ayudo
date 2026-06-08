@@ -86,7 +86,7 @@ describe("custom_bot_service", () => {
     const service = new custom_bot_service({ pool });
     const bots = await service.list_bots_by_account(account.rows[0].id);
 
-    expect(bots.some((bot) => bot.bot_type === "system" && bot.name === "Bot WhatsApp Legacy YoAyudo")).toBe(true);
+    expect(bots.some((bot) => bot.bot_type === "system" && bot.name === "Bot WhatsApp YoAyudo")).toBe(true);
     expect(bots.some((bot) => bot.bot_type === "custom" && bot.name === "Agente WhatsApp YoAyudo")).toBe(true);
     expect(bots.some((bot) => bot.bot_type === "custom" && bot.name === "Agente de Prospectos")).toBe(true);
 

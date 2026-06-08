@@ -321,7 +321,7 @@ export async function get_inspector_home(pool) {
         organizations.name AS organization_name
       FROM bots
       JOIN accounts ON accounts.id = bots.account_id
-      JOIN organizations ON organizations.id = bots.organization_id
+      JOIN organizations ON organizations.id = accounts.organization_id
       WHERE organizations.status = 'active'
         AND accounts.status = 'active'
         AND bots.status = 'active'

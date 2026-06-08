@@ -14,7 +14,7 @@ block content
             th Nombre
             th Tipo
             th Estado
-            th Account
+            th Cuenta
             th
         tbody
           each bot in bots
@@ -26,8 +26,8 @@ block content
               td= bot.bot_type || bot.channel
               td
                 span.status= bot.status
-              td= bot.account_name || "sin account"
+              td= bot.account_name || "sin cuenta"
               td
-                a.button(href=`/inspector/bots/${bot.id}`) Abrir
+                a.button(href=`/inspector/bots/${bot.id}`) Editar
     else
       div.empty Sin bots configurados.

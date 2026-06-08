@@ -411,17 +411,61 @@ async function upsert_account(pool, organization_id) {
 }
 
 async function upsert_bot(pool, input) {
+  // Retire any older "legacy" system bot so it doesn't linger in the demo.
+  await pool.query(
+    "UPDATE bots SET status = 'archived', updated_at = now() WHERE slug = 'bot-whatsapp-legacy-yoayudo'",
+  );
+
   const bot = await upsert_bot_record(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
     bot_profile_id: input.bot_profile_id,
-    name: "Bot WhatsApp Legacy YoAyudo",
-    slug: "bot-whatsapp-legacy-yoayudo",
+    name: "Bot WhatsApp YoAyudo",
+    slug: "bot-whatsapp-yoayudo",
     channel: "whatsapp",
     bot_type: "system",
     status: "active",
-    description: "Bot system de compatibilidad para el pipeline WhatsApp legacy.",
-    settings_json: {},
+    description: "Recibe mensajes de WhatsApp y registra ventas, compras, inventario y el cierre del día del negocio.",
+    definition_json: {
+      identity: {
+        name: "Bot WhatsApp YoAyudo",
+        description: "Recibe mensajes de WhatsApp y registra la operación diaria del negocio.",
+        goal: "Registrar ventas, compras, inventario y el cierre del día a partir de mensajes de WhatsApp, y confirmar cada registro.",
+        status: "active",
+        type: "system",
+      },
+      behavior: {
+        language: "es-MX",
+        tone: "friendly",
+        operating_instructions:
+          "Recibe mensajes del dueño o encargado por WhatsApp y registra ventas, compras, inventario y cierre del día. Confirma cada registro de forma breve y clara. Si falta un dato clave (por ejemplo el monto), pídelo. Si el mensaje no es una operación, no registres nada.",
+        constraints:
+          "No inventes montos ni datos.\nNo registres nada si el mensaje no es una operación.\nConfirma siempre lo que registraste.",
+      },
+      ai: {
+        provider: "openai",
+        model: config.openai_model,
+      },
+      knowledge_source_ids: [],
+      interactions: [
+        {
+          key: "receive_whatsapp_message",
+          type: "receive_whatsapp_message",
+          label: "Recibir mensajes de WhatsApp",
+          enabled: true,
+          instructions: "Recibe mensajes de operación (ventas, compras, inventario, cierre) y clasifícalos para registrarlos.",
+        },
+        {
+          key: "send_whatsapp_message",
+          type: "send_whatsapp_message",
+          label: "Enviar mensaje de WhatsApp",
+          enabled: true,
+          instructions: "Responde una confirmación breve de lo registrado, o pide el dato que falte.",
+        },
+      ],
+    },
+    definition_version: 1,
+    settings_json: { source: "seed", purpose: "operational_whatsapp" },
   });
 
   await pool.query("UPDATE conversations SET bot_id = $1 WHERE account_id = $2 AND bot_id IS NULL", [
@@ -1273,6 +1317,17 @@ export async function seed_development_data(pool) {
       WHERE source_family = 'business_knowledge'
         AND status = 'active'
         AND (summary IS NULL OR summary = '')
+    `,
+  );
+
+  // Keep each bot's organization in sync with its account's organization (source of truth).
+  await pool.query(
+    `
+      UPDATE bots
+      SET organization_id = accounts.organization_id, updated_at = now()
+      FROM accounts
+      WHERE accounts.id = bots.account_id
+        AND bots.organization_id <> accounts.organization_id
     `,
   );
 
