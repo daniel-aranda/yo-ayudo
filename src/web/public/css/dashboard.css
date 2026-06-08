@@ -669,6 +669,91 @@ td input {
   margin: 0 0 12px;
 }
 
+.channel-header {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.channel-title {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.channel-title h3 {
+  margin: 0 0 2px;
+}
+
+.channel-icon {
+  align-items: center;
+  background: #25d366;
+  border-radius: 9px;
+  color: #fff;
+  display: inline-flex;
+  flex: none;
+  font-size: 12px;
+  font-weight: 750;
+  height: 36px;
+  justify-content: center;
+  letter-spacing: 0.5px;
+  width: 36px;
+}
+
+.channel-status {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: none;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 6px;
+  padding: 5px 11px;
+}
+
+.channel-status::before {
+  border-radius: 999px;
+  content: "";
+  height: 8px;
+  width: 8px;
+}
+
+.channel-status.is-connected {
+  background: #e4f4ef;
+  color: var(--accent-dark);
+}
+
+.channel-status.is-connected::before {
+  background: #16a34a;
+}
+
+.channel-status.is-idle {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+.channel-status.is-idle::before {
+  background: #9ca3af;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.channel-hint {
+  background: var(--surface-strong);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+}
+
 .test-bot-panel {
   display: grid;
   gap: 12px;

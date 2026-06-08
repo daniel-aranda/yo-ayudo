@@ -262,47 +262,52 @@ block content
             each channel in supported_channel_rows
               if channel.channel === "whatsapp"
                 div.channel-config
-                  div.section-title
-                    div
-                      h3= channel.label
-                      if whatsapp_channel_rows.length
-                        p.meta Activo
-                      else
-                        p.meta Sin número asignado
+                  div.channel-header
+                    div.channel-title
+                      span.channel-icon(aria-hidden="true") WA
+                      div
+                        h3= channel.label
+                        p.meta El número por donde tus clientes le escriben a este agente.
+                    if whatsapp_channel_rows.length
+                      span.channel-status.is-connected Conectado
+                    else
+                      span.channel-status.is-idle Sin conectar
                   div.form-grid
                     div
-                      label(for="whatsapp_display_phone_number") Número WhatsApp
+                      label(for="whatsapp_display_phone_number") Número de WhatsApp
                       input#whatsapp_display_phone_number(
                         type="tel",
                         name="whatsapp_display_phone_number",
                         value=primary_whatsapp_channel.display_phone_number || "",
-                        placeholder="+525555999999"
+                        placeholder="+52 55 1234 5678"
                       )
+                      p.field-hint El número con lada que ven tus clientes.
                     div
-                      label(for="whatsapp_phone_number_id") Meta phone_number_id
+                      label(for="whatsapp_phone_number_id") ID del número en Meta
                       input#whatsapp_phone_number_id(
                         type="text",
                         name="whatsapp_phone_number_id",
                         value=primary_whatsapp_channel.phone_number_id || "",
                         placeholder="1234567890"
                       )
+                      p.field-hint En Meta WhatsApp Manager → Configuración de la API (phone_number_id).
                   if whatsapp_channel_rows.length
                     div.table-wrap
                       table
                         thead
                           tr
-                            th Canal
                             th Número
-                            th phone_number_id
+                            th ID Meta
                             th Estado
                         tbody
                           each whatsapp_channel in whatsapp_channel_rows
                             tr
-                              td WhatsApp
                               td= whatsapp_channel.display_phone_number || "Sin número"
                               td= whatsapp_channel.phone_number_id
                               td
                                 span.status= whatsapp_channel.status
+                  else
+                    p.channel-hint Llena ambos campos para conectar el número. Los cambios se guardan automáticamente.
           else
             div.empty Ningún canal soportado disponible.
         section.panel
