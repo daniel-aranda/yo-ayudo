@@ -126,6 +126,19 @@ a {
   margin: 0 0 14px;
 }
 
+.panel-subhead {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 20px 0 10px;
+  text-transform: uppercase;
+}
+
+.panel-subhead:first-of-type {
+  margin-top: 10px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

@@ -72,7 +72,7 @@ La direccion actual es Bot Engine configurable:
 - Memory local/mock, S3 memory store stub, Bedrock embedding stub.
 - Conversation Inspector interno.
 - Processing events.
-- Dashboard server-rendered.
+- Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
 - Tests unitarios e integracion del pipeline, router, memory, inspector y Bot Engine comercial.
 

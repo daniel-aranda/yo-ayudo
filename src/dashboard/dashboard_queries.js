@@ -176,6 +176,18 @@ export async function get_account_dashboard_data(pool, input) {
       "SELECT COALESCE(SUM(total_cost), 0) AS purchases_total, count(*)::int AS purchases_count FROM op_purchases WHERE business_day_id = $1",
       [operational_day.id],
     );
+    // Scope the purchases list to THIS day, like every other metric in the panel,
+    // so "Compras del día" and the table always agree (prior days are history,
+    // not today's operation).
+    const day_purchases = await pool.query(
+      `
+        SELECT item_name, quantity, unit, total_cost, supplier_name_raw, created_at
+        FROM op_purchases
+        WHERE business_day_id = $1
+        ORDER BY created_at DESC
+      `,
+      [operational_day.id],
+    );
     const report = await pool.query(
       "SELECT summary_text FROM op_daily_reports WHERE business_day_id = $1 ORDER BY created_at DESC LIMIT 1",
       [operational_day.id],
@@ -184,19 +196,17 @@ export async function get_account_dashboard_data(pool, input) {
       ...operational_day,
       purchases_total: purchases_agg.rows[0]?.purchases_total ?? 0,
       purchases_count: purchases_agg.rows[0]?.purchases_count ?? 0,
+      purchases: day_purchases.rows,
       report_summary: report.rows[0]?.summary_text ?? null,
+      is_closed: operational_day.status === "closed",
+      // The cash/card/transfer split is only populated on close; until then,
+      // hide the row instead of showing three placeholder $0 cards.
+      has_sales_breakdown:
+        Number(operational_day.cash_sales) > 0 ||
+        Number(operational_day.card_sales) > 0 ||
+        Number(operational_day.transfer_sales) > 0,
     };
   }
-  const recent_purchases = await pool.query(
-    `
-      SELECT item_name, quantity, unit, total_cost, supplier_name_raw, created_at
-      FROM op_purchases
-      WHERE account_id = $1
-      ORDER BY created_at DESC
-      LIMIT 5
-    `,
-    [input.account_id],
-  );
 
   const conversation_rows = [];
   for (const conversation of conversations.rows) {
@@ -231,6 +241,5 @@ export async function get_account_dashboard_data(pool, input) {
     stats: stats.rows[0] ?? {},
     capabilities,
     operational_day,
-    recent_purchases: recent_purchases.rows,
   };
 }

@@ -32,6 +32,14 @@ src/dashboard
 - No mostrar raw payloads en dashboard público.
 - El texto debe caber en mobile y desktop.
 
+## Dashboard Operativo De Cuenta
+
+`account.pug` (ruta `/dashboard/business/:id/accounts/:id`; datos en `dashboard_queries.js::get_account_dashboard_data`). El panel "Dashboard operativo" es:
+
+- **Capability-driven**: las métricas operativas (ventas, caja, compras, cierre) solo aparecen si uno o más bots activos de la cuenta las declaran. Se deriva en vivo de la unión de `acciones_habilitadas_json` de los bots → `capabilities { sales, cash, close, purchases, inventory, operational }`. No hay cache: guardar o asociar un bot se refleja en el siguiente render (la "invalidación" es automática).
+- **Single-day scoped**: muestra el último `op_business_days` de la cuenta. Todo el panel (ventas, caja, `purchases_total`/`count` y la tabla de compras) se scopea a ese `business_day_id`, así "Compras del día" y la tabla siempre concuerdan (días previos son historia, no la operación de hoy).
+- **State-driven (sin placeholders falsos)**: "Caja final" solo si el día está cerrado (`is_closed`); el desglose Efectivo/Tarjeta/Transferencia solo si hay datos (`has_sales_breakdown`), no tres $0. Sin `op_business_days` → estado vacío "Aún no hay actividad operativa". Sin capacidad operativa → no se renderiza el panel. Subsecciones con `h3.panel-subhead`.
+
 ## Editor De Bot
 
 El editor de bot (`src/web/views/inspector/bot.pug`) es server-rendered con Pug y un mínimo de JavaScript propio en `src/web/public/js`.

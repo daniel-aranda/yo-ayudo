@@ -29,7 +29,8 @@ block content
       section.panel
         h2 Dashboard operativo
         if operational_day
-          p.meta= `Día ${date(operational_day.operation_date)} · ${operational_day.status === "closed" ? "Cerrado" : "Abierto"}`
+          p.meta= `Día ${date(operational_day.operation_date)} · ${operational_day.is_closed ? "Cerrado" : "Abierto"}`
+          h3.panel-subhead Resumen del día
           .metrics
             if capabilities.sales
               article.metric
@@ -43,11 +44,12 @@ block content
               article.metric
                 span.label Compras del día
                 strong= money(operational_day.purchases_total)
-            if capabilities.close
+            if capabilities.close && operational_day.is_closed
               article.metric
                 span.label Caja final
                 strong= money(operational_day.closing_cash)
-          if capabilities.sales
+          if capabilities.sales && operational_day.has_sales_breakdown
+            h3.panel-subhead Desglose de ventas
             .metrics
               article.metric
                 span.label Efectivo
@@ -58,15 +60,8 @@ block content
               article.metric
                 span.label Transferencia
                 strong= money(operational_day.transfer_sales)
-          if capabilities.purchases
-            .metrics
-              article.metric
-                span.label Compras registradas
-                strong= operational_day.purchases_count || 0
-          if operational_day.report_summary
-            p.meta Resumen del cierre
-            p= operational_day.report_summary
-          if capabilities.purchases && recent_purchases && recent_purchases.length
+          if capabilities.purchases && operational_day.purchases && operational_day.purchases.length
+            h3.panel-subhead= `Compras del día (${operational_day.purchases_count})`
             .table-wrap
               table
                 thead
@@ -76,12 +71,15 @@ block content
                     th Costo
                     th Proveedor
                 tbody
-                  each purchase in recent_purchases
+                  each purchase in operational_day.purchases
                     tr
                       td= purchase.item_name
                       td= `${purchase.quantity || ""} ${purchase.unit || ""}`.trim()
                       td= money(purchase.total_cost)
                       td= purchase.supplier_name_raw || "-"
+          if operational_day.report_summary
+            h3.panel-subhead Resumen del cierre
+            p= operational_day.report_summary
         else
           .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
 
