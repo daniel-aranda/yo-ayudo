@@ -314,6 +314,7 @@ describe("Conversation Inspector", () => {
         interaction_instructions: ["Atender dudas comerciales.", "Prospecta clientes ideales y excluye los ya contactados."],
         interaction_human_group_ids: ["", ""],
         interaction_enabled: ["0", "1"],
+        interaction_option_read_attachments: "0",
         new_interaction_type: "consult_human",
         new_interaction_instructions: "Consultar a humano ante alcance custom.",
         new_interaction_human_group_ids: "ventas",
@@ -345,6 +346,8 @@ describe("Conversation Inspector", () => {
       enabled: true,
       instructions: "Atender dudas comerciales.",
     });
+    // "Entender adjuntos" sub-option is opt-in and parsed per interaction index.
+    expect(updated.rows[0].definition_json.interactions[0].options).toEqual({ read_attachments: true });
     expect(updated.rows[0].definition_json.interactions[1]).toMatchObject({
       key: "buscar_negocios",
       type: "buscar_negocios",

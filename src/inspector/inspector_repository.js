@@ -53,6 +53,13 @@ export const available_agent_interactions = [
     description: "Permite que el agente reciba y evalúe mensajes entrantes de WhatsApp.",
     instructions_placeholder:
       "Describe qué mensajes debe atender este agente, qué mensajes debe ignorar y cuándo debe pedir más contexto.",
+    options: [
+      {
+        key: "read_attachments",
+        label: "Entender adjuntos",
+        description: "Procesa imágenes, archivos y otros adjuntos del mensaje, no solo el texto.",
+      },
+    ],
   },
   {
     type: "consult_human",
@@ -98,6 +105,15 @@ export const available_agent_interactions = [
     instructions_placeholder:
       "Describe cuándo generar un resumen y qué debe contener (puntos clave, próximos pasos, datos del prospecto).",
     action_id: "generar_resumen",
+  },
+  {
+    type: "responder_voz",
+    key: "responder_voz",
+    label: "Responder con voz",
+    description: "Responde por WhatsApp con un mensaje de voz generado con ElevenLabs.",
+    instructions_placeholder:
+      "Describe cuándo responder con voz en lugar de texto (p. ej. saludos, explicaciones largas o seguimiento), y el tono que debe usar.",
+    action_id: "responder_con_voz",
   },
 ];
 
@@ -225,13 +241,32 @@ function parse_interactions(current_interactions, body) {
   }
 
   const enabled_indexes = checked_indexes(body.interaction_enabled);
+  // Per-interaction sub-options (e.g. "read_attachments") are posted as
+  // `interaction_option_<key>` checkboxes whose value is the card index, mirroring
+  // how `interaction_enabled` works. Cache the checked-index set per option key.
+  const option_index_cache = {};
+  const option_checked = (key, index) => {
+    if (!(key in option_index_cache)) option_index_cache[key] = checked_indexes(body[`interaction_option_${key}`]);
+    return option_index_cache[key].has(String(index));
+  };
+  const build_options = (type, resolver) => {
+    const available = available_interaction_by_type(type);
+    const options = {};
+    for (const option of available?.options ?? []) options[option.key] = resolver(option.key);
+    return options;
+  };
+
   const rows = row_objects(["type", "instructions", "human_group_ids"], body, "interaction")
-    .map((row, index) => ({
-      type: String(row.type ?? "").trim(),
-      instructions: String(row.instructions ?? "").trim(),
-      human_group_ids: parse_human_group_ids(row.human_group_ids),
-      enabled: enabled_indexes.has(String(index)),
-    }))
+    .map((row, index) => {
+      const type = String(row.type ?? "").trim();
+      return {
+        type,
+        instructions: String(row.instructions ?? "").trim(),
+        human_group_ids: parse_human_group_ids(row.human_group_ids),
+        enabled: enabled_indexes.has(String(index)),
+        options: build_options(type, (key) => option_checked(key, index)),
+      };
+    })
     .filter((row) => available_interaction_by_type(row.type));
 
   const new_type = String(body.new_interaction_type ?? "").trim();
@@ -241,6 +276,7 @@ function parse_interactions(current_interactions, body) {
       instructions: String(body.new_interaction_instructions ?? "").trim(),
       human_group_ids: parse_human_group_ids(body.new_interaction_human_group_ids),
       enabled: true,
+      options: build_options(new_type, () => false),
     });
   }
 
@@ -255,6 +291,7 @@ function parse_interactions(current_interactions, body) {
         enabled: row.enabled,
         instructions: row.instructions,
         ...(available.action_id ? { action_id: available.action_id } : {}),
+        ...(row.options && Object.keys(row.options).length ? { options: row.options } : {}),
         ...(row.type === "consult_human" ? { human_group_ids: row.human_group_ids } : {}),
       });
     }

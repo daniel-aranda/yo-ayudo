@@ -1,4 +1,5 @@
 import { search_business_prospects } from "../prospecting/business_search_service.js";
+import { synthesize_voice_reply } from "../voice/elevenlabs_voice_service.js";
 
 function normalize_due_at(value) {
   if (!value) {
@@ -149,11 +150,32 @@ async function buscar_negocios(_pool, context) {
   };
 }
 
+async function responder_con_voz(_pool, context) {
+  const result = await synthesize_voice_reply(context.input_json ?? {});
+
+  return {
+    status: result.status,
+    confirmation_required: false,
+    output: {
+      mensaje: result.message,
+      proveedor: result.provider,
+      voice_id: result.voice_id ?? null,
+      model_id: result.model_id ?? null,
+      content_type: result.content_type ?? null,
+      audio_bytes: result.audio_bytes ?? null,
+      caracteres: result.characters ?? null,
+      // Raw audio (when generated) is handed to the outbound sender, not persisted.
+      ...(result.audio ? { audio_generado: true } : {}),
+    },
+  };
+}
+
 const handlers = {
   guardar_nota,
   crear_tarea,
   generar_resumen,
   buscar_negocios,
+  responder_con_voz,
 };
 
 export async function execute_internal_action_handler(pool, action, context) {

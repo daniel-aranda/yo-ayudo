@@ -85,7 +85,13 @@ export class prompt_compiler {
       "# Interacciones permitidas",
       list_items(
         interactions.filter((interaction) => interaction.enabled !== false),
-        (interaction) => `${interaction.label ?? interaction.type}: ${interaction.instructions ?? ""}`,
+        (interaction) => {
+          let line = `${interaction.label ?? interaction.type}: ${interaction.instructions ?? ""}`;
+          if (interaction.options?.read_attachments) {
+            line += " Además puede recibir y entender adjuntos (imágenes, archivos): considéralos como parte del mensaje.";
+          }
+          return line;
+        },
       ),
       "",
       "# Acciones disponibles",

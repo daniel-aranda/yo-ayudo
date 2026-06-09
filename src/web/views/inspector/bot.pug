@@ -65,6 +65,8 @@ block content
       task: `${svg_open}<rect x="6" y="5" width="12" height="16" rx="1.5"/><path d="M9.5 5V4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/><path d="M9.5 13l1.8 1.8L15 11"/></svg>`,
       summary: `${svg_open}<rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg>`,
       trash: `${svg_open}<path d="M5 7h14"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l.8 12.2A1.5 1.5 0 0 0 9.3 20.5h5.4a1.5 1.5 0 0 0 1.5-1.3L17 7"/><path d="M10.5 11v6M13.5 11v6"/></svg>`,
+      chevron: `${svg_open}<path d="M6 9.5l6 6 6-6"/></svg>`,
+      mic: `${svg_open}<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M9 21h6"/></svg>`,
     };
     const editor_icon = (name) => editor_icons[name] || `${svg_open}<circle cx="12" cy="12" r="9"/></svg>`;
     const interaction_icons = {
@@ -75,12 +77,34 @@ block content
       guardar_nota: "note",
       crear_tarea: "task",
       generar_resumen: "summary",
+      responder_voz: "mic",
     };
     const interaction_icon = (type) => editor_icon(interaction_icons[type] || "bolt");
     const interaction_icon_svgs_json = JSON.stringify(
       Object.fromEntries((Array.isArray(available_interactions) ? available_interactions : []).map((item) => [item.type, interaction_icon(item.type)])),
     ).replace(/</g, "\\u003c");
     const editor_trash_svg_json = JSON.stringify(editor_icon("trash")).replace(/</g, "\\u003c");
+    const editor_chevron_svg_json = JSON.stringify(editor_icon("chevron")).replace(/</g, "\\u003c");
+    const interaction_options_by_type_json = JSON.stringify(
+      Object.fromEntries((Array.isArray(available_interactions) ? available_interactions : []).map((item) => [item.type, item.options || []])),
+    ).replace(/</g, "\\u003c");
+    // Per-category color: { accent (border + icon), tint (icon badge background) }.
+    const interaction_colors = {
+      receive_whatsapp_message: { accent: "#1f9d6b", tint: "#e4f4ee" },
+      send_whatsapp_message: { accent: "#34b27a", tint: "#e7f6ef" },
+      consult_human: { accent: "#2f6fed", tint: "#e7effe" },
+      buscar_negocios: { accent: "#7c5cf0", tint: "#efeafe" },
+      guardar_nota: { accent: "#e0930a", tint: "#fbf0db" },
+      crear_tarea: { accent: "#e0533d", tint: "#fbe9e4" },
+      generar_resumen: { accent: "#c43d8a", tint: "#fbe8f2" },
+      responder_voz: { accent: "#0e9aa7", tint: "#e1f4f5" },
+    };
+    const interaction_color = (type) => interaction_colors[type] || { accent: "#116a5b", tint: "#e4f4ef" };
+    const interaction_card_style = (type) => {
+      const color = interaction_color(type);
+      return `--ix-accent: ${color.accent}; --ix-tint: ${color.tint};`;
+    };
+    const interaction_colors_json = JSON.stringify(interaction_colors).replace(/</g, "\\u003c");
 
   mixin icon(name)
     != editor_icon(name)
@@ -302,17 +326,22 @@ block content
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="interacciones", hidden)
         +section_head("bolt", "Interacciones", "Lo que el agente puede hacer y cómo. Cada interacción tiene su propio prompt que define cuándo y cómo usarla.")
+        div.interaction-toolbar
+          button#toggle_all_interactions.toggle-all(type="button")
+            span.toggle-all-icon(aria-hidden="true")!= editor_icon("chevron")
+            span.toggle-all-label Expandir todos
         input(type="hidden", name="interactions_present", value="1")
         if interactions.length
           div.interaction-grid
             each interaction, index in interactions
               -
                 const system_interaction = system_interactions.find((item) => item.type === interaction.type) || interaction;
-              div.interaction-card(
+              div.interaction-card.is-collapsed(
                 data-type=system_interaction.type,
                 data-label=system_interaction.label || interaction.label,
                 data-description=system_interaction.description || "",
                 data-placeholder=system_interaction.instructions_placeholder || "",
+                style=interaction_card_style(system_interaction.type),
                 class=(interaction.enabled === false ? "is-disabled" : "")
               )
                 input(type="hidden", name="interaction_type", value=system_interaction.type)
@@ -323,33 +352,47 @@ block content
                     if system_interaction.description
                       p.meta= system_interaction.description
                   div.interaction-card-controls
-                    label.checkbox-line
+                    label.interaction-switch
                       input(type="checkbox", name="interaction_enabled", value=index, checked=interaction.enabled !== false)
-                      | Habilitada
+                      span.switch-track(aria-hidden="true")
+                      span.switch-label Habilitada
                     button.interaction-remove(type="button", title="Quitar interacción", aria-label="Quitar interacción")!= editor_icon("trash")
-                label.interaction-field-label Instrucciones
-                textarea(
-                  name="interaction_instructions",
-                  rows="4",
-                  placeholder=system_interaction.instructions_placeholder || "Describe cuándo y cómo debe usar esta interacción."
-                )= interaction.instructions || ""
-                if interaction.type === "consult_human"
-                  -
-                    const selected_human_group_id = Array.isArray(interaction.human_group_ids)
-                      ? interaction.human_group_ids.find((id) => human_group_options.some((group) => group.id === id)) || ""
-                      : "";
-                  label(for=`interaction_human_group_ids_${index}`) Grupos humanos
-                  select(
-                    id=`interaction_human_group_ids_${index}`,
-                    name="interaction_human_group_ids",
-                  )
-                    option(value="") Selecciona grupo humano
-                    each group in human_group_options
-                      option(value=group.id, selected=selected_human_group_id === group.id)= group.label
-                  if !selected_human_group_id
-                    p.config-warning Sin grupo humano asignado: el agente no sabrá a quién escalar.
-                else
-                  input(type="hidden", name="interaction_human_group_ids", value="")
+                    button.interaction-collapse(type="button", aria-label="Mostrar u ocultar instrucciones", aria-expanded="false")!= editor_icon("chevron")
+                div.interaction-card-body
+                  label.interaction-field-label Instrucciones
+                  textarea(
+                    name="interaction_instructions",
+                    rows="4",
+                    placeholder=system_interaction.instructions_placeholder || "Describe cuándo y cómo debe usar esta interacción."
+                  )= interaction.instructions || ""
+                  if (system_interaction.options || []).length
+                    div.interaction-options
+                      each option in system_interaction.options
+                        - const option_on = !!(interaction.options && interaction.options[option.key]);
+                        label.interaction-switch.interaction-option
+                          input(type="checkbox", name=`interaction_option_${option.key}`, value=index, checked=option_on)
+                          span.switch-track(aria-hidden="true")
+                          span.interaction-option-text
+                            span.interaction-option-label= option.label
+                            if option.description
+                              span.interaction-option-desc= option.description
+                  if interaction.type === "consult_human"
+                    -
+                      const selected_human_group_id = Array.isArray(interaction.human_group_ids)
+                        ? interaction.human_group_ids.find((id) => human_group_options.some((group) => group.id === id)) || ""
+                        : "";
+                    label(for=`interaction_human_group_ids_${index}`) Grupos humanos
+                    select(
+                      id=`interaction_human_group_ids_${index}`,
+                      name="interaction_human_group_ids",
+                    )
+                      option(value="") Selecciona grupo humano
+                      each group in human_group_options
+                        option(value=group.id, selected=selected_human_group_id === group.id)= group.label
+                    if !selected_human_group_id
+                      p.config-warning Sin grupo humano asignado: el agente no sabrá a quién escalar.
+                  else
+                    input(type="hidden", name="interaction_human_group_ids", value="")
         div.empty#interaction_empty_state(hidden=interactions.length > 0) Ninguna interacción configurada.
 
         div.inline-add-row
@@ -420,6 +463,9 @@ block content
       const humanGroupOptions = !{human_group_options_json};
       const interactionIconSvgs = !{interaction_icon_svgs_json};
       const interactionTrashSvg = !{editor_trash_svg_json};
+      const interactionChevronSvg = !{editor_chevron_svg_json};
+      const interactionColors = !{interaction_colors_json};
+      const interactionOptionsByType = !{interaction_options_by_type_json};
 
       function renderHumanGroupSelect() {
         const options = humanGroupOptions
@@ -452,8 +498,11 @@ block content
       // back; keep them in sync with DOM order after any add/remove.
       function reindexInteractions() {
         document.querySelectorAll(".interaction-card").forEach((card, position) => {
-          const checkbox = card.querySelector('input[name="interaction_enabled"]');
-          if (checkbox) checkbox.value = String(position);
+          card
+            .querySelectorAll('input[name="interaction_enabled"], input[name^="interaction_option_"]')
+            .forEach((checkbox) => {
+              checkbox.value = String(position);
+            });
         });
       }
 
@@ -483,10 +532,29 @@ block content
         card.dataset.description = description || "";
         card.dataset.placeholder = placeholder || "";
         const iconSvg = interactionIconSvgs[type] || "";
+        const color = interactionColors[type] || { accent: "#116a5b", tint: "#e4f4ef" };
+        card.style.setProperty("--ix-accent", color.accent);
+        card.style.setProperty("--ix-tint", color.tint);
         const humanField =
           type === "consult_human"
             ? renderHumanGroupSelect()
             : '<input type="hidden" name="interaction_human_group_ids" value="">';
+        const options = interactionOptionsByType[type] || [];
+        const optionsHtml = options.length
+          ? `<div class="interaction-options">${options
+              .map(
+                (option) => `
+                <label class="interaction-switch interaction-option">
+                  <input type="checkbox" name="interaction_option_${escapeHtml(option.key)}" value="0">
+                  <span class="switch-track" aria-hidden="true"></span>
+                  <span class="interaction-option-text">
+                    <span class="interaction-option-label">${escapeHtml(option.label)}</span>
+                    ${option.description ? `<span class="interaction-option-desc">${escapeHtml(option.description)}</span>` : ""}
+                  </span>
+                </label>`,
+              )
+              .join("")}</div>`
+          : "";
         card.innerHTML = `
           <input type="hidden" name="interaction_type" value="${escapeHtml(type)}">
           <div class="interaction-card-head">
@@ -496,16 +564,21 @@ block content
               ${description ? `<p class="meta">${escapeHtml(description)}</p>` : ""}
             </div>
             <div class="interaction-card-controls">
-              <label class="checkbox-line">
+              <label class="interaction-switch">
                 <input type="checkbox" name="interaction_enabled" value="0" ${enabled ? "checked" : ""}>
-                Habilitada
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-label">Habilitada</span>
               </label>
               <button class="interaction-remove" type="button" title="Quitar interacción" aria-label="Quitar interacción">${interactionTrashSvg}</button>
+              <button class="interaction-collapse" type="button" aria-label="Mostrar u ocultar instrucciones" aria-expanded="true">${interactionChevronSvg}</button>
             </div>
           </div>
-          <label class="interaction-field-label">Instrucciones</label>
-          <textarea name="interaction_instructions" rows="4" placeholder="${escapeHtml(placeholder || "")}"></textarea>
-          ${humanField}
+          <div class="interaction-card-body">
+            <label class="interaction-field-label">Instrucciones</label>
+            <textarea name="interaction_instructions" rows="4" placeholder="${escapeHtml(placeholder || "")}"></textarea>
+            ${optionsHtml}
+            ${humanField}
+          </div>
         `;
         return card;
       }
@@ -543,6 +616,8 @@ block content
         interactionPicker.value = "";
         reindexInteractions();
         refreshInteractionEmptyState();
+        refreshToggleAll();
+        card.scrollIntoView({ block: "nearest", behavior: "smooth" });
         syncInteractionPicker();
         window.bot_editor_autosave?.request_save({
           control: { name: "interaction_type", tag: "button", value: type },
@@ -551,30 +626,66 @@ block content
       });
 
       const interactionsSection = document.querySelector('.tab-section[data-section="interacciones"]');
+      const toggleAllButton = document.getElementById("toggle_all_interactions");
+
+      function setCardCollapsed(card, collapsed) {
+        card.classList.toggle("is-collapsed", collapsed);
+        const chevron = card.querySelector(".interaction-collapse");
+        if (chevron) chevron.setAttribute("aria-expanded", String(!collapsed));
+      }
+
+      function refreshToggleAll() {
+        if (!toggleAllButton) return;
+        const cards = [...document.querySelectorAll(".interaction-card")];
+        toggleAllButton.hidden = cards.length === 0;
+        const allCollapsed = cards.length > 0 && cards.every((card) => card.classList.contains("is-collapsed"));
+        toggleAllButton.dataset.mode = allCollapsed ? "expand" : "collapse";
+        toggleAllButton.classList.toggle("is-open", !allCollapsed);
+        const label = toggleAllButton.querySelector(".toggle-all-label");
+        if (label) label.textContent = allCollapsed ? "Expandir todos" : "Compactar todos";
+      }
+
+      toggleAllButton?.addEventListener("click", () => {
+        const expand = toggleAllButton.dataset.mode === "expand";
+        document.querySelectorAll(".interaction-card").forEach((card) => setCardCollapsed(card, !expand));
+        refreshToggleAll();
+      });
 
       interactionsSection?.addEventListener("click", (event) => {
         const removeButton = event.target.closest(".interaction-remove");
-        if (!removeButton) return;
-        const card = removeButton.closest(".interaction-card");
-        if (!card) return;
-        const instructions = card.querySelector('textarea[name="interaction_instructions"]');
-        const hasText = Boolean(instructions && instructions.value.trim());
-        if (hasText && !window.confirm("¿Quitar esta interacción? Se perderá su prompt.")) return;
-        const meta = {
-          type: card.dataset.type,
-          label: card.dataset.label,
-          description: card.dataset.description,
-          placeholder: card.dataset.placeholder,
-        };
-        card.remove();
-        restoreInteractionOption(meta);
-        reindexInteractions();
-        refreshInteractionEmptyState();
-        syncInteractionPicker();
-        window.bot_editor_autosave?.request_save({
-          control: { name: "interaction_type", tag: "button", value: meta.type },
-          event: { type: "remove_interaction" },
-        });
+        if (removeButton) {
+          const card = removeButton.closest(".interaction-card");
+          if (!card) return;
+          const instructions = card.querySelector('textarea[name="interaction_instructions"]');
+          const hasText = Boolean(instructions && instructions.value.trim());
+          if (hasText && !window.confirm("¿Quitar esta interacción? Se perderá su prompt.")) return;
+          const meta = {
+            type: card.dataset.type,
+            label: card.dataset.label,
+            description: card.dataset.description,
+            placeholder: card.dataset.placeholder,
+          };
+          card.remove();
+          restoreInteractionOption(meta);
+          reindexInteractions();
+          refreshInteractionEmptyState();
+          refreshToggleAll();
+          syncInteractionPicker();
+          window.bot_editor_autosave?.request_save({
+            control: { name: "interaction_type", tag: "button", value: meta.type },
+            event: { type: "remove_interaction" },
+          });
+          return;
+        }
+
+        // Expand/collapse: chevron button, or clicking the header (but not the switch).
+        const head = event.target.closest(".interaction-card-head");
+        if (head && !event.target.closest(".interaction-switch")) {
+          const card = head.closest(".interaction-card");
+          if (!card) return;
+          setCardCollapsed(card, !card.classList.contains("is-collapsed"));
+          refreshToggleAll();
+        }
       });
 
       // Dim a card live when its "Habilitada" toggle is turned off.
@@ -585,6 +696,7 @@ block content
         if (card) card.classList.toggle("is-disabled", !checkbox.checked);
       });
 
+      refreshToggleAll();
       syncInteractionPicker();
 
       const knowledgePicker = document.getElementById("knowledge_source_picker");

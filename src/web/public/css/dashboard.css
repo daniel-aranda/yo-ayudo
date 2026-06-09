@@ -836,14 +836,14 @@ td input {
 .interaction-card {
   background: var(--surface);
   border: 1px solid var(--line);
+  border-left: 4px solid var(--ix-accent, var(--line));
   border-radius: 10px;
-  padding: 16px;
+  padding: 16px 16px 16px 18px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
 
 .interaction-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 1px 4px rgba(17, 106, 91, 0.08);
+  box-shadow: 0 2px 10px rgba(20, 20, 20, 0.07);
 }
 
 .interaction-card-head {
@@ -855,9 +855,9 @@ td input {
 
 .interaction-icon {
   align-items: center;
-  background: #e4f4ef;
+  background: var(--ix-tint, #e4f4ef);
   border-radius: 10px;
-  color: var(--accent-dark);
+  color: var(--ix-accent, var(--accent-dark));
   display: inline-flex;
   flex: none;
   height: 38px;
@@ -928,17 +928,211 @@ td input {
 
 .interaction-card.is-disabled {
   background: var(--surface-strong);
-  opacity: 0.7;
+  border-left-color: var(--line);
+  opacity: 0.72;
 }
 
 .interaction-card.is-disabled:hover {
-  border-color: var(--line);
   box-shadow: none;
 }
 
 .interaction-card.is-disabled .interaction-icon {
   background: #e7e6df;
   color: var(--muted);
+}
+
+/* iOS-style toggle for the "Habilitada" control */
+.interaction-switch {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 9px;
+  margin: 0;
+  user-select: none;
+}
+
+.interaction-switch input {
+  height: 0;
+  opacity: 0;
+  position: absolute;
+  width: 0;
+}
+
+.switch-track {
+  background: #c9cdc4;
+  border-radius: 999px;
+  flex: none;
+  height: 22px;
+  position: relative;
+  transition: background 0.18s ease;
+  width: 38px;
+}
+
+.switch-track::after {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  content: "";
+  height: 18px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 0.18s ease;
+  width: 18px;
+}
+
+.interaction-switch input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.interaction-switch input:checked + .switch-track::after {
+  transform: translateX(16px);
+}
+
+.interaction-switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.interaction-switch input:checked ~ .switch-label {
+  color: var(--text);
+}
+
+/* Collapsible card: prompt hidden until expanded */
+.interaction-card-head {
+  cursor: pointer;
+}
+
+.interaction-card.is-collapsed .interaction-card-head {
+  margin-bottom: 0;
+}
+
+.interaction-card.is-collapsed .interaction-card-body {
+  display: none;
+}
+
+.interaction-card.is-collapsed .interaction-card-titles .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.interaction-collapse {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+  width: 32px;
+}
+
+.interaction-collapse .ui-icon {
+  height: 18px;
+  transition: transform 0.18s ease;
+  width: 18px;
+}
+
+.interaction-collapse:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.interaction-card:not(.is-collapsed) .interaction-collapse .ui-icon {
+  transform: rotate(180deg);
+}
+
+/* Expand/collapse-all toolbar */
+.interaction-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 12px;
+}
+
+.toggle-all {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 11px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.toggle-all[hidden] {
+  display: none;
+}
+
+.toggle-all:hover {
+  background: var(--surface-strong);
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.toggle-all-icon {
+  align-items: center;
+  display: inline-flex;
+}
+
+.toggle-all-icon .ui-icon {
+  height: 16px;
+  transition: transform 0.18s ease;
+  width: 16px;
+}
+
+.toggle-all.is-open .toggle-all-icon .ui-icon {
+  transform: rotate(180deg);
+}
+
+/* Per-interaction sub-options (e.g. "Entender adjuntos") */
+.interaction-options {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.interaction-option {
+  align-items: flex-start;
+}
+
+.interaction-option .switch-track {
+  margin-top: 1px;
+}
+
+.interaction-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.interaction-option-label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.interaction-option-desc {
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .channel-header {

@@ -502,6 +502,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       enabled: true,
       instructions:
         "Atiende mensajes de vendedores relacionados con dudas sobre YoAyudo, capacidades, integraciones, pricing o estrategia comercial. Ignora mensajes que no requieran acción o respuesta.",
+      options: { read_attachments: true },
     },
     {
       key: "send_whatsapp_message",
