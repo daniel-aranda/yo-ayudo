@@ -1135,6 +1135,100 @@ td input {
   font-size: 12.5px;
 }
 
+/* Activity / status view: per-interaction execution log */
+.activity-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-pill {
+  align-items: center;
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12.5px;
+  font-weight: 650;
+  padding: 4px 10px;
+}
+
+.status-executed {
+  background: #e4f4ee;
+  color: #1f7a55;
+}
+
+.status-failed,
+.status-unknown_action {
+  background: #fcecec;
+  color: #b0322a;
+}
+
+.status-pending_provider,
+.status-not_implemented {
+  background: #fbf0db;
+  color: #9a6a06;
+}
+
+.status-pending_confirmation {
+  background: #e7effe;
+  color: #2f5fc0;
+}
+
+.status-blocked {
+  background: #efece6;
+  color: #6b5a3e;
+}
+
+.activity-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.activity-table th,
+.activity-table td {
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.activity-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.activity-back {
+  color: var(--accent-dark);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.activity-back:hover {
+  text-decoration: underline;
+}
+
+.activity-link {
+  align-self: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.activity-link:hover {
+  background: var(--surface-strong);
+  border-color: var(--muted);
+}
+
 .channel-header {
   align-items: start;
   display: flex;

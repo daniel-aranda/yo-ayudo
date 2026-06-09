@@ -1,4 +1,5 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
+import { get_action } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, update_bot_configuration } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
@@ -543,6 +544,58 @@ export async function get_bot_view(pool, bot_id) {
     memory_documents: memory_documents.rows,
     review_items: review_items.rows,
   };
+}
+
+// Activity / status view: per-bot log of action executions (from action_audit_logs)
+// + guardrail events, so operators can see when interactions work or fail
+// (incl. external API failures like ElevenLabs/Places/WhatsApp not configured).
+export async function get_bot_activity_view(pool, bot_id) {
+  const bot = await get_bot_by_id(pool, bot_id);
+  if (!bot) {
+    return null;
+  }
+
+  const audit = await pool.query(
+    `
+      SELECT action_id, status, output_json, error, actor_type, confirmation_required, created_at
+      FROM action_audit_logs
+      WHERE bot_id = $1
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
+    [bot_id],
+  );
+  const guardrails = await pool.query(
+    `
+      SELECT tipo, action_id, descripcion, severidad, created_at
+      FROM bot_guardrail_events
+      WHERE bot_id = $1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `,
+    [bot_id],
+  );
+
+  const activity = audit.rows.map((row) => {
+    const action = get_action(row.action_id);
+    const output = row.output_json ?? {};
+    return {
+      action_id: row.action_id,
+      label: action?.nombre ?? row.action_id,
+      status: row.status,
+      message: row.error || output.mensaje || output.message || "",
+      actor_type: row.actor_type,
+      confirmation_required: row.confirmation_required,
+      created_at: row.created_at,
+    };
+  });
+
+  const summary = activity.reduce((acc, row) => {
+    acc[row.status] = (acc[row.status] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return { bot, activity, guardrails: guardrails.rows, summary };
 }
 
 export async function update_bot_builder_view(pool, bot_id, body) {

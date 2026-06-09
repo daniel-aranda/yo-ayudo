@@ -51,6 +51,23 @@ Templates como `recepcionista_ai`, `seguimiento_ventas`, `agenda_facil`, `factur
 12. Registrar audit log y guardrail events.
 13. Responder al usuario o escalar.
 
+## Flujo De Ejecucion (Estado Actual)
+
+El ciclo de arriba es el contrato. Hoy ese flujo se dispara desde dos lugares, **no** desde el WhatsApp entrante real:
+
+- `bot_engine_test_service.test_message()`: el tab "Probar bot" y los tests de preflight.
+- `POST /internal/action-executions` (`src/commercial/commercial_routes.js`): ejecucion directa de una accion por API.
+
+El inbound real de WhatsApp (`webhook -> handle_whatsapp_webhook_payload` en `src/engine/message_processor.js`) todavia usa el pipeline legacy: parsea, rutea y responde texto con `whatsapp_client.send_text`. **No** llama al Bot Engine ni a `execute_action`. Conectar inbound -> engine es lo pendiente para ejecucion autonoma de acciones en mensajes entrantes reales.
+
+Como se deciden las acciones (en `test_message`):
+
+- Con AI real (`provider.decide_bot_test_message`, ej. OpenAI): el modelo lee el prompt compilado + `acciones_disponibles` y devuelve `{ reply, action_requests: [{ action_id, input }] }`.
+- Con `AI_PROVIDER=mock` o sin provider: heuristica por keywords (`infer_action_requests_from_message`) que mapea el texto a acciones (ej. "buscar negocios" -> `buscar_negocios`).
+- El caller tambien puede pasar `action_requests` explicitos.
+
+Cada `action_request` pasa por `action_execution_service.execute_action`, que aplica la cadena de validacion en orden: existe en el registry -> habilitada en el registry -> habilitada para el bot (via `acciones_habilitadas_json`) -> permisos -> `input_schema` -> riesgo/confirmacion. Luego corre el handler real (`execute_internal_action_handler`) o un stub seguro. Siempre escribe `action_audit_logs` y, cuando aplica, `bot_guardrail_events`.
+
 ## Conceptos
 
 ### Bot Definition / Config

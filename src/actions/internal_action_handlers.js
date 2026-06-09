@@ -1,5 +1,7 @@
 import { search_business_prospects } from "../prospecting/business_search_service.js";
 import { synthesize_voice_reply } from "../voice/elevenlabs_voice_service.js";
+import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
+import { operational_action_handlers } from "./operational_action_handlers.js";
 
 function normalize_due_at(value) {
   if (!value) {
@@ -150,22 +152,87 @@ async function buscar_negocios(_pool, context) {
   };
 }
 
-async function responder_con_voz(_pool, context) {
-  const result = await synthesize_voice_reply(context.input_json ?? {});
+async function resolve_recipient_phone(pool, context) {
+  const explicit = String(
+    context.input_json?.to ?? context.input_json?.telefono ?? context.input_json?.numero ?? "",
+  ).trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  if (!pool || !context.conversation_id) {
+    return "";
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT c.whatsapp_phone
+        FROM conversations cv
+        JOIN contacts c ON c.id = cv.contact_id
+        WHERE cv.id = $1
+        LIMIT 1
+      `,
+      [context.conversation_id],
+    );
+    return String(result.rows[0]?.whatsapp_phone ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function responder_con_voz(pool, context) {
+  const voice = await synthesize_voice_reply(context.input_json ?? {}, context.voice_options ?? {});
+
+  // No audio generated (no key, no text, or provider error): surface as-is.
+  if (voice.status !== "executed" || !voice.audio) {
+    return {
+      status: voice.status,
+      confirmation_required: false,
+      output: {
+        mensaje: voice.message,
+        proveedor: voice.provider,
+        voice_id: voice.voice_id ?? null,
+      },
+    };
+  }
+
+  const to = await resolve_recipient_phone(pool, context);
+  if (!to) {
+    return {
+      status: "failed",
+      confirmation_required: false,
+      output: {
+        mensaje: "Audio generado, pero falta el número de destino (envía `to` o usa una conversación con contacto).",
+        proveedor: voice.provider,
+        voice_id: voice.voice_id ?? null,
+        audio_bytes: voice.audio_bytes ?? null,
+      },
+    };
+  }
+
+  const client = context.whatsapp_client ?? new meta_whatsapp_client();
+  const delivery = await client.send_voice_note({ to, buffer: voice.audio, mime_type: voice.content_type });
+  const sent = delivery.sent === true;
+  const pending_credentials = !sent && delivery.reason === "missing_whatsapp_credentials";
 
   return {
-    status: result.status,
+    status: sent ? "executed" : pending_credentials ? "pending_provider" : "failed",
     confirmation_required: false,
     output: {
-      mensaje: result.message,
-      proveedor: result.provider,
-      voice_id: result.voice_id ?? null,
-      model_id: result.model_id ?? null,
-      content_type: result.content_type ?? null,
-      audio_bytes: result.audio_bytes ?? null,
-      caracteres: result.characters ?? null,
-      // Raw audio (when generated) is handed to the outbound sender, not persisted.
-      ...(result.audio ? { audio_generado: true } : {}),
+      mensaje: sent
+        ? "Mensaje de voz enviado por WhatsApp."
+        : pending_credentials
+          ? "Audio generado; configura WHATSAPP_ACCESS_TOKEN para enviarlo por WhatsApp."
+          : `Audio generado, pero el envío por WhatsApp falló (${delivery.reason ?? "desconocido"}).`,
+      proveedor: voice.provider,
+      voice_id: voice.voice_id ?? null,
+      to,
+      caracteres: voice.characters ?? null,
+      audio_bytes: voice.audio_bytes ?? null,
+      enviado: sent,
+      external_message_id: delivery.external_message_id ?? null,
+      media_id: delivery.media_id ?? null,
     },
   };
 }
@@ -176,6 +243,7 @@ const handlers = {
   generar_resumen,
   buscar_negocios,
   responder_con_voz,
+  ...operational_action_handlers,
 };
 
 export async function execute_internal_action_handler(pool, action, context) {

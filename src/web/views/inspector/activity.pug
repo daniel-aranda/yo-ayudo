@@ -1,0 +1,71 @@
+extends ../layout
+
+block content
+  -
+    const status_labels = {
+      executed: "Ejecutada",
+      failed: "Falló",
+      pending_provider: "Proveedor faltante",
+      pending_confirmation: "Pendiente confirmación",
+      blocked: "Bloqueada",
+      not_implemented: "No implementada",
+      unknown_action: "Desconocida",
+    };
+    const when = (value) => {
+      try { return new Date(value).toLocaleString("es-MX"); } catch (error) { return String(value || ""); }
+    };
+
+  if bot
+    section.page-header
+      div
+        h1 Actividad del agente
+        p= `${bot.name} · cuándo cada interacción funciona o falla`
+      div.builder-actions
+        a.activity-back(href=`/inspector/bots/${bot.id}`) ← Volver al editor
+
+    section.panel
+      h2 Resumen
+      div.activity-summary
+        if Object.keys(summary).length
+          each count, status in summary
+            span(class=`status-pill status-${status}`)= `${status_labels[status] || status}: ${count}`
+        else
+          span.empty Sin ejecuciones registradas todavía. Prueba el bot o conéctalo a WhatsApp.
+
+    section.panel
+      h2 Ejecuciones recientes
+      if activity.length
+        table.activity-table
+          thead
+            tr
+              th Interacción / acción
+              th Estado
+              th Mensaje
+              th Actor
+              th Cuándo
+          tbody
+            each row in activity
+              tr
+                td
+                  strong= row.label
+                  span.meta= ` (${row.action_id})`
+                td
+                  span(class=`status-pill status-${row.status}`)= status_labels[row.status] || row.status
+                td= row.message || "—"
+                td.meta= row.actor_type
+                td.meta= when(row.created_at)
+      else
+        div.empty Ninguna interacción se ha ejecutado aún.
+
+    if guardrails.length
+      section.panel
+        h2 Guardrails recientes
+        ul.clean-list
+          each event in guardrails
+            li
+              span.status-pill.status-blocked= event.tipo
+              span= ` ${event.descripcion}`
+              span.meta= ` · ${event.severidad} · ${when(event.created_at)}`
+  else
+    section.page-header
+      h1 Bot no encontrado

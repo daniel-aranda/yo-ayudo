@@ -3,6 +3,7 @@ import multer from "multer";
 import { pool } from "../db/client.js";
 import {
   get_account_view,
+  get_bot_activity_view,
   get_bot_conversations,
   get_bot_view,
   get_conversation_view,
@@ -177,6 +178,19 @@ export function register_inspector_routes(router, dependencies = {}) {
       response.render("inspector/bot", {
         ...(await get_bot_view(route_pool, route_value(request.params.bot_id))),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/inspector/bots/:bot_id/activity", inspector_auth, async (request, response, next) => {
+    try {
+      const view = await get_bot_activity_view(route_pool, route_value(request.params.bot_id));
+      if (!view) {
+        response.status(404).send("Bot not found");
+        return;
+      }
+      response.render("inspector/activity", view);
     } catch (error) {
       next(error);
     }

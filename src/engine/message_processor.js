@@ -1,12 +1,10 @@
 import { config } from "../app/config.js";
 import { date_key_in_timezone } from "../shared/dates.js";
 import { logger } from "../shared/logger.js";
-import { agent_router } from "../agents/agent_router.js";
-import { handler_for_agent } from "../agents/agent_registry.js";
+import { action_execution_service } from "../actions/action_execution_service.js";
 import { create_model_provider } from "../ai/provider_factory.js";
 import { observed_model_provider } from "../ai/observed_provider.js";
 import { message_intent_parser } from "./message_intent_parser.js";
-import { dispatch_operation } from "./operation_dispatcher.js";
 import { build_reply } from "./response_builder.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { extract_media_metadata, extract_text_body } from "../channels/whatsapp/whatsapp_message_parser.js";
@@ -252,69 +250,68 @@ async function store_outbound_message(pool, input) {
   return result.rows[0];
 }
 
+// Inbound intent -> operational engine action. The deterministic parser extracts
+// the data; the matching registrar_* action executes it through the unified
+// action flow (audited + guardrailed + visible in the activity view).
+const INTENT_TO_OPERATION_ACTION = {
+  day_start: "registrar_inicio_dia",
+  sales_update: "registrar_venta",
+  purchase: "registrar_compra",
+  inventory_update: "registrar_inventario",
+  daily_close: "registrar_cierre_dia",
+  daily_note: "registrar_nota_dia",
+  report_request: "generar_reporte_dia",
+};
+
 async function route_and_dispatch_operation(dependencies, processing_context, parsed) {
-  if (!config.agent_router_enabled) {
+  if (parsed.needs_review) {
+    return { routing_result: null, handle_result: { handled: false } };
+  }
+
+  if (parsed.intent === "human_help") {
     return {
       routing_result: null,
-      handle_result: await dispatch_operation(processing_context, parsed),
+      handle_result: {
+        handled: true,
+        reply_text: "Te canalizo con una persona. Mientras tanto, sigo guardando los mensajes operativos.",
+      },
     };
   }
 
-  try {
-    const router = new agent_router({ pool: dependencies.pool });
-    const routing_result = await router.route_message({
-      contact_id: processing_context.contact.id,
-      conversation_id: processing_context.conversation.id,
-      message_id: processing_context.message.id,
-      organization_id: processing_context.organization?.id ?? processing_context.bot?.organization_id ?? null,
-      account_id: processing_context.account?.id ?? processing_context.bot?.account_id ?? null,
-      bot_id: processing_context.bot?.id ?? null,
-      bot_type: processing_context.bot?.bot_type ?? null,
-      bot_definition: processing_context.bot?.definition_json ?? {},
-      organization: processing_context.organization,
-      account: processing_context.account,
-      bot: processing_context.bot,
-      contact: processing_context.contact,
-      conversation: processing_context.conversation,
-      channel: processing_context.message.channel ?? "whatsapp",
-      bot_profile_id: processing_context.bot_profile?.id ?? null,
-      solution_template_id: processing_context.bot_profile?.solution_template_id ?? null,
-      parsed_intent: parsed.intent,
-      parsed_json: parsed.data,
-      text_body: processing_context.message.text_body ?? "",
-    });
-    const agent_handler = handler_for_agent(routing_result.agent_key);
-    const agent_execution_context = {
-      ...processing_context,
-      selected_agent: {
-        id: routing_result.selected_agent_id,
-        name: routing_result.selected_agent_name,
-        type: routing_result.selected_agent_type,
-        executable_agent_key: routing_result.agent_key,
-        handoff_recommended: routing_result.handoff_recommended,
-        handoff_reason: routing_result.handoff_reason,
-      },
-      business_knowledge: routing_result.retrieved_context?.business_knowledge ?? [],
-      conversation_memory: routing_result.retrieved_context?.conversation_memory ?? [],
-      agent_context: routing_result.agent_context,
-    };
-
+  const action_id = INTENT_TO_OPERATION_ACTION[parsed.intent];
+  if (!action_id) {
     return {
-      routing_result,
-      handle_result: await agent_handler(agent_execution_context, parsed),
-    };
-  } catch (error) {
-    logger.error({ err: error, message_id: processing_context.message.id }, "agent routing failed");
-    return {
-      routing_result: {
-        agent_key: "unknown_agent",
-        confidence: 0,
-        reason: "router failed; used direct dispatcher fallback",
-        retrieved_context: [],
+      routing_result: null,
+      handle_result: {
+        handled: false,
+        reply_text: "No pude clasificar este mensaje para operación. Lo dejo en revisión.",
       },
-      handle_result: await dispatch_operation(processing_context, parsed),
     };
   }
+
+  const actions = new action_execution_service({ pool: dependencies.pool });
+  const result = await actions.execute_action({
+    organization_id: processing_context.organization?.id ?? processing_context.bot?.organization_id ?? null,
+    account_id: processing_context.account?.id ?? processing_context.bot?.account_id ?? null,
+    bot_id: processing_context.bot?.id ?? null,
+    conversation_id: processing_context.conversation.id,
+    message_id: processing_context.message.id,
+    action_id,
+    input_json: { ...(parsed.data ?? {}), operation_date: processing_context.operation_date },
+    actor_type: "system",
+    bypass_bot_enablement: true,
+    prompt_fragment: String(processing_context.text ?? "").slice(0, 500),
+  });
+
+  return {
+    routing_result: null,
+    handle_result: {
+      handled: result.status === "executed",
+      metadata: result.output ?? {},
+      report_id: result.output?.report_id,
+      action_status: result.status,
+    },
+  };
 }
 
 async function process_inbound_message(dependencies, input) {

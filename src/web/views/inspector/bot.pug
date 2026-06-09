@@ -127,6 +127,7 @@ block content
           span.autosave-dot(aria-hidden="true")
           span.autosave-text
           button.autosave-retry(type="button", hidden) Reintentar
+        a.activity-link(href=`/inspector/bots/${bot.id}/activity`) Actividad
         details.json-toggle
           summary Ver settings JSON
           pre= JSON.stringify(settings_json, null, 2)

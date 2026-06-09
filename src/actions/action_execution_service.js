@@ -133,7 +133,10 @@ export class action_execution_service {
 
     const bot = input.bot_id ? await get_bot_by_id(this.pool, input.bot_id) : null;
 
-    if (bot && !enabled_actions_for_bot(bot).has(action.action_id)) {
+    // System-invoked actions (e.g. operational writes routed from the deterministic
+    // parser) bypass the per-bot enablement toggle: operations are a platform
+    // capability, not a per-bot configured interaction. Still audited with bot_id.
+    if (bot && !input.bypass_bot_enablement && !enabled_actions_for_bot(bot).has(action.action_id)) {
       return this.block_with_guardrail(input, action, {
         tipo: "accion_no_habilitada",
         status: "blocked",

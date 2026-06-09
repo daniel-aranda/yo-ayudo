@@ -122,24 +122,21 @@ describe("WhatsApp inbound pipeline", () => {
     expect(reports.rows[0].summary_text).toContain("Ventas");
   });
 
-  it("routes through agents and writes useful messages to memory", async () => {
+  it("records the operation through the unified action flow and writes useful messages to memory", async () => {
     await simulate(pool, client, "compré 12 kg pastor por 1680 con Juan");
 
     const purchases = await pool.query("SELECT * FROM op_purchases");
     const memory_documents = await pool.query("SELECT * FROM memory_documents WHERE document_type = 'conversation_message'");
-    const agent_runs = await pool.query("SELECT * FROM agent_runs WHERE run_type = 'route'");
+    const audit = await pool.query("SELECT * FROM action_audit_logs WHERE action_id = 'registrar_compra'");
 
     expect(purchases.rowCount).toBe(1);
     expect(memory_documents.rowCount).toBe(1);
     expect(memory_documents.rows[0].local_path).toContain(".storage/test-memory");
     expect(memory_documents.rows[0].embedding_status).toBe("completed");
-    expect(agent_runs.rowCount).toBe(1);
-    expect(agent_runs.rows[0].agent_key).toBe("purchases_agent");
-    expect(agent_runs.rows[0].selected_agent_id).toBe("purchases_agent");
-    expect(Number(agent_runs.rows[0].routing_confidence)).toBeGreaterThan(0);
-    expect(agent_runs.rows[0].routing_candidates_json.length).toBeGreaterThan(0);
-    expect(agent_runs.rows[0].retrieved_context_json.business_knowledge).toBeDefined();
-    expect(agent_runs.rows[0].retrieved_context_json.conversation_memory).toBeDefined();
+    // Inbound operations now run through the unified action flow (audited), not a legacy router.
+    expect(audit.rowCount).toBe(1);
+    expect(audit.rows[0].status).toBe("executed");
+    expect(audit.rows[0].actor_type).toBe("system");
   });
 
   it("keeps processing operations when memory store fails", async () => {

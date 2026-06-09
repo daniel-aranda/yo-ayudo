@@ -69,6 +69,8 @@ En el editor de bots ya no existe una lista separada de "Acciones del bot". Todo
 - Al guardar el bot, `acciones_habilitadas_json` se **deriva** de las interacciones habilitadas que tienen `action_id` (en `src/inspector/inspector_repository.js`). Ese campo sigue siendo la puerta de ejecucion del engine.
 - El prompt compiler inyecta el prompt (instrucciones) de cada interaccion ejecutable en la seccion "# Acciones disponibles" del prompt final, en lugar de una descripcion estatica. Asi la accion lleva el prompt del operador (por ejemplo, como prospectar, hacer cherry-pick o excluir contactados en `buscar_negocios`).
 
+Para el cableado runtime (quien dispara `execute_action`, decision mock-vs-AI y que falta conectar del inbound real), ver `bot_engine.md` -> "Flujo De Ejecucion (Estado Actual)".
+
 ## Niveles De Riesgo
 
 ### automatico

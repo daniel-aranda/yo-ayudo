@@ -138,7 +138,7 @@ describe("Conversation Inspector", () => {
     rm_sync(".storage/test-inspector-memory", { recursive: true, force: true });
   });
 
-  it("builds a message trace with parsing, router, memory, operation write and outbound response", async () => {
+  it("builds a message trace with parsing, memory, operation write and outbound response", async () => {
     await simulate(pool, client, "compré 12 kg pastor por 1680 con Juan");
 
     const message_result = await pool.query(
@@ -148,11 +148,12 @@ describe("Conversation Inspector", () => {
 
     expect(trace.message.text_body).toContain("pastor");
     expect(trace.parsing_results[0].intent).toBe("purchase");
-    expect(trace.router_runs[0].agent_key).toBe("purchases_agent");
+    // No legacy agent router: the deterministic parser routes straight to the action flow.
+    expect(trace.router_runs).toEqual([]);
     expect(trace.memory_documents[0].status).toBe("stored");
     expect(trace.operational_writes.some((write) => write.type === "purchase")).toBe(true);
     expect(trace.outbound_responses[0].text_body).toContain("Compra registrada");
-    expect(trace.processing_events.some((event) => event.event_stage === "routing")).toBe(true);
+    expect(trace.processing_events.some((event) => event.event_stage === "operation_write")).toBe(true);
   });
 
   it("builds a trace when optional pipeline sections are missing", async () => {
@@ -189,7 +190,9 @@ describe("Conversation Inspector", () => {
 
     expect(view.conversation.bot_name).toBe("Agente WhatsApp YoAyudo");
     expect(view.messages).toHaveLength(2);
-    expect(view.messages[0].compact_trace_summary.selected_agent).toBe("purchases_agent");
+    // No legacy agent routing; the inbound message is the parsed purchase.
+    expect(view.messages[0].compact_trace_summary.selected_agent).toBeFalsy();
+    expect(view.messages[0].message.parsed_intent).toBe("purchase");
     expect(view.messages[1].message.direction).toBe("outbound");
   });
 
@@ -227,6 +230,13 @@ describe("Conversation Inspector", () => {
     expect(bot_page.text).not.toContain("Acciones del bot");
     // Executable capabilities now render as interactions (each with its own prompt).
     expect(bot_page.text).toContain("Buscar negocios");
+    // Activity / status view is linked from the editor and renders.
+    expect(bot_page.text).toContain(`/inspector/bots/${ids.rows[0].bot_id}/activity`);
+    const activity_page = await request(app)
+      .get(`/inspector/bots/${ids.rows[0].bot_id}/activity`)
+      .expect(200);
+    expect(activity_page.text).toContain("Actividad del agente");
+    expect(activity_page.text).toContain("Ejecuciones recientes");
     expect(bot_page.text).toContain("Knowledge");
     expect(bot_page.text).toContain("Ir a Knowledge Center");
     expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
@@ -281,7 +291,7 @@ describe("Conversation Inspector", () => {
     await request(app)
       .get(`/inspector/conversations/${ids.rows[0].conversation_id}`)
       .expect(200)
-      .expect(/purchases_agent/);
+      .expect(/purchase/);
     await request(app)
       .get(`/inspector/messages/${ids.rows[0].message_id}`)
       .expect(200)
