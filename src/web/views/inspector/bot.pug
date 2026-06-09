@@ -67,6 +67,10 @@ block content
       trash: `${svg_open}<path d="M5 7h14"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l.8 12.2A1.5 1.5 0 0 0 9.3 20.5h5.4a1.5 1.5 0 0 0 1.5-1.3L17 7"/><path d="M10.5 11v6M13.5 11v6"/></svg>`,
       chevron: `${svg_open}<path d="M6 9.5l6 6 6-6"/></svg>`,
       mic: `${svg_open}<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M9 21h6"/></svg>`,
+      cash: `${svg_open}<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5h.01M18 14.5h.01"/></svg>`,
+      receipt: `${svg_open}<path d="M6 3h12v18l-3-1.5-3 1.5-3-1.5L6 21z"/><path d="M9 8h6M9 12h6"/></svg>`,
+      cart: `${svg_open}<circle cx="9.5" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/><path d="M3 4h2l2.4 11.4a1 1 0 0 0 1 .8h8.5a1 1 0 0 0 1-.78L20.5 8H6.2"/></svg>`,
+      box: `${svg_open}<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg>`,
     };
     const editor_icon = (name) => editor_icons[name] || `${svg_open}<circle cx="12" cy="12" r="9"/></svg>`;
     const interaction_icons = {
@@ -78,6 +82,13 @@ block content
       crear_tarea: "task",
       generar_resumen: "summary",
       responder_voz: "mic",
+      registrar_inicio_dia: "cash",
+      registrar_venta: "receipt",
+      registrar_compra: "cart",
+      registrar_inventario: "box",
+      registrar_cierre_dia: "lock",
+      registrar_nota_dia: "note",
+      generar_reporte_dia: "summary",
     };
     const interaction_icon = (type) => editor_icon(interaction_icons[type] || "bolt");
     const interaction_icon_svgs_json = JSON.stringify(
@@ -98,6 +109,13 @@ block content
       crear_tarea: { accent: "#e0533d", tint: "#fbe9e4" },
       generar_resumen: { accent: "#c43d8a", tint: "#fbe8f2" },
       responder_voz: { accent: "#0e9aa7", tint: "#e1f4f5" },
+      registrar_inicio_dia: { accent: "#0d9488", tint: "#d9f0ee" },
+      registrar_venta: { accent: "#16a34a", tint: "#e3f6e9" },
+      registrar_compra: { accent: "#ea580c", tint: "#fdeede" },
+      registrar_inventario: { accent: "#a16207", tint: "#f7eecf" },
+      registrar_cierre_dia: { accent: "#475569", tint: "#e8edf3" },
+      registrar_nota_dia: { accent: "#6b7280", tint: "#eef0f2" },
+      generar_reporte_dia: { accent: "#4f46e5", tint: "#e9e7fb" },
     };
     const interaction_color = (type) => interaction_colors[type] || { accent: "#116a5b", tint: "#e4f4ef" };
     const interaction_card_style = (type) => {

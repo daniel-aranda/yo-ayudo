@@ -116,6 +116,69 @@ export const available_agent_interactions = [
       "Describe cuándo responder con voz en lugar de texto (p. ej. saludos, explicaciones largas o seguimiento), y el tono que debe usar.",
     action_id: "responder_con_voz",
   },
+  {
+    type: "registrar_inicio_dia",
+    key: "registrar_inicio_dia",
+    label: "Registrar inicio del día",
+    description: "Abre el día operativo con el efectivo inicial en caja.",
+    instructions_placeholder:
+      "Describe cómo el negocio reporta la apertura (p. ej. \"abrimos con $X en caja\") y qué confirmar.",
+    action_id: "registrar_inicio_dia",
+  },
+  {
+    type: "registrar_venta",
+    key: "registrar_venta",
+    label: "Registrar ventas",
+    description: "Registra las ventas del día (acumulado, efectivo, tarjeta, transferencia, apps).",
+    instructions_placeholder:
+      "Describe cómo el negocio reporta ventas y cómo desglosarlas (efectivo, tarjeta, transferencia, apps de delivery).",
+    action_id: "registrar_venta",
+  },
+  {
+    type: "registrar_compra",
+    key: "registrar_compra",
+    label: "Registrar compras",
+    description: "Registra compras de insumos/inventario (artículo, cantidad, costo, proveedor).",
+    instructions_placeholder:
+      "Describe cómo el negocio reporta compras y qué capturar (artículo, cantidad, costo, proveedor).",
+    action_id: "registrar_compra",
+  },
+  {
+    type: "registrar_inventario",
+    key: "registrar_inventario",
+    label: "Registrar inventario",
+    description: "Registra un conteo de inventario (artículos, cantidades, unidades).",
+    instructions_placeholder:
+      "Describe cuándo tomar inventario y qué artículos seguir.",
+    action_id: "registrar_inventario",
+  },
+  {
+    type: "registrar_cierre_dia",
+    key: "registrar_cierre_dia",
+    label: "Cerrar el día",
+    description: "Cierra el día con totales, efectivo en caja y notas de merma/faltante/sobrante.",
+    instructions_placeholder:
+      "Describe cómo el negocio reporta el cierre y qué validar antes de cerrar (totales, caja, mermas).",
+    action_id: "registrar_cierre_dia",
+  },
+  {
+    type: "registrar_nota_dia",
+    key: "registrar_nota_dia",
+    label: "Registrar notas del día",
+    description: "Agrega notas operativas del día (merma, faltante, sobrante o comentario libre).",
+    instructions_placeholder:
+      "Describe qué notas operativas capturar durante el día.",
+    action_id: "registrar_nota_dia",
+  },
+  {
+    type: "generar_reporte_dia",
+    key: "generar_reporte_dia",
+    label: "Generar reporte del día",
+    description: "Genera el reporte operativo del día (totales, métricas y alertas).",
+    instructions_placeholder:
+      "Describe cuándo generar el reporte del día y qué resaltar.",
+    action_id: "generar_reporte_dia",
+  },
 ];
 
 export const supported_bot_channels = [

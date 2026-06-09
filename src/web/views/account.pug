@@ -6,7 +6,10 @@ block content
   else
     section.page-header
       h1 #{account.business_name} / #{account.name}
-      p Ventas, compras y cierre del día — registrados por WhatsApp
+      if capabilities && capabilities.operational
+        p Operación del negocio registrada por WhatsApp
+      else
+        p Bots, canales y conversaciones de esta cuenta
 
     .metrics
       article.metric
@@ -22,57 +25,65 @@ block content
         span.label Eventos con error
         strong= stats.error_events_count || 0
 
-    section.panel
-      h2 Dashboard operativo
-      if operational_day
-        p.meta= `Día ${date(operational_day.operation_date)} · ${operational_day.status === "closed" ? "Cerrado" : "Abierto"}`
-        .metrics
-          article.metric
-            span.label Ventas del día
-            strong= money(operational_day.total_sales)
-          article.metric
-            span.label Caja inicial
-            strong= money(operational_day.opening_cash)
-          article.metric
-            span.label Compras del día
-            strong= money(operational_day.purchases_total)
-          article.metric
-            span.label Caja final
-            strong= money(operational_day.closing_cash)
-        .metrics
-          article.metric
-            span.label Efectivo
-            strong= money(operational_day.cash_sales)
-          article.metric
-            span.label Tarjeta
-            strong= money(operational_day.card_sales)
-          article.metric
-            span.label Transferencia
-            strong= money(operational_day.transfer_sales)
-          article.metric
-            span.label Compras registradas
-            strong= operational_day.purchases_count || 0
-        if operational_day.report_summary
-          p.meta Resumen del cierre
-          p= operational_day.report_summary
-        if recent_purchases && recent_purchases.length
-          .table-wrap
-            table
-              thead
-                tr
-                  th Compra
-                  th Cantidad
-                  th Costo
-                  th Proveedor
-              tbody
-                each purchase in recent_purchases
+    if capabilities && capabilities.operational
+      section.panel
+        h2 Dashboard operativo
+        if operational_day
+          p.meta= `Día ${date(operational_day.operation_date)} · ${operational_day.status === "closed" ? "Cerrado" : "Abierto"}`
+          .metrics
+            if capabilities.sales
+              article.metric
+                span.label Ventas del día
+                strong= money(operational_day.total_sales)
+            if capabilities.cash
+              article.metric
+                span.label Caja inicial
+                strong= money(operational_day.opening_cash)
+            if capabilities.purchases
+              article.metric
+                span.label Compras del día
+                strong= money(operational_day.purchases_total)
+            if capabilities.close
+              article.metric
+                span.label Caja final
+                strong= money(operational_day.closing_cash)
+          if capabilities.sales
+            .metrics
+              article.metric
+                span.label Efectivo
+                strong= money(operational_day.cash_sales)
+              article.metric
+                span.label Tarjeta
+                strong= money(operational_day.card_sales)
+              article.metric
+                span.label Transferencia
+                strong= money(operational_day.transfer_sales)
+          if capabilities.purchases
+            .metrics
+              article.metric
+                span.label Compras registradas
+                strong= operational_day.purchases_count || 0
+          if operational_day.report_summary
+            p.meta Resumen del cierre
+            p= operational_day.report_summary
+          if capabilities.purchases && recent_purchases && recent_purchases.length
+            .table-wrap
+              table
+                thead
                   tr
-                    td= purchase.item_name
-                    td= `${purchase.quantity || ""} ${purchase.unit || ""}`.trim()
-                    td= money(purchase.total_cost)
-                    td= purchase.supplier_name_raw || "-"
-      else
-        .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
+                    th Compra
+                    th Cantidad
+                    th Costo
+                    th Proveedor
+                tbody
+                  each purchase in recent_purchases
+                    tr
+                      td= purchase.item_name
+                      td= `${purchase.quantity || ""} ${purchase.unit || ""}`.trim()
+                      td= money(purchase.total_cost)
+                      td= purchase.supplier_name_raw || "-"
+        else
+          .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
 
     .two-column
       section.panel

@@ -10,6 +10,7 @@ import { register_dashboard_routes } from "../dashboard/dashboard_routes.js";
 import { register_commercial_routes } from "../commercial/commercial_routes.js";
 import { register_dev_routes } from "../dev/dev_routes.js";
 import { register_inspector_routes } from "../inspector/inspector_routes.js";
+import { register_admin_routes } from "../admin/admin_routes.js";
 import { register_review_routes } from "../review/review_routes.js";
 import { register_whatsapp_routes } from "../channels/whatsapp/whatsapp_webhook_routes.js";
 import { json_text, message_alignment } from "../inspector/inspector_presenter.js";
@@ -49,6 +50,7 @@ export function create_app() {
   register_dashboard_routes(router);
   register_commercial_routes(router);
   register_inspector_routes(router);
+  register_admin_routes(router);
   register_review_routes(router);
   register_dev_routes(router);
 

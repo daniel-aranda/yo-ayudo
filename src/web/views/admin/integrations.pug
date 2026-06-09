@@ -1,0 +1,58 @@
+extends ../layout
+
+block content
+  -
+    const pill_class = { ok: "status-executed", error: "status-failed", not_configured: "status-pending_provider", unknown: "status-blocked" };
+    const status_text = { ok: "Conectado", error: "Falla", not_configured: "No configurado", unknown: "Sin check" };
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+
+  section.page-header
+    h1 Integraciones
+    p= `Estado de conexión y operación · actividad de las últimas ${since_hours}h`
+
+  .metrics
+    article.metric
+      span.label Conectadas
+      strong= health.ok
+    article.metric
+      span.label Con falla
+      strong= health.error
+    article.metric
+      span.label No configuradas
+      strong= health.not_configured
+    article.metric
+      span.label Eventos OK
+      strong= totals.success
+    article.metric
+      span.label Eventos con error
+      strong= totals.failure
+
+  section.panel
+    h2 Estado de integraciones
+    p.meta El estado se verifica en vivo al cargar la página (conexión + operación). Los conteos son de la actividad real reciente.
+    .table-wrap
+      table.activity-table
+        thead
+          tr
+            th Integración
+            th Estado
+            th Detalle
+            th Latencia
+            th Éxitos
+            th Errores
+            th Último evento
+        tbody
+          each item in integrations
+            tr
+              td
+                strong= item.label
+                div.meta= item.key
+              td
+                span(class=`status-pill ${pill_class[item.status] || "status-blocked"}`)= status_text[item.status] || item.status
+              td.meta= item.detail || "—"
+              td.meta= item.latency_ms != null ? `${item.latency_ms} ms` : "—"
+              td= item.events.success_count || 0
+              td= item.events.failure_count || 0
+              td.meta= when(item.events.last_event_at)

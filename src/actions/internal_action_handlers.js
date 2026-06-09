@@ -2,6 +2,15 @@ import { search_business_prospects } from "../prospecting/business_search_servic
 import { synthesize_voice_reply } from "../voice/elevenlabs_voice_service.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { operational_action_handlers } from "./operational_action_handlers.js";
+import { safe_record_integration_event } from "../integrations/integration_event_repository.js";
+
+function event_identity(context) {
+  return {
+    organization_id: context.organization_id ?? null,
+    account_id: context.account_id ?? null,
+    bot_id: context.bot_id ?? null,
+  };
+}
 
 function normalize_due_at(value) {
   if (!value) {
@@ -137,8 +146,32 @@ async function generar_resumen(_pool, context) {
   };
 }
 
-async function buscar_negocios(_pool, context) {
+async function buscar_negocios(pool, context) {
   const result = await search_business_prospects(context.input_json ?? {});
+  const identity = event_identity(context);
+
+  if (result.status === "pending_provider") {
+    await safe_record_integration_event(pool, {
+      integration_key: "google_places",
+      operation: "search",
+      status: "not_configured",
+      detail: result.message,
+      ...identity,
+    });
+  } else {
+    for (const provider of result.providers_used ?? []) {
+      await safe_record_integration_event(pool, { integration_key: provider, operation: "search", status: "success", ...identity });
+    }
+    for (const provider_error of result.provider_errors ?? []) {
+      await safe_record_integration_event(pool, {
+        integration_key: provider_error.provider,
+        operation: "search",
+        status: "failure",
+        detail: provider_error.message,
+        ...identity,
+      });
+    }
+  }
 
   return {
     status: result.status,
@@ -184,6 +217,14 @@ async function resolve_recipient_phone(pool, context) {
 async function responder_con_voz(pool, context) {
   const voice = await synthesize_voice_reply(context.input_json ?? {}, context.voice_options ?? {});
 
+  await safe_record_integration_event(pool, {
+    integration_key: "elevenlabs",
+    operation: "tts",
+    status: voice.status === "executed" ? "success" : voice.status === "pending_provider" ? "not_configured" : "failure",
+    detail: voice.message,
+    ...event_identity(context),
+  });
+
   // No audio generated (no key, no text, or provider error): surface as-is.
   if (voice.status !== "executed" || !voice.audio) {
     return {
@@ -215,6 +256,14 @@ async function responder_con_voz(pool, context) {
   const delivery = await client.send_voice_note({ to, buffer: voice.audio, mime_type: voice.content_type });
   const sent = delivery.sent === true;
   const pending_credentials = !sent && delivery.reason === "missing_whatsapp_credentials";
+
+  await safe_record_integration_event(pool, {
+    integration_key: "whatsapp",
+    operation: "send_voice",
+    status: sent ? "success" : pending_credentials ? "not_configured" : "failure",
+    detail: delivery.reason ?? null,
+    ...event_identity(context),
+  });
 
   return {
     status: sent ? "executed" : pending_credentials ? "pending_provider" : "failed",

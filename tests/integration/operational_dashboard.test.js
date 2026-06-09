@@ -123,6 +123,25 @@ describe("Operational dashboard", () => {
     expect(response.text).toContain("Aún no hay actividad operativa");
   });
 
+  it("hides the operational dashboard for accounts whose bots have no operational capability", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    await seed_operational_day(pool, account_id, organization_id);
+    // Strip operational actions: this account's bots are now commercial-only.
+    await pool.query(
+      `UPDATE bots SET acciones_habilitadas_json = '["buscar_negocios","guardar_nota"]'::jsonb WHERE account_id = $1`,
+      [account_id],
+    );
+
+    const app = create_dashboard_test_app(pool);
+    const response = await request(app)
+      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
+      .expect(200);
+
+    // Even with operational data present, no operational bot => no operational dashboard.
+    expect(response.text).not.toContain("Dashboard operativo");
+    expect(response.text).not.toContain("Ventas del día");
+  });
+
   it("does not duplicate bots in the account view (one link per active bot)", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);

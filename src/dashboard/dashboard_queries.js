@@ -207,6 +207,21 @@ export async function get_account_dashboard_data(pool, input) {
     conversation_rows.push({ ...conversation, last_message: last_message.rows[0]?.text_body ?? null });
   }
 
+  // Capability-driven dashboard: only surface operational sections the account's
+  // active bots actually declare (via their enabled operational actions). A
+  // commercial account shows no ventas/compras/caja; an operational bot does.
+  const enabled_actions = new Set(
+    bots.rows.flatMap((bot) => (Array.isArray(bot.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : [])),
+  );
+  const capabilities = {
+    sales: enabled_actions.has("registrar_venta"),
+    cash: enabled_actions.has("registrar_inicio_dia") || enabled_actions.has("registrar_cierre_dia"),
+    close: enabled_actions.has("registrar_cierre_dia"),
+    purchases: enabled_actions.has("registrar_compra"),
+    inventory: enabled_actions.has("registrar_inventario"),
+  };
+  capabilities.operational = Object.values(capabilities).some(Boolean);
+
   return {
     account: account.rows[0] ?? null,
     bots: bots.rows,
@@ -214,6 +229,7 @@ export async function get_account_dashboard_data(pool, input) {
     conversations: conversation_rows,
     events: events.rows,
     stats: stats.rows[0] ?? {},
+    capabilities,
     operational_day,
     recent_purchases: recent_purchases.rows,
   };

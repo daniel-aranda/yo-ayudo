@@ -20,6 +20,7 @@ import {
   update_knowledge_source,
 } from "../knowledge/knowledge_center_repository.js";
 import { upload_knowledge_document_to_s3 } from "../knowledge/knowledge_s3_uploader.js";
+import { safe_record_integration_event } from "../integrations/integration_event_repository.js";
 
 function inspector_auth(request, response, next) {
   if (!config.inspector_enabled) {
@@ -272,6 +273,13 @@ export function register_inspector_routes(router, dependencies = {}) {
           account_id: route_value(filters.account_id) || null,
           file: request.file,
         });
+        await safe_record_integration_event(route_pool, {
+          integration_key: "s3",
+          operation: "upload",
+          status: "success",
+          organization_id: route_value(filters.organization_id) || null,
+          account_id: route_value(filters.account_id) || null,
+        });
 
         metadata_json = {
           ...metadata_json,
@@ -298,6 +306,12 @@ export function register_inspector_routes(router, dependencies = {}) {
       response.redirect(`/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`);
     } catch (error) {
       if (error.code?.startsWith("knowledge_s3_")) {
+        await safe_record_integration_event(route_pool, {
+          integration_key: "s3",
+          operation: "upload",
+          status: error.code === "knowledge_s3_not_configured" ? "not_configured" : "failure",
+          detail: error.message,
+        });
         await render_knowledge_center(response, route_pool, {
           status: 400,
           filters: request.body,

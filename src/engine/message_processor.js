@@ -11,6 +11,7 @@ import { extract_media_metadata, extract_text_body } from "../channels/whatsapp/
 import { resolve_whatsapp_identity_by_phone_number_id } from "../channels/whatsapp/whatsapp_identity_resolver.js";
 import { safe_ingest_message_to_memory } from "../memory/memory_ingestion_service.js";
 import { record_context_event, safe_record_processing_event } from "../processing_events/processing_event_service.js";
+import { safe_record_integration_event } from "../integrations/integration_event_repository.js";
 
 async function upsert_contact(pool, input) {
   const result = await pool.query(
@@ -299,7 +300,6 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
     action_id,
     input_json: { ...(parsed.data ?? {}), operation_date: processing_context.operation_date },
     actor_type: "system",
-    bypass_bot_enablement: true,
     prompt_fragment: String(processing_context.text ?? "").slice(0, 500),
   });
 
@@ -542,6 +542,18 @@ async function process_inbound_message(dependencies, input) {
     const send_result = await dependencies.whatsapp_client.send_text({
       to: input.inbound_message.from,
       body: reply_text,
+    });
+    await safe_record_integration_event(dependencies.pool, {
+      integration_key: "whatsapp",
+      operation: "send_message",
+      status: send_result.sent
+        ? "success"
+        : send_result.raw_response?.reason === "missing_whatsapp_credentials"
+          ? "not_configured"
+          : "failure",
+      organization_id,
+      account_id,
+      bot_id: resolution.bot?.id ?? null,
     });
     const outbound_message = await store_outbound_message(dependencies.pool, {
       account_id,
