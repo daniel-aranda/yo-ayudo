@@ -1480,3 +1480,224 @@ pre {
     max-width: 100%;
   }
 }
+
+/* ============================================================
+   Popup (agnostic modal) — pairs with public/js/core/Popup.js
+   Markup contract: [data-popup-overlay] + .popup + [data-popup-close]
+   ============================================================ */
+.popup-overlay {
+  align-items: center;
+  backdrop-filter: blur(3px);
+  background: rgba(20, 20, 18, 0.45);
+  display: none;
+  inset: 0;
+  justify-content: center;
+  padding: 16px;
+  position: fixed;
+  z-index: 9990;
+}
+
+.popup-overlay.is-open {
+  animation: popup-fade-in 160ms ease-out;
+  display: flex;
+}
+
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.popup {
+  animation: popup-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  max-height: min(85vh, 760px);
+  max-width: 36rem;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.popup--sm {
+  max-width: 26rem;
+}
+
+.popup--md {
+  max-width: 36rem;
+}
+
+.popup--lg {
+  max-width: 52rem;
+}
+
+.popup__header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.popup__header-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.popup__title {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 650;
+  margin: 0;
+}
+
+.popup__subtitle {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.popup__body {
+  background: var(--surface);
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.popup__footer {
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 18px;
+}
+
+.popup__close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  margin: 0;
+  padding: 6px;
+}
+
+.popup__close:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.popup__close .ui-icon {
+  height: 20px;
+  width: 20px;
+}
+
+.body--popup-open {
+  overflow: hidden;
+}
+
+/* ============================================================
+   Interaction picker list (inside the popup)
+   ============================================================ */
+.inline-add-row--single {
+  grid-template-columns: auto;
+  justify-content: start;
+}
+
+.interaction-picker-list {
+  display: grid;
+  gap: 10px;
+}
+
+.interaction-pick {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ix-accent, var(--accent));
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  margin: 0;
+  padding: 12px 14px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.interaction-pick:hover {
+  background: var(--surface-strong);
+}
+
+.interaction-pick:has(.interaction-pick-input:checked) {
+  background: var(--ix-tint, #e4f4ef);
+  border-color: var(--ix-accent, var(--accent));
+}
+
+.interaction-pick-input {
+  accent-color: var(--ix-accent, var(--accent));
+  border: 0;
+  border-radius: 0;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  width: 18px;
+}
+
+.interaction-pick-icon {
+  align-items: center;
+  background: var(--ix-tint, #e4f4ef);
+  border-radius: 8px;
+  color: var(--ix-accent, var(--accent));
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.interaction-pick-icon .ui-icon {
+  height: 20px;
+  width: 20px;
+}
+
+.interaction-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.interaction-pick-label {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.interaction-pick-desc {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}

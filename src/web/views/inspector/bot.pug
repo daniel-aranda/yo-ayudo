@@ -66,6 +66,7 @@ block content
       summary: `${svg_open}<rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg>`,
       trash: `${svg_open}<path d="M5 7h14"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l.8 12.2A1.5 1.5 0 0 0 9.3 20.5h5.4a1.5 1.5 0 0 0 1.5-1.3L17 7"/><path d="M10.5 11v6M13.5 11v6"/></svg>`,
       chevron: `${svg_open}<path d="M6 9.5l6 6 6-6"/></svg>`,
+      x: `${svg_open}<path d="M6 6l12 12M18 6L6 18"/></svg>`,
       mic: `${svg_open}<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M9 21h6"/></svg>`,
       cash: `${svg_open}<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5h.01M18 14.5h.01"/></svg>`,
       receipt: `${svg_open}<path d="M6 3h12v18l-3-1.5-3 1.5-3-1.5L6 21z"/><path d="M9 8h6M9 12h6"/></svg>`,
@@ -123,6 +124,14 @@ block content
       return `--ix-accent: ${color.accent}; --ix-tint: ${color.tint};`;
     };
     const interaction_colors_json = JSON.stringify(interaction_colors).replace(/</g, "\\u003c");
+    const available_interactions_json = JSON.stringify(
+      (Array.isArray(available_interactions) ? available_interactions : []).map((item) => ({
+        type: item.type,
+        label: item.label,
+        description: item.description || "",
+        placeholder: item.instructions_placeholder || "",
+      })),
+    ).replace(/</g, "\\u003c");
 
   mixin icon(name)
     != editor_icon(name)
@@ -414,20 +423,30 @@ block content
                     input(type="hidden", name="interaction_human_group_ids", value="")
         div.empty#interaction_empty_state(hidden=interactions.length > 0) Ninguna interacción configurada.
 
-        div.inline-add-row
-          select#interaction_picker(disabled=!addable_interactions.length)
-            option(value="") Selecciona una interacción
-            each interaction in addable_interactions
-              option(
-                value=interaction.type,
-                data-key=interaction.key,
-                data-label=interaction.label,
-                data-description=interaction.description,
-                data-placeholder=interaction.instructions_placeholder
-              )= interaction.label
-          button#add_interaction(type="button", disabled=!addable_interactions.length) Agregar interacción
+        div.inline-add-row.inline-add-row--single
+          button#open_interaction_picker(type="button", disabled=!addable_interactions.length) Agregar interacción
 
         div#new_interaction_mount
+
+        //- Popup agnóstico (window.Popup): elegir una o más interacciones con su descripción.
+        #interaction_picker_popup.popup-overlay(
+          data-popup-overlay,
+          data-popup-overlay-close="true",
+          data-interaction-picker-popup,
+          data-autosave-ignore
+        )
+          .popup.popup--lg.popup--default
+            .popup__header
+              .popup__header-text
+                h3.popup__title Agregar interacciones
+                .popup__subtitle Elige una o más interacciones para este agente.
+              button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
+            .popup__body
+              div#interaction_picker_list.interaction-picker-list
+              div.empty#interaction_picker_empty(hidden) Tienes todas las interacciones conectadas.
+            .popup__footer
+              button.secondary-button#interaction_picker_cancel(type="button", data-popup-close) Cancelar
+              button#interaction_picker_confirm(type="button", disabled) Agregar seleccionadas
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="restricciones", hidden)
         +section_head("lock", "Restricciones", "Qué no debe prometer el agente, cuándo detenerse y cuándo escalar a un humano.")
@@ -472,19 +491,27 @@ block content
       h1 Agente no encontrado
       p No se encontró el bot solicitado.
 
+  script
+    include ../../public/js/core/Popup.js
+
   script.
     (() => {
-      const interactionPicker = document.getElementById("interaction_picker");
-      const addInteractionButton = document.getElementById("add_interaction");
+      const openInteractionButton = document.getElementById("open_interaction_picker");
       const interactionMount = document.getElementById("new_interaction_mount");
-      const interactionGrid = document.querySelector(".interaction-grid");
-      const interactionEmptyState = document.getElementById("interaction_empty_state");
       const humanGroupOptions = !{human_group_options_json};
       const interactionIconSvgs = !{interaction_icon_svgs_json};
       const interactionTrashSvg = !{editor_trash_svg_json};
       const interactionChevronSvg = !{editor_chevron_svg_json};
       const interactionColors = !{interaction_colors_json};
       const interactionOptionsByType = !{interaction_options_by_type_json};
+      const availableInteractions = !{available_interactions_json};
+      const interactionPickerList = document.getElementById("interaction_picker_list");
+      const interactionPickerEmpty = document.getElementById("interaction_picker_empty");
+      const interactionPickerConfirm = document.getElementById("interaction_picker_confirm");
+      const interactionPopup = window.Popup
+        ? new window.Popup({ overlay_selector: "[data-interaction-picker-popup]" })
+        : null;
+      interactionPopup?.iniciar();
 
       function renderHumanGroupSelect() {
         const options = humanGroupOptions
@@ -493,14 +520,52 @@ block content
         return `<label>Grupos humanos</label><select name="interaction_human_group_ids"><option value="">Selecciona grupo humano</option>${options}</select>`;
       }
 
-      function syncInteractionPicker() {
-        if (!interactionPicker || !addInteractionButton) return;
-        const hasOptions = Array.from(interactionPicker.options).some((option) => option.value);
-        interactionPicker.disabled = !hasOptions;
-        addInteractionButton.disabled = !hasOptions;
-        if (!hasOptions) {
-          interactionPicker.innerHTML = '<option>Tienes todas las interacciones conectadas</option>';
-        }
+      // Interactions already on the bot (read live from the grid) are excluded,
+      // so the picker always offers only what's left to add.
+      function addableInteractions() {
+        const configuredTypes = new Set(
+          Array.from(document.querySelectorAll(".interaction-card")).map((card) => card.dataset.type),
+        );
+        return availableInteractions.filter((item) => !configuredTypes.has(item.type));
+      }
+
+      function refreshOpenInteractionButton() {
+        if (openInteractionButton) openInteractionButton.disabled = addableInteractions().length === 0;
+      }
+
+      function updateInteractionPickerConfirm() {
+        if (!interactionPickerConfirm) return;
+        const count = interactionPickerList
+          ? interactionPickerList.querySelectorAll(".interaction-pick-input:checked").length
+          : 0;
+        interactionPickerConfirm.disabled = count === 0;
+        interactionPickerConfirm.textContent = count > 0 ? `Agregar (${count})` : "Agregar seleccionadas";
+      }
+
+      function renderInteractionPickerList() {
+        if (!interactionPickerList) return;
+        const addable = addableInteractions();
+        if (interactionPickerEmpty) interactionPickerEmpty.hidden = addable.length > 0;
+        interactionPickerList.innerHTML = addable
+          .map((item) => {
+            const iconSvg = interactionIconSvgs[item.type] || "";
+            const color = interactionColors[item.type] || { accent: "#116a5b", tint: "#e4f4ef" };
+            return `
+              <label class="interaction-pick" style="--ix-accent: ${color.accent}; --ix-tint: ${color.tint};">
+                <input type="checkbox" class="interaction-pick-input"
+                  data-type="${escapeHtml(item.type)}"
+                  data-label="${escapeHtml(item.label)}"
+                  data-description="${escapeHtml(item.description)}"
+                  data-placeholder="${escapeHtml(item.placeholder)}">
+                <span class="interaction-pick-icon">${iconSvg}</span>
+                <span class="interaction-pick-text">
+                  <span class="interaction-pick-label">${escapeHtml(item.label)}</span>
+                  ${item.description ? `<span class="interaction-pick-desc">${escapeHtml(item.description)}</span>` : ""}
+                </span>
+              </label>`;
+          })
+          .join("");
+        updateInteractionPickerConfirm();
       }
 
       function getOrCreateInteractionGrid() {
@@ -602,44 +667,44 @@ block content
         return card;
       }
 
-      function restoreInteractionOption({ type, label, description, placeholder }) {
-        if (!interactionPicker || !type) return;
-        const hasRealOptions = Array.from(interactionPicker.options).some((option) => option.value);
-        if (!hasRealOptions) {
-          interactionPicker.innerHTML = '<option value="">Selecciona una interacción</option>';
-        }
-        if (Array.from(interactionPicker.options).some((option) => option.value === type)) return;
-        const option = document.createElement("option");
-        option.value = type;
-        option.dataset.key = type;
-        option.dataset.label = label || type;
-        option.dataset.description = description || "";
-        option.dataset.placeholder = placeholder || "";
-        option.textContent = label || type;
-        interactionPicker.appendChild(option);
-        interactionPicker.disabled = false;
-        if (addInteractionButton) addInteractionButton.disabled = false;
-      }
+      openInteractionButton?.addEventListener("click", () => {
+        renderInteractionPickerList();
+        interactionPopup?.open();
+      });
 
-      addInteractionButton?.addEventListener("click", () => {
-        if (!interactionPicker) return;
-        const option = interactionPicker.selectedOptions[0];
-        if (!option?.value) return;
-        const type = option.value;
-        const label = option.dataset.label || option.textContent;
-        const description = option.dataset.description || "";
-        const placeholder = option.dataset.placeholder || "Describe cuándo y cómo debe usar esta interacción.";
-        const card = buildInteractionCard({ type, label, description, placeholder, enabled: true });
-        getOrCreateInteractionGrid().appendChild(card);
-        option.remove();
-        interactionPicker.value = "";
+      interactionPickerList?.addEventListener("change", (event) => {
+        if (event.target.classList?.contains("interaction-pick-input")) updateInteractionPickerConfirm();
+      });
+
+      interactionPickerConfirm?.addEventListener("click", () => {
+        if (!interactionPickerList) return;
+        const picks = Array.from(interactionPickerList.querySelectorAll(".interaction-pick-input:checked"));
+        if (!picks.length) return;
+        const grid = getOrCreateInteractionGrid();
+        let lastCard = null;
+        picks.forEach((input) => {
+          const card = buildInteractionCard({
+            type: input.dataset.type,
+            label: input.dataset.label,
+            description: input.dataset.description,
+            placeholder: input.dataset.placeholder || "Describe cuándo y cómo debe usar esta interacción.",
+            enabled: true,
+          });
+          grid.appendChild(card);
+          lastCard = card;
+        });
         reindexInteractions();
         refreshInteractionEmptyState();
         refreshToggleAll();
-        card.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        syncInteractionPicker();
+        refreshOpenInteractionButton();
+        interactionPopup?.close();
+        lastCard?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         window.bot_editor_autosave?.request_save({
-          control: { name: "interaction_type", tag: "button", value: type },
+          control: {
+            name: "interaction_type",
+            tag: "button",
+            value: picks.map((input) => input.dataset.type).join(","),
+          },
           event: { type: "add_interaction" },
         });
       });
@@ -678,20 +743,14 @@ block content
           const instructions = card.querySelector('textarea[name="interaction_instructions"]');
           const hasText = Boolean(instructions && instructions.value.trim());
           if (hasText && !window.confirm("¿Quitar esta interacción? Se perderá su prompt.")) return;
-          const meta = {
-            type: card.dataset.type,
-            label: card.dataset.label,
-            description: card.dataset.description,
-            placeholder: card.dataset.placeholder,
-          };
+          const removedType = card.dataset.type;
           card.remove();
-          restoreInteractionOption(meta);
           reindexInteractions();
           refreshInteractionEmptyState();
           refreshToggleAll();
-          syncInteractionPicker();
+          refreshOpenInteractionButton();
           window.bot_editor_autosave?.request_save({
-            control: { name: "interaction_type", tag: "button", value: meta.type },
+            control: { name: "interaction_type", tag: "button", value: removedType },
             event: { type: "remove_interaction" },
           });
           return;
@@ -716,7 +775,7 @@ block content
       });
 
       refreshToggleAll();
-      syncInteractionPicker();
+      refreshOpenInteractionButton();
 
       const knowledgePicker = document.getElementById("knowledge_source_picker");
       const addKnowledgeButton = document.getElementById("add_knowledge_source");
