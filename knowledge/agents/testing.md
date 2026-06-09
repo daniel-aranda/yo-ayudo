@@ -3,7 +3,7 @@
 ## Runner
 
 - `npm test` corre Vitest (`vitest run`).
-- Hoy son 17 archivos de test / 57 tests, todos en verde.
+- Hoy son 23 archivos de test / 80 tests, todos en verde.
 - Los archivos viven en `tests/unit/` y `tests/integration/`.
 
 ## Filosofía

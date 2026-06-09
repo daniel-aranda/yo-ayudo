@@ -31,3 +31,22 @@ export function build_reply(parsed, result) {
       return null;
   }
 }
+
+// Combine the replies of every operation the router fired into one WhatsApp
+// message, one line per operation. Distinct lines only, so repeated phrasing
+// (e.g. two review prompts) collapses instead of spamming the user.
+export function build_multi_reply(operation_results) {
+  const seen = new Set();
+  const lines = [];
+
+  for (const result of operation_results ?? []) {
+    const reply = build_reply(result.parsed ?? {}, result);
+    if (!reply || seen.has(reply)) {
+      continue;
+    }
+    seen.add(reply);
+    lines.push(reply);
+  }
+
+  return lines.length ? lines.join("\n") : null;
+}

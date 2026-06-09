@@ -53,20 +53,35 @@ Templates como `recepcionista_ai`, `seguimiento_ventas`, `agenda_facil`, `factur
 
 ## Flujo De Ejecucion (Estado Actual)
 
-El ciclo de arriba es el contrato. Hoy ese flujo se dispara desde dos lugares, **no** desde el WhatsApp entrante real:
+El ciclo de arriba es el contrato. Hoy `execute_action` (la cadena unificada y auditada) se dispara desde **tres** lugares:
 
-- `bot_engine_test_service.test_message()`: el tab "Probar bot" y los tests de preflight.
+- `bot_engine_test_service.test_message()`: el tab "Probar bot" y los tests de preflight. Usa el Prompt Compiler + seleccion de acciones por AI.
 - `POST /internal/action-executions` (`src/commercial/commercial_routes.js`): ejecucion directa de una accion por API.
+- El inbound real de WhatsApp (`webhook -> handle_whatsapp_webhook_payload` en `src/engine/message_processor.js`): ejecuta operaciones a traves de `execute_action` (auditado).
 
-El inbound real de WhatsApp (`webhook -> handle_whatsapp_webhook_payload` en `src/engine/message_processor.js`) todavia usa el pipeline legacy: parsea, rutea y responde texto con `whatsapp_client.send_text`. **No** llama al Bot Engine ni a `execute_action`. Conectar inbound -> engine es lo pendiente para ejecucion autonoma de acciones en mensajes entrantes reales.
+### Inbound real: multi-ejecucion
 
-Como se deciden las acciones (en `test_message`):
+El inbound NO usa todavia el Prompt Compiler ni la seleccion de acciones por AI: decide operaciones con NLU deterministico. Pero **si** corre por `execute_action` y soporta **multi-ejecucion** (un mensaje puede disparar mas de una interaccion). Flujo:
+
+1. `observed_provider.normalize_message`.
+2. `observed_provider.classify_intents` (multi-intent): detecta cada categoria de operacion presente, deduplica y **segmenta** el texto en los limites de cada keyword para que cada extractor solo vea su propia clausula (evita que el monto de una operacion contamine a otra). El `mock_provider` lo implementa; `observed_provider` hace fallback a un solo intent si el provider no lo implementa (ej. OpenAI hoy).
+3. Por cada intent: `message_intent_parser.parse(segmento, intent)` corre el `extract_*` correspondiente.
+4. `route_and_dispatch_operations` ejecuta cada operacion via `INTENT_TO_OPERATION_ACTION[intent]` + `execute_action`. Cada ejecucion escribe su propio `action_audit_logs` (lo que alimenta los chips de "interacciones disparadas" del inspector).
+5. `build_multi_reply` combina la respuesta de cada operacion en un solo mensaje de WhatsApp.
+
+Ejemplo: "abrimos con 1500, vendimos 3200 y compre 5 kg pastor por 600" -> `registrar_inicio_dia` + `registrar_venta` + `registrar_compra` (3 interacciones, una respuesta combinada). Un mensaje de una sola operacion produce un segmento = texto completo, identico al comportamiento anterior.
+
+Pendiente: conectar el inbound al Prompt Compiler / seleccion de acciones por AI del engine (hoy el inbound es deterministico por keywords).
+
+### Como se deciden las acciones (en `test_message`)
 
 - Con AI real (`provider.decide_bot_test_message`, ej. OpenAI): el modelo lee el prompt compilado + `acciones_disponibles` y devuelve `{ reply, action_requests: [{ action_id, input }] }`.
 - Con `AI_PROVIDER=mock` o sin provider: heuristica por keywords (`infer_action_requests_from_message`) que mapea el texto a acciones (ej. "buscar negocios" -> `buscar_negocios`).
 - El caller tambien puede pasar `action_requests` explicitos.
 
-Cada `action_request` pasa por `action_execution_service.execute_action`, que aplica la cadena de validacion en orden: existe en el registry -> habilitada en el registry -> habilitada para el bot (via `acciones_habilitadas_json`) -> permisos -> `input_schema` -> riesgo/confirmacion. Luego corre el handler real (`execute_internal_action_handler`) o un stub seguro. Siempre escribe `action_audit_logs` y, cuando aplica, `bot_guardrail_events`.
+### Cadena de validacion
+
+Cada `action_request`/operacion pasa por `action_execution_service.execute_action`, que aplica la cadena en orden: existe en el registry -> habilitada en el registry -> habilitada para el bot (via `acciones_habilitadas_json`) -> permisos -> `input_schema` -> riesgo/confirmacion. Luego corre el handler real (`execute_internal_action_handler`) o un stub seguro. Siempre escribe `action_audit_logs` y, cuando aplica, `bot_guardrail_events`.
 
 ## Conceptos
 

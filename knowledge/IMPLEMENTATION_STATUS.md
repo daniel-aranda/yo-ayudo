@@ -1,6 +1,6 @@
 # Implementation Status
 
-Fecha de auditoria: 2026-06-08.
+Fecha de auditoria: 2026-06-09.
 
 ## Resumen Actual
 
@@ -58,6 +58,9 @@ La direccion actual es Bot Engine configurable:
 - Action Executor con validacion de schema, permiso por bot, riesgo, confirmacion, audit log y guardrails.
 - Actions con handler real: `buscar_negocios` (prospeccion via Google Places), `guardar_nota`, `crear_tarea`, `generar_resumen`. El resto del registry son stubs `stub_*` de roadmap.
 - Capacidades unificadas como interacciones: el editor ya no tiene una lista separada de "Acciones del bot". Todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`. El prompt compiler inyecta el prompt de cada interaccion en "# Acciones disponibles".
+- Multi-ejecucion en el inbound real: un mensaje de WhatsApp puede disparar varias interacciones. `mock_provider.classify_intents` detecta multiples categorias de operacion y segmenta el texto por keyword; `route_and_dispatch_operations` (en `message_processor.js`) ejecuta cada una via `execute_action` (auditada) y `build_multi_reply` combina la respuesta. Mensajes de una sola operacion se comportan igual que antes. Ver `architecture/bot_engine.md`.
+- Visibilidad de interacciones disparadas en el inspector: chips por mensaje en la conversacion (`⚡ N interacciones`), seccion en el trace de mensaje, y panel "Interacciones" en Probar bot. Datos de `action_audit_logs` (via `compact_trace_summary` / `trace_builder.js`) y del `interaction_trace` de `bot_engine_test_service`.
+- Picker de interacciones por popup: agregar interacciones al bot usa un popup de seleccion multiple con descripciones, sobre el componente agnostico `Popup` (`src/web/public/js/core/Popup.js`).
 - Editor de bot server-rendered con tab navigator (Identidad, Conversaciones, Probar, Knowledge, Canales, Interacciones, Restricciones), iconos SVG inline via mixins de Pug y autosave proactivo (`POST /inspector/bots/:bot_id`, indicador "Guardado 3:58pm").
 - `action_audit_logs`.
 - `bot_guardrail_events`.
@@ -188,7 +191,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 17 archivos, 57 tests (Vitest).
+- `npm test`: OK, 23 archivos, 80 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0011` en orden.
 
 Comandos locales disponibles:

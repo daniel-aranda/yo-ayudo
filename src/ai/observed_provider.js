@@ -79,6 +79,18 @@ export class observed_model_provider {
     return this.observe("classify_intent", input, () => this.provider.classify_intent(input));
   }
 
+  // Providers that don't implement multi-intent detection (e.g. the OpenAI
+  // provider today) gracefully degrade to a single-intent classification, so
+  // the pipeline still works — it just won't fan out into multiple operations.
+  async classify_intents(input) {
+    if (typeof this.provider.classify_intents === "function") {
+      return this.observe("classify_intents", input, () => this.provider.classify_intents(input));
+    }
+
+    const classification = await this.classify_intent(input);
+    return { intents: [classification] };
+  }
+
   extract_purchase(input) {
     return this.observe("extract_purchase", input, () => this.provider.extract_purchase(input));
   }

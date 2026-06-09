@@ -124,6 +124,11 @@ export async function build_message_trace(pool, { message_id }) {
     "SELECT * FROM processing_events WHERE message_id = $1 ORDER BY created_at",
     [message_id],
   );
+  const action_logs = await rows(
+    pool,
+    "SELECT * FROM action_audit_logs WHERE message_id = $1 ORDER BY created_at",
+    [message_id],
+  );
   const outbound_responses = await rows(
     pool,
     `
@@ -146,6 +151,7 @@ export async function build_message_trace(pool, { message_id }) {
     outbound_responses,
     review_items,
     processing_events,
+    action_logs,
   };
 
   return {
@@ -179,6 +185,11 @@ export async function compact_trace_for_message(pool, message) {
     "SELECT * FROM processing_events WHERE message_id = $1 ORDER BY created_at",
     [message.id],
   );
+  const action_logs = await rows(
+    pool,
+    "SELECT action_id, status, actor_type, created_at FROM action_audit_logs WHERE message_id = $1 ORDER BY created_at",
+    [message.id],
+  );
 
   return compact_trace_summary({
     message,
@@ -188,5 +199,6 @@ export async function compact_trace_for_message(pool, message) {
     memory_documents,
     review_items,
     processing_events,
+    action_logs,
   });
 }

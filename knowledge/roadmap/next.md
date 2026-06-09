@@ -6,9 +6,11 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
 
 ## Prioridades
 
-1. Conectar Bot Engine al inbound real de forma incremental.
-   - Mantener fallback de `src/agents`.
-   - Empezar con bots opt-in.
+1. Conectar el Prompt Compiler / seleccion de acciones por AI al inbound real.
+   - Hecho: el inbound ya ejecuta operaciones via `execute_action` (auditado) y soporta multi-ejecucion (varias interacciones por mensaje) con NLU deterministico (`classify_intents` + segmentacion). Ver `architecture/bot_engine.md`.
+   - Falta: que el inbound use el prompt compilado + seleccion de acciones por AI (hoy decide por keywords, no por modelo).
+   - Implementar `classify_intents` en el provider OpenAI para multi-intent con lenguaje libre (hoy hace fallback a un solo intent).
+   - Mantener fallback deterministico; empezar con bots opt-in.
 
 2. Implementar mas handlers reales para las actions `stub_*`.
    - Hoy solo `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecucion interna real.

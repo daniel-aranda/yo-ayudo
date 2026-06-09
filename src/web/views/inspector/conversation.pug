@@ -1,6 +1,13 @@
 extends ../layout
 
 block content
+  -
+    const interaction_status_class = (status) => {
+      const value = String(status || "");
+      if (value === "executed") return "ok";
+      if (value.startsWith("pending")) return "pending";
+      return "blocked";
+    };
   section.page-header
     h1 Inspector
     if conversation
@@ -34,6 +41,12 @@ block content
                   span.trace-badge.trace-badge-warning review
                 if trace.has_error
                   span.trace-badge.trace-badge-error error
+              if trace.interactions && trace.interactions.length
+                div.interaction-fired
+                  span.interaction-fired-count(class=(trace.interaction_count > 1 ? "is-multi" : ""))= (trace.interaction_count > 1 ? "⚡ " : "") + (trace.interaction_count === 1 ? "1 interacción" : `${trace.interaction_count} interacciones`)
+                  div.interaction-chips
+                    each ix in trace.interactions
+                      span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
               a(href=`/inspector/messages/${message.id}`) Ver trace completo
         else
           div.empty Sin mensajes.

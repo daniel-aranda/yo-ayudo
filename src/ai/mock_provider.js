@@ -93,6 +93,54 @@ export class mock_provider {
     return { intent: "unknown", confidence: 0.32, reason: "no known pattern matched" };
   }
 
+  // Multi-interaction routing: a single message can carry several operations
+  // (e.g. "abrimos con 1500, vendimos 3200 y compré 5 kg pastor por 600").
+  // We locate every category by its trigger keyword, dedupe (a single operation
+  // never double-fires), then SEGMENT the text at those keyword boundaries so
+  // each extractor only sees its own clause — otherwise one operation's numbers
+  // (e.g. the sales total) would leak into another (e.g. the opening cash).
+  async classify_intents(input) {
+    const text = normalize_text(input.text);
+    const detectors = [
+      { intent: "day_start", confidence: 0.93, pattern: /abrimos|inicio del dia|empezamos/, reason: "day start keyword" },
+      { intent: "purchase", confidence: 0.92, pattern: /compre|compramos|compra/, reason: "purchase keyword" },
+      { intent: "sales_update", confidence: 0.91, pattern: /vendimos|venta acumulada|ventas hasta|hasta ahorita|hasta ahora/, reason: "sales update keyword" },
+      { intent: "inventory_update", confidence: 0.86, pattern: /inventario|existencia|conteo/, reason: "inventory keyword" },
+      { intent: "daily_note", confidence: 0.86, pattern: /sobro|sobrante|falto|faltante|merma|nota/, reason: "daily note keyword" },
+      { intent: "daily_close", confidence: 0.94, pattern: /cerramos|cierre|cerrar dia/, reason: "daily close keyword" },
+      { intent: "report_request", confidence: 0.9, pattern: /reporte|resumen|como vamos|como salio/, reason: "report keyword" },
+      { intent: "human_help", confidence: 0.92, pattern: /ayuda|humano|persona|soporte/, reason: "human help keyword" },
+    ];
+
+    const matches = [];
+    for (const detector of detectors) {
+      const match = text.match(detector.pattern);
+      if (match && !matches.some((entry) => entry.intent === detector.intent)) {
+        matches.push({ ...detector, index: match.index });
+      }
+    }
+
+    if (!matches.length) {
+      return { intents: [{ intent: "unknown", confidence: 0.32, reason: "no known pattern matched", segment: text }] };
+    }
+
+    // Order by where each operation appears, then bound each to [its keyword,
+    // next keyword). A single-operation message yields one segment = full text,
+    // so single-op extraction is byte-for-byte identical to before.
+    matches.sort((a, b) => a.index - b.index);
+    return {
+      intents: matches.map((match, position) => {
+        const end = position + 1 < matches.length ? matches[position + 1].index : text.length;
+        return {
+          intent: match.intent,
+          confidence: match.confidence,
+          reason: match.reason,
+          segment: text.slice(match.index, end).trim(),
+        };
+      }),
+    };
+  }
+
   async extract_day_start(input) {
     const text = normalize_text(input.text);
     const opening_cash =

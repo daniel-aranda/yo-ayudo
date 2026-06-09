@@ -122,6 +122,41 @@ describe("WhatsApp inbound pipeline", () => {
     expect(reports.rows[0].summary_text).toContain("Ventas");
   });
 
+  it("fires multiple interactions from a single message (multi-execution)", async () => {
+    const results = await simulate(
+      pool,
+      client,
+      "abrimos con 1500 en caja, vendimos 3200 hasta ahorita y compré 5 kg pastor por 600 con Juan",
+    );
+
+    const business_days = await pool.query("SELECT * FROM op_business_days");
+    const sales_updates = await pool.query("SELECT * FROM op_sales_updates");
+    const purchases = await pool.query("SELECT * FROM op_purchases");
+    const inbound = await pool.query("SELECT * FROM messages WHERE direction = 'inbound' LIMIT 1");
+    const audit = await pool.query(
+      "SELECT action_id, status FROM action_audit_logs WHERE message_id = $1 ORDER BY action_id",
+      [inbound.rows[0].id],
+    );
+
+    // One message resolved to three operations — each executed and audited,
+    // each with its own numbers correctly segmented (no cross-contamination).
+    expect(results[0].intents).toEqual(expect.arrayContaining(["day_start", "sales_update", "purchase"]));
+    expect(business_days.rows[0].opening_cash).toBe(1500);
+    expect(sales_updates.rows[0].accumulated_sales).toBe(3200);
+    expect(purchases.rows[0].item_name).toBe("pastor");
+    expect(purchases.rows[0].total_cost).toBe(600);
+    expect(audit.rows.map((row) => row.action_id)).toEqual([
+      "registrar_compra",
+      "registrar_inicio_dia",
+      "registrar_venta",
+    ]);
+    expect(audit.rows.every((row) => row.status === "executed")).toBe(true);
+    // The single reply acknowledges every interaction.
+    expect(client.sent_messages[0].body).toContain("Inicio del día registrado");
+    expect(client.sent_messages[0].body).toContain("Venta acumulada registrada");
+    expect(client.sent_messages[0].body).toContain("Compra registrada");
+  });
+
   it("records the operation through the unified action flow and writes useful messages to memory", async () => {
     await simulate(pool, client, "compré 12 kg pastor por 1680 con Juan");
 

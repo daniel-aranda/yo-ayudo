@@ -1,4 +1,5 @@
 import { action_execution_service } from "../actions/action_execution_service.js";
+import { get_action } from "../actions/action_registry.js";
 import { create_model_provider } from "../ai/provider_factory.js";
 import { bot_configuration_service } from "./bot_configuration_service.js";
 import { prompt_compiler } from "./prompt_compiler.js";
@@ -186,6 +187,14 @@ function should_consult_human(message, action_results) {
   );
 }
 
+// Map an action-execution status onto the interaction-trace vocabulary so the UI
+// colors it consistently (executed = ok, pending = amber, everything else = blocked).
+function action_status_for_trace(status) {
+  if (status === "executed") return "executed";
+  if (status === "pending_confirmation") return "pending_confirmation";
+  return status ?? "unknown";
+}
+
 function build_interaction_trace(bot, message, reply, action_results) {
   const interactions = enabled_interactions_for_bot(bot);
   const trace = [];
@@ -204,6 +213,24 @@ function build_interaction_trace(bot, message, reply, action_results) {
       interaction_type: "receive_whatsapp_message",
       status: "ignored",
       reason: "El agente no tiene habilitada la interacción para recibir WhatsApp.",
+    });
+  }
+
+  // The router can fire MORE THAN ONE interaction per message — each executed
+  // action is one interaction it decided to trigger. This multi-interaction
+  // routing is the bot's edge, so it leads the trace right after "recibir".
+  for (const result of action_results) {
+    const action = get_action(result.action_id);
+    trace.push({
+      interaction_type: result.action_id,
+      action_id: result.action_id,
+      label: action?.nombre ?? result.action_id,
+      status: action_status_for_trace(result.status),
+      reason:
+        result.status === "executed"
+          ? "El router disparó esta interacción y se ejecutó."
+          : `El router disparó esta interacción (estado: ${result.status}).`,
+      output: result.output ?? {},
     });
   }
 

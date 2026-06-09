@@ -1701,3 +1701,141 @@ pre {
   font-size: 13px;
   line-height: 1.35;
 }
+
+/* ============================================================
+   Triggered interactions — the multi-interaction router decision,
+   shown in conversations, message trace, and the bot tester.
+   ============================================================ */
+.interaction-fired {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.interaction-fired-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.interaction-fired-count.is-multi {
+  background: #e9e7fb;
+  border-radius: 999px;
+  color: #4f46e5;
+  padding: 2px 10px;
+}
+
+.interaction-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.interaction-chip {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.interaction-chip.is-ok {
+  background: #e4f4ef;
+  border-color: #1f9d6b;
+  color: var(--accent-dark);
+}
+
+.interaction-chip.is-pending {
+  background: #fbf0db;
+  border-color: #e0930a;
+  color: #8a5a00;
+}
+
+.interaction-chip.is-blocked {
+  background: #fbe9e4;
+  border-color: #e0533d;
+  color: #9a3412;
+}
+
+.interaction-chip.is-muted {
+  background: var(--surface-strong);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+/* Bot tester: the interaction trace is the hero panel of the result. */
+.interaction-trace-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.interaction-trace-head h3 {
+  margin: 0;
+}
+
+.interaction-trace {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.interaction-trace-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 2px 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px 12px;
+}
+
+.interaction-trace-row.is-ok {
+  border-left-color: #1f9d6b;
+}
+
+.interaction-trace-row.is-pending {
+  border-left-color: #e0930a;
+}
+
+.interaction-trace-row.is-blocked {
+  border-left-color: #e0533d;
+}
+
+.interaction-trace-row.is-muted {
+  border-left-color: var(--line);
+  opacity: 0.7;
+}
+
+.interaction-trace-label {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.interaction-trace-status {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.interaction-trace-reason,
+.interaction-trace-output {
+  color: var(--muted);
+  font-size: 13px;
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+}
+
+.interaction-trace-output {
+  color: var(--text);
+}

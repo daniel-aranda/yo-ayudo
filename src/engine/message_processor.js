@@ -5,7 +5,7 @@ import { action_execution_service } from "../actions/action_execution_service.js
 import { create_model_provider } from "../ai/provider_factory.js";
 import { observed_model_provider } from "../ai/observed_provider.js";
 import { message_intent_parser } from "./message_intent_parser.js";
-import { build_reply } from "./response_builder.js";
+import { build_multi_reply } from "./response_builder.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { extract_media_metadata, extract_text_body } from "../channels/whatsapp/whatsapp_message_parser.js";
 import { resolve_whatsapp_identity_by_phone_number_id } from "../channels/whatsapp/whatsapp_identity_resolver.js";
@@ -264,33 +264,30 @@ const INTENT_TO_OPERATION_ACTION = {
   report_request: "generar_reporte_dia",
 };
 
-async function route_and_dispatch_operation(dependencies, processing_context, parsed) {
+async function dispatch_one_operation(actions, processing_context, parsed) {
   if (parsed.needs_review) {
-    return { routing_result: null, handle_result: { handled: false } };
+    return { intent: parsed.intent, parsed, handled: false, needs_review: true };
   }
 
   if (parsed.intent === "human_help") {
     return {
-      routing_result: null,
-      handle_result: {
-        handled: true,
-        reply_text: "Te canalizo con una persona. Mientras tanto, sigo guardando los mensajes operativos.",
-      },
+      intent: parsed.intent,
+      parsed,
+      handled: true,
+      reply_text: "Te canalizo con una persona. Mientras tanto, sigo guardando los mensajes operativos.",
     };
   }
 
   const action_id = INTENT_TO_OPERATION_ACTION[parsed.intent];
   if (!action_id) {
     return {
-      routing_result: null,
-      handle_result: {
-        handled: false,
-        reply_text: "No pude clasificar este mensaje para operación. Lo dejo en revisión.",
-      },
+      intent: parsed.intent,
+      parsed,
+      handled: false,
+      reply_text: "No pude clasificar este mensaje para operación. Lo dejo en revisión.",
     };
   }
 
-  const actions = new action_execution_service({ pool: dependencies.pool });
   const result = await actions.execute_action({
     organization_id: processing_context.organization?.id ?? processing_context.bot?.organization_id ?? null,
     account_id: processing_context.account?.id ?? processing_context.bot?.account_id ?? null,
@@ -304,14 +301,29 @@ async function route_and_dispatch_operation(dependencies, processing_context, pa
   });
 
   return {
-    routing_result: null,
-    handle_result: {
-      handled: result.status === "executed",
-      metadata: result.output ?? {},
-      report_id: result.output?.report_id,
-      action_status: result.status,
-    },
+    intent: parsed.intent,
+    parsed,
+    action_id,
+    handled: result.status === "executed",
+    action_status: result.status,
+    metadata: result.output ?? {},
+    report_id: result.output?.report_id,
   };
+}
+
+// Multi-interaction execution: a single inbound message can resolve to several
+// operations, and each one runs through the unified, audited action flow. Every
+// execution writes its own action_audit_logs row — which is exactly what surfaces
+// the per-message interaction chips in the inspector. This is the bot's edge.
+async function route_and_dispatch_operations(dependencies, processing_context, operations) {
+  const actions = new action_execution_service({ pool: dependencies.pool });
+  const results = [];
+
+  for (const parsed of operations) {
+    results.push(await dispatch_one_operation(actions, processing_context, parsed));
+  }
+
+  return results;
 }
 
 async function process_inbound_message(dependencies, input) {
@@ -403,8 +415,20 @@ async function process_inbound_message(dependencies, input) {
     resolution.bot_profile?.timezone ?? resolution.account?.timezone ?? "America/Mexico_City",
   );
   const parser = new message_intent_parser(observed_provider);
-  const classification = await observed_provider.classify_intent({ text: normalized.normalized_text });
-  const parsed = await parser.parse(normalized.normalized_text, classification);
+  const { intents } = await observed_provider.classify_intents({ text: normalized.normalized_text });
+  const detected_intents =
+    Array.isArray(intents) && intents.length ? intents : [{ intent: "unknown", confidence: 0, reason: "no classification" }];
+  // One message can carry several operations. Each detected intent carries its
+  // own text segment (falling back to the full text for providers that don't
+  // segment), so its extractor only parses its own clause.
+  const operations = [];
+  for (const classification of detected_intents) {
+    operations.push(await parser.parse(classification.segment ?? normalized.normalized_text, classification));
+  }
+  // The first operation is the "primary" one — it drives the message's headline
+  // columns and memory ingestion; the rest are extra interactions it fired.
+  const primary_operation = operations[0];
+  const needs_review_any = operations.some((operation) => operation.needs_review);
   const processing_context = {
     pool: dependencies.pool,
     bot_profile: resolution.bot_profile,
@@ -419,93 +443,88 @@ async function process_inbound_message(dependencies, input) {
     operation_date,
   };
 
-  await store_parsing_result(dependencies.pool, {
-    account_id,
-    organization_id,
-    message_id: stored_message.id,
-    parsed,
-  });
+  for (const operation of operations) {
+    await store_parsing_result(dependencies.pool, {
+      account_id,
+      organization_id,
+      message_id: stored_message.id,
+      parsed: operation,
+    });
+  }
   await record_context_event(dependencies.pool, processing_context, {
     event_type: "parsing_completed",
     event_stage: "parsing",
     title: "Parsing completed",
-    summary: `Intent ${parsed.intent} with confidence ${parsed.confidence}.`,
+    summary: `Intents ${operations.map((operation) => operation.intent).join(", ")}.`,
     details_json: {
-      intent: parsed.intent,
-      confidence: parsed.confidence,
-      needs_review: parsed.needs_review,
-      validation_errors: parsed.validation_errors,
+      intents: operations.map((operation) => ({
+        intent: operation.intent,
+        confidence: operation.confidence,
+        needs_review: operation.needs_review,
+      })),
     },
     source_table: "parsing_results",
     source_id: stored_message.id,
   });
 
-  if (parsed.needs_review) {
+  for (const operation of operations) {
+    if (!operation.needs_review) {
+      continue;
+    }
     await create_review_item(dependencies.pool, {
       account_id,
       organization_id,
       bot_id: resolution.bot?.id ?? null,
       message_id: stored_message.id,
-      reason: parsed.validation_errors[0]?.message?.toString() ?? "low_confidence_or_missing_data",
+      reason: operation.validation_errors[0]?.message?.toString() ?? "low_confidence_or_missing_data",
       raw_text: stored_message.text_body ?? "",
-      extracted_json: parsed.data,
+      extracted_json: operation.data,
     });
+  }
+  if (needs_review_any) {
     await record_context_event(dependencies.pool, processing_context, {
       event_type: "review_item_created",
       event_stage: "review",
       status: "warning",
       title: "Review item created",
       summary: "Message needs human review.",
-      details_json: { intent: parsed.intent, missing_fields: parsed.missing_fields },
+      details_json: {
+        intents: operations.filter((operation) => operation.needs_review).map((operation) => operation.intent),
+      },
       source_table: "review_items",
       source_id: stored_message.id,
     });
   }
 
-  const { routing_result, handle_result } = await route_and_dispatch_operation(
-    dependencies,
-    processing_context,
-    parsed,
-  );
-  if (routing_result) {
+  const operation_results = await route_and_dispatch_operations(dependencies, processing_context, operations);
+  const handled_any = operation_results.some((result) => result.handled);
+  // One operation_write event per fired interaction — each carries its action_id
+  // and status, so the message trace shows the full multi-interaction decision.
+  for (const result of operation_results) {
     await record_context_event(dependencies.pool, processing_context, {
-      event_type: "router_selected_agent",
-      event_stage: "routing",
-      title: "Router selected agent",
-      summary: `${routing_result.agent_key}: ${routing_result.reason}`,
-      details_json: routing_result,
-      source_table: "agent_runs",
+      event_type: "operation_saved",
+      event_stage: "operation_write",
+      title: `Operation ${result.intent}`,
+      summary: result.handled
+        ? `Interacción ${result.intent} ejecutada${result.action_id ? ` (${result.action_id})` : ""}.`
+        : `Interacción ${result.intent} sin escritura operativa.`,
+      details_json: {
+        intent: result.intent,
+        action_id: result.action_id ?? null,
+        handled: result.handled,
+        action_status: result.action_status ?? null,
+        report_id: result.report_id ?? null,
+        metadata: result.metadata ?? {},
+      },
+      source_table: "messages",
       source_id: stored_message.id,
     });
   }
-  await record_context_event(dependencies.pool, processing_context, {
-    event_type: "agent_completed",
-    event_stage: "agent",
-    title: "Agent completed",
-    summary: routing_result?.agent_key ?? "direct dispatcher",
-    details_json: {
-      handled: handle_result.handled,
-      report_id: handle_result.report_id,
-      metadata: handle_result.metadata,
-    },
-    source_table: "messages",
-    source_id: stored_message.id,
-  });
-  await record_context_event(dependencies.pool, processing_context, {
-    event_type: "operation_saved",
-    event_stage: "operation_write",
-    title: "Operation handler completed",
-    summary: handle_result.handled ? "Operational write completed or no-op handled." : "No operational write.",
-    details_json: handle_result,
-    source_table: "messages",
-    source_id: stored_message.id,
-  });
 
   if (config.memory_ingestion_enabled) {
     const memory_document = await safe_ingest_message_to_memory({
       context: processing_context,
-      parsed,
-      handle_result,
+      parsed: primary_operation,
       store: dependencies.memory_store,
       embedding: dependencies.embedding_gateway,
     });
@@ -530,13 +549,22 @@ async function process_inbound_message(dependencies, input) {
     }
   }
 
-  const processing_status = parsed.needs_review ? "needs_review" : handle_result.handled ? "handled" : "unhandled";
-  await update_message_parsing(dependencies.pool, stored_message.id, parsed, processing_status);
+  const processing_status = needs_review_any && !handled_any ? "needs_review" : handled_any ? "handled" : "unhandled";
+  await update_message_parsing(
+    dependencies.pool,
+    stored_message.id,
+    { ...primary_operation, needs_review: needs_review_any },
+    processing_status,
+  );
   logger.info(
-    { message_id: stored_message.id, intent: parsed.intent, confidence: parsed.confidence },
+    {
+      message_id: stored_message.id,
+      intents: operations.map((operation) => operation.intent),
+      confidence: primary_operation.confidence,
+    },
     "message parsed",
   );
-  const reply_text = build_reply(parsed, handle_result);
+  const reply_text = build_multi_reply(operation_results);
 
   if (reply_text) {
     const send_result = await dependencies.whatsapp_client.send_text({
@@ -586,10 +614,11 @@ async function process_inbound_message(dependencies, input) {
 
   return {
     message_id: stored_message.id,
-    intent: parsed.intent,
-    needs_review: parsed.needs_review,
+    intent: primary_operation.intent,
+    intents: operations.map((operation) => operation.intent),
+    needs_review: needs_review_any,
     reply_text,
-    agent_key: routing_result?.agent_key ?? null,
+    agent_key: null,
   };
 }
 

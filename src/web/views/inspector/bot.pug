@@ -831,6 +831,39 @@ block content
         return `<section class="test-result-section"><h3>${title}</h3>${rows || '<p class="meta">Sin registros.</p>'}</section>`;
       }
 
+      function interactionStatusClass(status) {
+        const value = String(status || "");
+        if (["executed", "mock_received", "mock_sent", "mock_requested_and_answered"].includes(value)) return "ok";
+        if (value.startsWith("pending")) return "pending";
+        if (value === "ignored") return "muted";
+        return "blocked";
+      }
+
+      // The "Interacciones" panel is the hero of the test result: it shows the full
+      // ordered set the router fired (recibir -> N acciones -> consultar -> enviar),
+      // so you can see this bot trigger MORE THAN ONE interaction per message.
+      function renderInteractionTrace(trace) {
+        const items = Array.isArray(trace) ? trace : [];
+        const fired = items.filter((event) => event.status !== "ignored");
+        const countLabel = fired.length === 1 ? "1 interacción disparada" : `${fired.length} interacciones disparadas`;
+        const rows = items
+          .map((event) => `
+            <div class="interaction-trace-row is-${interactionStatusClass(event.status)}">
+              <span class="interaction-trace-label">${escapeHtml(event.label || event.interaction_type)}</span>
+              <span class="interaction-trace-status">${escapeHtml(event.status)}</span>
+              ${event.reason ? `<p class="interaction-trace-reason">${escapeHtml(event.reason)}</p>` : ""}
+              ${event.output?.response ? `<p class="interaction-trace-output">${escapeHtml(event.output.response)}</p>` : ""}
+            </div>`)
+          .join("");
+        return `<section class="test-result-section">
+          <div class="interaction-trace-head">
+            <h3>Interacciones</h3>
+            <span class="interaction-fired-count ${fired.length > 1 ? "is-multi" : ""}">${fired.length > 1 ? "⚡ " : ""}${countLabel}</span>
+          </div>
+          ${items.length ? `<div class="interaction-trace">${rows}</div>` : '<p class="meta">Sin interacciones.</p>'}
+        </section>`;
+      }
+
       testButton?.addEventListener("click", async () => {
         const mensaje = testMessage.value.trim();
         if (!mensaje) return;
@@ -869,14 +902,7 @@ block content
               ${modelDecision}
               <p class="meta">Prompt compilation: ${escapeHtml(result.prompt_compilation_id)}</p>
             </section>
-            ${renderList("Interacciones", result.interaction_trace, (event) => `
-              <div class="trace-card">
-                <strong>${escapeHtml(event.label || event.interaction_type)}</strong>
-                <span class="status">${escapeHtml(event.status)}</span>
-                <p class="meta">${escapeHtml(event.reason || "")}</p>
-                ${event.output?.response ? `<p>${escapeHtml(event.output.response)}</p>` : ""}
-              </div>
-            `)}
+            ${renderInteractionTrace(result.interaction_trace)}
             ${renderList("Acciones pedidas", result.action_requests, (action) => `
               <div class="trace-card">
                 <strong>${escapeHtml(action.action_id)}</strong>

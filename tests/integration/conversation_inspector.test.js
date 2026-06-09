@@ -674,12 +674,19 @@ describe("Conversation Inspector", () => {
       .expect(200);
 
     expect(response.body.result.respuesta).toContain("Recibí el mensaje");
-    expect(response.body.result.interaction_trace.map((event) => event.interaction_type)).toEqual(
-      expect.arrayContaining(["receive_whatsapp_message", "consult_human", "send_whatsapp_message"]),
+    const interaction_trace = response.body.result.interaction_trace;
+    // The router fires MORE THAN ONE interaction: receive + the executed action(s)
+    // (e.g. crear_tarea) + consult_human + send all appear in the same trace.
+    expect(interaction_trace.map((event) => event.interaction_type)).toEqual(
+      expect.arrayContaining(["receive_whatsapp_message", "crear_tarea", "consult_human", "send_whatsapp_message"]),
     );
-    expect(response.body.result.interaction_trace.find((event) => event.interaction_type === "consult_human").status).toBe(
+    expect(interaction_trace.find((event) => event.interaction_type === "consult_human").status).toBe(
       "mock_requested_and_answered",
     );
+    const tarea_interaction = interaction_trace.find((event) => event.interaction_type === "crear_tarea");
+    expect(tarea_interaction.label).toBe("Crear tarea");
+    expect(tarea_interaction.action_id).toBe("crear_tarea");
+    expect(interaction_trace.filter((event) => event.status !== "ignored").length).toBeGreaterThan(1);
     expect(response.body.result.action_requests.map((action) => action.action_id)).toContain("crear_tarea");
   });
 

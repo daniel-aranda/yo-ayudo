@@ -63,10 +63,23 @@ Las capacidades ejecutables se configuran como interacciones, cada una con su pr
 - `memory_documents`: status de store local/S3, embedding y metadata.
 - `ai_calls`: llamadas al provider observado.
 - `op_purchases`, `op_sales_updates`, `op_inventory_snapshots`, `op_business_days`, `op_daily_reports`: escrituras operativas.
+- `action_audit_logs`: interacciones (acciones) que el mensaje disparo, con su status.
 - `review_items`: pendientes de revision.
 - `processing_events`: timeline tecnica compacta.
 
 Si una seccion no existe, la UI muestra un estado vacio claro en vez de fallar.
+
+## Interacciones Disparadas
+
+El edge del producto es que un mensaje puede disparar **mas de una interaccion**. El inspector lo hace visible:
+
+- **Timeline de conversacion** (`conversation.pug`): bajo cada mensaje, un conteo (`⚡ N interacciones`, resaltado cuando N > 1) y un chip por interaccion, con color por status (verde = ejecutada, ambar = pendiente, rojo = bloqueada).
+- **Trace de mensaje** (`message_trace.pug`): seccion "Interacciones disparadas" con los chips + detalle (`action_id`, status, output) por interaccion.
+- **Probar bot** (resultado de `test-message`): panel "Interacciones" que muestra el `interaction_trace` completo y ordenado (recibir -> N acciones -> consultar humano -> enviar) con el conteo de interacciones disparadas.
+
+De donde sale el dato:
+- Conversacion y trace: de `action_audit_logs` por `message_id`. `compact_trace_summary` (en `inspector_presenter.js`) mapea cada `action_id` a su label via el registry (`get_action`) y expone `interactions` + `interaction_count`. `trace_builder.js` consulta `action_audit_logs` en `compact_trace_for_message` y `build_message_trace`.
+- Probar bot: del `interaction_trace` que arma `bot_engine_test_service` (`build_interaction_trace`), que ahora intercala cada accion ejecutada como una interaccion entre "recibir" y "enviar".
 
 ## Processing Events
 
@@ -74,10 +87,8 @@ Si una seccion no existe, la UI muestra un estado vacio claro en vez de fallar.
 
 - webhook recibido
 - mensaje guardado
-- parsing completado
-- routing
-- agente completado
-- escritura operativa
+- parsing completado (resume todos los intents detectados)
+- escritura operativa: **una por interaccion disparada** (`event_stage = operation_write`, con `action_id` y status)
 - memory document creado
 - outbound creado
 - review creado

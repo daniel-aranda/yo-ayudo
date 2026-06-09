@@ -1,5 +1,7 @@
 # Guia Para Agentes
 
+> Protocolo de trabajo (leer `knowledge/` antes de la tarea, actualizarlo al final, mantenerlo al 100%) e indice del folder: ver `/AGENTS.md` en la raiz. Este archivo es la guia profunda de arquitectura y reglas.
+
 Este repo construye YoAyudo como Bot Engine configurable para negocios.
 
 La frase guia:
@@ -30,6 +32,15 @@ Tambien utiles:
 - `knowledge/testing/founder_preflight_checklist.md` para validar el primer flujo interno.
 - `knowledge/testing/founder_trial_checklist.md` para la prueba manual founder de punta a punta.
 - `knowledge/agents/testing.md` para pruebas.
+
+## Al Terminar (Actualizar)
+
+Antes de cerrar o hacer commit de una tarea, deja el folder al 100%:
+
+- Actualiza el doc de arquitectura del area que tocaste.
+- Actualiza `knowledge/IMPLEMENTATION_STATUS.md` (que se implemento, endpoints nuevos, conteo de tests) y `knowledge/roadmap/next.md` si cambiaron prioridades.
+- Si el codigo contradecia un doc, el codigo gana: corrige el doc.
+- Se conciso y edita en su lugar: el folder existe para que el siguiente agente gaste menos tokens, no mas.
 
 ## Reglas Duras
 

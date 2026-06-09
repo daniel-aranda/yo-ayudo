@@ -1,6 +1,17 @@
 extends ../layout
 
 block content
+  -
+    const interaction_status_class = (status) => {
+      const value = String(status || "");
+      if (value === "executed") return "ok";
+      if (value.startsWith("pending")) return "pending";
+      return "blocked";
+    };
+    const interaction_label_by_action = {};
+    (compact_trace_summary && compact_trace_summary.interactions ? compact_trace_summary.interactions : []).forEach((ix) => {
+      interaction_label_by_action[ix.action_id] = ix.label;
+    });
   section.page-header
     h1 Message Trace
     p= `${message.bot_name || "sin bot"} · ${message.contact_name || message.whatsapp_phone} · ${message.direction}`
@@ -34,6 +45,26 @@ block content
         details.json-details
           summary Raw payload
           pre= json(message.raw_payload_json)
+
+      article.trace-section
+        h2 Interacciones disparadas
+        if action_logs && action_logs.length
+          div.interaction-fired
+            span.interaction-fired-count(class=(action_logs.length > 1 ? "is-multi" : ""))= (action_logs.length > 1 ? "⚡ " : "") + (action_logs.length === 1 ? "1 interacción" : `${action_logs.length} interacciones`)
+            div.interaction-chips
+              each log in action_logs
+                span.interaction-chip(class=`is-${interaction_status_class(log.status)}`, title=log.status)= interaction_label_by_action[log.action_id] || log.action_id
+          each log in action_logs
+            div.trace-card
+              strong= interaction_label_by_action[log.action_id] || log.action_id
+              p= `${log.action_id} · ${log.status}`
+              if log.error
+                p.trace-badge-error= log.error
+              details.json-details
+                summary Output
+                pre= json(log.output_json)
+        else
+          div.empty Este mensaje no disparó interacciones (recibir/enviar no se registran como acciones).
 
       article.trace-section
         h2 Parsing
