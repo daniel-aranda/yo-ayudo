@@ -147,7 +147,9 @@ async function generar_resumen(_pool, context) {
 }
 
 async function buscar_negocios(pool, context) {
+  const started_at = Date.now();
   const result = await search_business_prospects(context.input_json ?? {});
+  const latency_ms = Date.now() - started_at;
   const identity = event_identity(context);
 
   if (result.status === "pending_provider") {
@@ -156,11 +158,12 @@ async function buscar_negocios(pool, context) {
       operation: "search",
       status: "not_configured",
       detail: result.message,
+      latency_ms,
       ...identity,
     });
   } else {
     for (const provider of result.providers_used ?? []) {
-      await safe_record_integration_event(pool, { integration_key: provider, operation: "search", status: "success", ...identity });
+      await safe_record_integration_event(pool, { integration_key: provider, operation: "search", status: "success", latency_ms, ...identity });
     }
     for (const provider_error of result.provider_errors ?? []) {
       await safe_record_integration_event(pool, {
@@ -168,6 +171,7 @@ async function buscar_negocios(pool, context) {
         operation: "search",
         status: "failure",
         detail: provider_error.message,
+        latency_ms,
         ...identity,
       });
     }
@@ -215,13 +219,16 @@ async function resolve_recipient_phone(pool, context) {
 }
 
 async function responder_con_voz(pool, context) {
+  const voice_started_at = Date.now();
   const voice = await synthesize_voice_reply(context.input_json ?? {}, context.voice_options ?? {});
+  const voice_latency_ms = Date.now() - voice_started_at;
 
   await safe_record_integration_event(pool, {
     integration_key: "elevenlabs",
     operation: "tts",
     status: voice.status === "executed" ? "success" : voice.status === "pending_provider" ? "not_configured" : "failure",
     detail: voice.message,
+    latency_ms: voice_latency_ms,
     ...event_identity(context),
   });
 
@@ -253,7 +260,9 @@ async function responder_con_voz(pool, context) {
   }
 
   const client = context.whatsapp_client ?? new meta_whatsapp_client();
+  const send_started_at = Date.now();
   const delivery = await client.send_voice_note({ to, buffer: voice.audio, mime_type: voice.content_type });
+  const send_latency_ms = Date.now() - send_started_at;
   const sent = delivery.sent === true;
   const pending_credentials = !sent && delivery.reason === "missing_whatsapp_credentials";
 
@@ -262,6 +271,7 @@ async function responder_con_voz(pool, context) {
     operation: "send_voice",
     status: sent ? "success" : pending_credentials ? "not_configured" : "failure",
     detail: delivery.reason ?? null,
+    latency_ms: send_latency_ms,
     ...event_identity(context),
   });
 

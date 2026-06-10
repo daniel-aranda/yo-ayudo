@@ -305,6 +305,7 @@ button:hover {
 }
 
 .compact div {
+  align-items: baseline;
   display: flex;
   gap: 16px;
   justify-content: space-between;
@@ -312,11 +313,22 @@ button:hover {
 
 .compact dt {
   color: var(--muted);
+  flex-shrink: 0;
 }
 
 .compact dd {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
   text-align: right;
+}
+
+/* Technical values (ids, hashes, paths): monospace + break so they never
+   overflow their container. */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .clean-list {
@@ -1385,6 +1397,7 @@ td input {
 .inspector-sidebar {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .inspector-panel,
@@ -1394,7 +1407,28 @@ td input {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
+  min-width: 0;
   padding: 16px;
+}
+
+/* Trace items: a lighter "row" inside the white section, not a card-in-card.
+   overflow-wrap keeps long ids/paths/json contained. */
+.trace-card {
+  background: var(--surface-strong);
+  border: 0;
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.trace-card p {
+  font-size: 13px;
+  margin: 0;
+}
+
+.trace-card + .trace-card {
+  margin-top: 10px;
 }
 
 .trace-section h2,
@@ -1469,6 +1503,7 @@ pre {
   border-radius: 7px;
   color: #f7f7f4;
   font-size: 12px;
+  max-width: 100%;
   overflow: auto;
   padding: 12px;
 }
@@ -1851,4 +1886,402 @@ pre {
 
 .interaction-trace-output {
   color: var(--text);
+}
+
+/* ============================================================
+   Conversation observability view (/inspector/conversations/:id)
+   ============================================================ */
+.breadcrumb {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.breadcrumb a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--accent-dark);
+}
+
+.breadcrumb-sep {
+  color: var(--line);
+}
+
+.breadcrumb-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.conversation-header {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.conversation-header-aside {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.status-badge {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.status-badge.is-open {
+  background: #e4f4ef;
+  color: var(--accent-dark);
+}
+
+.status-badge.is-closed {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+.button-ghost {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 600;
+  margin-top: 0;
+  text-decoration: none;
+}
+
+.button-ghost:hover {
+  background: var(--surface-strong);
+}
+
+/* Conversation thread — a single chat-window wrapper, not floating cards */
+.conversation-thread {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(20, 20, 18, 0.03);
+  display: grid;
+  gap: 14px;
+  padding: 22px 24px;
+}
+
+.turn {
+  display: grid;
+  gap: 6px;
+}
+
+.turn + .turn {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+/* WhatsApp-style bubbles: operator (left, neutral) vs agent (right, mint) */
+.turn-msg {
+  border-radius: 14px;
+  max-width: 72%;
+  padding: 11px 14px;
+}
+
+.turn-msg--user {
+  background: var(--surface-strong);
+  justify-self: start;
+}
+
+.turn-msg--agent {
+  background: #e7f5ef;
+  justify-self: end;
+}
+
+.turn--error .turn-msg--user {
+  box-shadow: inset 3px 0 0 #e0533d;
+}
+
+.msg-head {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.msg-author {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.turn-msg--agent .msg-author {
+  color: var(--accent-dark);
+}
+
+.msg-time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.msg-text {
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Understanding: only what matters — action + confidence — right-aligned. The
+   technical detail (intent code, memory, embedding) lives in "Ver trace
+   completo"; the raw intent stays as data-intent for tooling. */
+.turn-understanding {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  justify-self: end;
+  max-width: 72%;
+}
+
+.turn-understanding .u-none {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.u-confidence {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.u-confidence.is-ok {
+  background: #e4f4ef;
+  color: var(--accent-dark);
+}
+
+.u-confidence.is-low {
+  background: #fbf0db;
+  color: #8a5a00;
+}
+
+.u-tag {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+}
+
+.u-tag.is-warning {
+  background: #fbf0db;
+  color: #8a5a00;
+}
+
+.u-tag.is-error {
+  background: #fbe9e4;
+  color: #9a3412;
+}
+
+.turn-pending {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+  justify-self: end;
+  margin: 0;
+}
+
+.turn-foot {
+  justify-self: end;
+  margin-top: 2px;
+}
+
+.trace-link {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.trace-link:hover {
+  color: var(--accent-dark);
+  text-decoration: underline;
+}
+
+/* Sticky context sidebar (scoped to this view) */
+.conversation-view .inspector-sidebar {
+  position: sticky;
+  top: 84px;
+}
+
+.with-copy {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.copy-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  margin: 0;
+  padding: 2px 8px;
+}
+
+.copy-btn:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.copy-btn.is-copied {
+  background: #e4f4ef;
+  border-color: #1f9d6b;
+  color: var(--accent-dark);
+}
+
+.quick-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-actions .button {
+  margin-top: 0;
+  width: 100%;
+}
+
+@media (max-width: 780px) {
+  .conversation-view .inspector-sidebar {
+    position: static;
+  }
+
+  .turn-msg,
+  .turn-understanding {
+    max-width: 100%;
+  }
+}
+
+/* ============================================================
+   Message trace — the message is the hero; details live in tabs.
+   ============================================================ */
+.trace-hero {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(20, 20, 18, 0.03);
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 22px 24px;
+}
+
+.trace-hero-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.trace-hero-text {
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding-left: 14px;
+}
+
+.trace-hero-facts {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fact-chip {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 4px 11px;
+}
+
+.fact-chip.is-intent {
+  background: var(--accent);
+  color: #fff;
+}
+
+.fact-chip.is-none {
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Tabs that group the trace detail (reuses .tabs/.tab/.tab-section). */
+.trace-tabs-shell {
+  margin: 0 0 16px;
+}
+
+.trace-pane {
+  display: grid;
+  gap: 14px;
+}
+
+/* Subtle empty state for the trace — a quiet line, not an invasive dashed box. */
+.trace-empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ============================================================
+   Admin (integrations / interactions)
+   ============================================================ */
+.admin-subnav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.admin-subnav a {
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 650;
+  padding: 6px 14px;
+  text-decoration: none;
+}
+
+.admin-subnav a:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.admin-subnav a.is-active {
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.admin-tabs {
+  margin: 16px 0;
+}
+
+.count-ok {
+  color: var(--accent-dark);
+  font-weight: 650;
+}
+
+.count-error {
+  color: #9a3412;
+  font-weight: 650;
 }

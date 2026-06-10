@@ -56,6 +56,8 @@ Viven en `src/web/public/js/core/` y se incluyen via `script` + `include` de Pug
 - `Tab_Navigator.js` (`window.TabNavigator`): tabs por `data-section` que muestran/ocultan paneles `.tab-section[data-parent-tab][data-section]`.
 - `Popup.js` (`window.Popup`): popup/modal **agnóstico y markup-driven**. Contrato: overlay `[data-popup-overlay]`, disparadores de cierre `[data-popup-close]`, `data-popup-overlay-close="true"` para cerrar al click en el backdrop; clases `is-open` (overlay) y `body--popup-open` (body); métodos `iniciar()/open()/close()/destroy()` y cierre con Escape. El CSS vive en `dashboard.css` (`.popup-overlay`, `.popup`, `.popup__header/__body/__footer/__close`, sizes `--sm/--md/--lg`). Reutilízalo para cualquier modal nuevo en vez de reinventarlo.
 
+Mixin Pug compartido: `+breadcrumb(items)` en `layout.pug` (disponible en toda vista que haga `extends`). `items` = `[{ label, href? }]`; sin `href` = página actual. Úsalo en cualquier página nueva del inspector/dashboard para mantener la navegación consistente (CSS `.breadcrumb` en `dashboard.css`).
+
 ## Seguridad De Vistas
 
 Pug escapa interpolaciones por defecto. Mantener esa propiedad:

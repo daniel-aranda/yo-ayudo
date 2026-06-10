@@ -1,7 +1,7 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
 import { get_action } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
-import { get_bot_by_id, update_bot_configuration } from "../bots/bot_repository.js";
+import { get_bot_by_id, get_bot_with_definition, update_bot_configuration } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
 
@@ -613,7 +613,8 @@ export async function get_bot_view(pool, bot_id) {
 // + guardrail events, so operators can see when interactions work or fail
 // (incl. external API failures like ElevenLabs/Places/WhatsApp not configured).
 export async function get_bot_activity_view(pool, bot_id) {
-  const bot = await get_bot_by_id(pool, bot_id);
+  // get_bot_with_definition adds account_name/organization_name for the breadcrumb.
+  const bot = (await get_bot_with_definition(pool, bot_id)) ?? (await get_bot_by_id(pool, bot_id));
   if (!bot) {
     return null;
   }
@@ -773,7 +774,9 @@ export async function get_bot_conversations(pool, input) {
     });
   }
 
-  return { conversations };
+  const bot = await get_bot_with_definition(pool, input.bot_id);
+
+  return { conversations, bot, search: input.search ?? "" };
 }
 
 export async function get_conversation_view(pool, conversation_id) {
@@ -786,7 +789,9 @@ export async function get_conversation_view(pool, conversation_id) {
         bots.name AS bot_name,
         bots.id AS bot_id,
         accounts.name AS account_name,
-        organizations.name AS organization_name
+        accounts.id AS resolved_account_id,
+        organizations.name AS organization_name,
+        organizations.id AS resolved_organization_id
       FROM conversations
       JOIN contacts ON contacts.id = conversations.contact_id
       LEFT JOIN bots ON bots.id = conversations.bot_id
@@ -797,6 +802,7 @@ export async function get_conversation_view(pool, conversation_id) {
     `,
     [conversation_id],
   );
+  const conversation_row = conversation.rows[0] ?? null;
   const messages = await pool.query(
     "SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC",
     [conversation_id],
@@ -810,9 +816,52 @@ export async function get_conversation_view(pool, conversation_id) {
     });
   }
 
+  // Group each inbound message with the outbound message(s) that replied to it
+  // (via reply_to_message_id) so the UI can render conversation "turns" instead
+  // of flat alternating cards. `messages` is kept as-is for callers/tests that
+  // consume the flat list.
+  const turns = [];
+  const turn_by_message_id = new Map();
+  for (const item of messages_with_trace) {
+    if (item.message.direction === "inbound") {
+      const turn = { id: item.message.id, incoming: item, responses: [] };
+      turns.push(turn);
+      turn_by_message_id.set(item.message.id, turn);
+    } else {
+      const parent = item.message.reply_to_message_id
+        ? turn_by_message_id.get(item.message.reply_to_message_id)
+        : null;
+      if (parent) {
+        parent.responses.push(item);
+      } else {
+        turns.push({ id: item.message.id, incoming: null, responses: [item] });
+      }
+    }
+  }
+
+  // Account-level operational day for the sidebar "Estado del día" (best-effort;
+  // the section is hidden in the view when this is null — never invented).
+  const account_id = conversation_row?.resolved_account_id ?? conversation_row?.account_id ?? null;
+  let operational_day = null;
+  if (account_id) {
+    const day = await pool.query(
+      `
+        SELECT operation_date, status, opening_cash, total_sales, updated_at
+        FROM op_business_days
+        WHERE account_id = $1
+        ORDER BY operation_date DESC, updated_at DESC
+        LIMIT 1
+      `,
+      [account_id],
+    );
+    operational_day = day.rows[0] ?? null;
+  }
+
   return {
-    conversation: conversation.rows[0],
+    conversation: conversation_row,
     messages: messages_with_trace,
+    turns,
+    operational_day,
   };
 }
 

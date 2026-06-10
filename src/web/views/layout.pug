@@ -1,3 +1,16 @@
+//- Shared breadcrumb. Pass items as [{ label, href? }]; the last item (or any
+//- without href) renders as the current page. Available to every view via extends.
+mixin breadcrumb(items)
+  if items && items.length
+    nav.breadcrumb(aria-label="Migas de pan")
+      each item, index in items
+        if index > 0
+          span.breadcrumb-sep ›
+        if item.href
+          a(href=item.href)= item.label
+        else
+          span.breadcrumb-current= item.label
+
 doctype html
 html(lang="es")
   head

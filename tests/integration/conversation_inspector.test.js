@@ -14,6 +14,7 @@ import { build_message_trace } from "../../src/inspector/trace_builder.js";
 import { get_conversation_view } from "../../src/inspector/inspector_repository.js";
 import { local_memory_store } from "../../src/memory/local_memory_store.js";
 import { format_money } from "../../src/shared/money.js";
+import { format_date_es, format_datetime_es } from "../../src/shared/dates.js";
 import { create_test_pool } from "../helpers/test_pool.js";
 
 class fake_whatsapp_client {
@@ -58,6 +59,8 @@ function create_inspector_test_app(pool, dependencies = {}) {
   app.set("view engine", "pug");
   app.set("views", path.join(process.cwd(), "src", "web", "views"));
   app.locals.money = format_money;
+  app.locals.date = format_date_es;
+  app.locals.datetime = format_datetime_es;
   app.locals.json = json_text;
   app.locals.message_alignment = message_alignment;
   app.use(express.json());
@@ -295,7 +298,7 @@ describe("Conversation Inspector", () => {
     await request(app)
       .get(`/inspector/messages/${ids.rows[0].message_id}`)
       .expect(200)
-      .expect(/Operational Writes/)
+      .expect(/Escrituras operativas/)
       .expect(/Compra registrada/);
   });
 

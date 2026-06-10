@@ -2,6 +2,19 @@ extends ../layout
 
 block content
   -
+    const intent_labels = {
+      sales_update: "Actualización de venta",
+      day_start: "Inicio del día",
+      daily_close: "Cierre del día",
+      purchase: "Compra",
+      inventory_update: "Inventario",
+      daily_note: "Nota del día",
+      report_request: "Reporte del día",
+      human_help: "Pide ayuda humana",
+      unknown: "No identificado",
+    };
+    const intent_human = (intent) => intent_labels[intent] || null;
+    const confidence_pct = (value) => (value == null || value === "" ? null : Math.round(Number(value) * 100));
     const interaction_status_class = (status) => {
       const value = String(status || "");
       if (value === "executed") return "ok";
@@ -12,219 +25,248 @@ block content
     (compact_trace_summary && compact_trace_summary.interactions ? compact_trace_summary.interactions : []).forEach((ix) => {
       interaction_label_by_action[ix.action_id] = ix.label;
     });
-  section.page-header
-    h1 Message Trace
-    p= `${message.bot_name || "sin bot"} · ${message.contact_name || message.whatsapp_phone} · ${message.direction}`
+    const summary = compact_trace_summary || {};
+    const summary_conf = confidence_pct(summary.confidence);
+    const summary_intent_human = intent_human(summary.intent);
+    const author = message && message.direction === "outbound" ? "Agente" : "Usuario";
+    const trace_account_url = message && message.organization_id && message.account_id ? `/dashboard/business/${message.organization_id}/accounts/${message.account_id}` : "/dashboard";
+    const trace_bc = [{ label: "Dashboard", href: "/dashboard" }];
+    if (message) {
+      if (message.account_name) trace_bc.push({ label: message.account_name, href: trace_account_url });
+      if (message.bot_id) {
+        trace_bc.push({ label: message.bot_name || "Bot", href: `/inspector/bots/${message.bot_id}` });
+        trace_bc.push({ label: "Conversaciones", href: `/inspector/bots/${message.bot_id}/conversations` });
+      }
+      if (message.conversation_id) trace_bc.push({ label: message.contact_name || message.whatsapp_phone || "Conversación", href: `/inspector/conversations/${message.conversation_id}` });
+    }
+    trace_bc.push({ label: "Trace" });
+  +breadcrumb(trace_bc)
 
-  div.inspector-layout
-    section.inspector-main
-      article.trace-section
-        h2 Message
-        dl.compact
-          div
-            dt ID
-            dd= message.id
-          div
-            dt External
-            dd= message.external_message_id || "-"
-          div
-            dt Channel
-            dd= message.channel
-          div
-            dt Direction
-            dd= message.direction
-          div
-            dt Type
-            dd= message.message_type
-          div
-            dt Created
-            dd= message.created_at
-          div
-            dt Text
-            dd= message.text_body || "(sin texto)"
-        details.json-details
-          summary Raw payload
-          pre= json(message.raw_payload_json)
+  //- El mensaje es el rey: hero prominente con lo que el bot entendió/hizo.
+  section.trace-hero
+    p.trace-hero-meta= `${author} · ${message.direction} · ${message.channel} · ${datetime(message.created_at)}`
+    blockquote.trace-hero-text= message.text_body || "(sin texto)"
+    .trace-hero-facts
+      if summary.intent
+        span.fact-chip.is-intent= summary_intent_human || summary.intent
+      if summary_conf != null
+        span.u-confidence(class=(summary_conf < 72 ? "is-low" : "is-ok"))= `Confianza ${summary_conf}%`
+      if summary.interactions && summary.interactions.length
+        each ix in summary.interactions
+          span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
+      else
+        span.fact-chip.is-none Sin acción ejecutada
+      if summary.needs_review || summary.review_status
+        span.u-tag.is-warning Revisión pendiente
+      if summary.has_error
+        span.u-tag.is-error Error en el procesamiento
 
-      article.trace-section
-        h2 Interacciones disparadas
-        if action_logs && action_logs.length
-          div.interaction-fired
-            span.interaction-fired-count(class=(action_logs.length > 1 ? "is-multi" : ""))= (action_logs.length > 1 ? "⚡ " : "") + (action_logs.length === 1 ? "1 interacción" : `${action_logs.length} interacciones`)
-            div.interaction-chips
-              each log in action_logs
-                span.interaction-chip(class=`is-${interaction_status_class(log.status)}`, title=log.status)= interaction_label_by_action[log.action_id] || log.action_id
-          each log in action_logs
-            div.trace-card
-              strong= interaction_label_by_action[log.action_id] || log.action_id
-              p= `${log.action_id} · ${log.status}`
-              if log.error
-                p.trace-badge-error= log.error
-              details.json-details
-                summary Output
-                pre= json(log.output_json)
-        else
-          div.empty Este mensaje no disparó interacciones (recibir/enviar no se registran como acciones).
+  .trace-tabs-shell.wamy-tabs
+    #trace-tabs.tabs(data-initial-tab="interpretacion", role="tablist", aria-label="Detalle del trace")
+      button.tab.active(type="button", data-section="interpretacion", role="tab", aria-selected="true")
+        span Interpretación
+      button.tab(type="button", data-section="contexto", role="tab", aria-selected="false")
+        span Memoria & AI
+      button.tab(type="button", data-section="routing", role="tab", aria-selected="false")
+        span Routing
+      button.tab(type="button", data-section="operacion", role="tab", aria-selected="false")
+        span Operación
+      button.tab(type="button", data-section="eventos", role="tab", aria-selected="false")
+        span Eventos
+      button.tab(type="button", data-section="mensaje", role="tab", aria-selected="false")
+        span Mensaje
 
-      article.trace-section
-        h2 Parsing
-        if parsing_results.length
-          each parsing in parsing_results
-            div.trace-card
-              strong= parsing.intent
-              p= `Parser ${parsing.parser_name} · confidence ${parsing.confidence} · review ${parsing.needs_review}`
-              details.json-details
-                summary Extracted JSON
-                pre= json(parsing.extracted_json)
-              details.json-details
-                summary Validation errors
-                pre= json(parsing.validation_errors_json)
-        else
-          div.empty No parsing result found for this message.
+  section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="interpretacion")
+    article.trace-section
+      h2 Parsing
+      if parsing_results.length
+        each parsing in parsing_results
+          - const parse_conf = confidence_pct(parsing.confidence)
+          div.trace-card
+            strong= intent_human(parsing.intent) || parsing.intent
+            p.meta= `${parsing.intent} · confianza ${parse_conf == null ? "-" : parse_conf + "%"} · revisión ${parsing.needs_review ? "sí" : "no"}`
+            details.json-details
+              summary Datos extraídos
+              pre= json(parsing.extracted_json)
+            details.json-details
+              summary Errores de validación
+              pre= json(parsing.validation_errors_json)
+      else
+        p.trace-empty Sin parsing registrado.
+    article.trace-section
+      h2 Interacciones disparadas
+      if action_logs && action_logs.length
+        div.interaction-fired
+          span.interaction-fired-count(class=(action_logs.length > 1 ? "is-multi" : ""))= (action_logs.length > 1 ? "⚡ " : "") + (action_logs.length === 1 ? "1 interacción" : `${action_logs.length} interacciones`)
+          div.interaction-chips
+            each log in action_logs
+              span.interaction-chip(class=`is-${interaction_status_class(log.status)}`, title=log.status)= interaction_label_by_action[log.action_id] || log.action_id
+        each log in action_logs
+          div.trace-card
+            strong= interaction_label_by_action[log.action_id] || log.action_id
+            p.meta= `${log.action_id} · ${log.status}`
+            if log.error
+              p.trace-badge-error= log.error
+            details.json-details
+              summary Output
+              pre= json(log.output_json)
+      else
+        p.trace-empty Este mensaje no disparó interacciones (recibir/enviar no se registran como acciones).
 
-      article.trace-section
-        h2 Guardrails
-        if guardrail_events.length
-          each event in guardrail_events
-            div.trace-card
-              strong= event.title || event.event_type
-              p= event.summary || event.status
-        else
-          div.empty No guardrail event recorded.
+  section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="contexto", hidden)
+    article.trace-section
+      h2 Memoria
+      if memory_documents.length
+        each document in memory_documents
+          div.trace-card
+            strong= document.title || document.document_type
+            p.meta= `${document.scope} · ${document.status} · ${document.embedding_status}`
+            if document.local_path || document.s3_key
+              p.mono= document.local_path || document.s3_key
+            else
+              p.meta sin ubicación
+            p.mono= `hash ${document.content_hash}`
+            details.json-details
+              summary Metadata
+              pre= json(document.metadata_json)
+            details.json-details
+              summary Vista previa del contenido
+              pre= document.content
+      else
+        p.trace-empty Sin memoria generada para este mensaje.
+    article.trace-section
+      h2 AI Calls
+      if ai_calls.length
+        each call in ai_calls
+          div.trace-card
+            strong= `${call.provider} · ${call.function_name}`
+            p.meta= `${call.status} · ${call.latency_ms || 0}ms`
+            if call.error_message
+              p.trace-badge-error= call.error_message
+            details.json-details
+              summary Input
+              pre= json(call.input_json)
+            details.json-details
+              summary Output
+              pre= json(call.output_json)
+      else
+        p.trace-empty Sin llamadas de AI registradas.
 
-      article.trace-section
-        h2 Router
-        if router_runs.length
-          each run in router_runs
-            div.trace-card
-              strong= run.agent_key
-              - const retrievedContext = run.retrieved_context_json || {}
-              - const retrievedCount = Array.isArray(retrievedContext) ? retrievedContext.length : ((retrievedContext.business_knowledge || []).length + (retrievedContext.conversation_memory || []).length)
-              p= `${run.status} · retrieved ${retrievedCount}`
-              if run.error_message
-                p.trace-badge-error= run.error_message
-              details.json-details
-                summary Input
-                pre= json(run.input_json)
-              details.json-details
-                summary Output
-                pre= json(run.output_json)
-        else
-          div.empty No agent routed. Reason: no route run found.
+  section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="routing", hidden)
+    article.trace-section
+      h2 Router
+      if router_runs.length
+        each run in router_runs
+          - const retrievedContext = run.retrieved_context_json || {}
+          - const retrievedCount = Array.isArray(retrievedContext) ? retrievedContext.length : ((retrievedContext.business_knowledge || []).length + (retrievedContext.conversation_memory || []).length)
+          div.trace-card
+            strong= run.agent_key
+            p.meta= `${run.status} · retrieved ${retrievedCount}`
+            if run.error_message
+              p.trace-badge-error= run.error_message
+            details.json-details
+              summary Input
+              pre= json(run.input_json)
+            details.json-details
+              summary Output
+              pre= json(run.output_json)
+      else
+        p.trace-empty Sin routing (este bot usa el pipeline determinístico).
+    article.trace-section
+      h2 Ejecuciones de agente
+      if agent_runs.length
+        each run in agent_runs
+          div.trace-card
+            strong= `${run.agent_key} · ${run.run_type}`
+            p.meta= `${run.status} · ${datetime(run.created_at)} → ${run.completed_at ? datetime(run.completed_at) : "-"}`
+            if run.error_message
+              p.trace-badge-error= run.error_message
+            details.json-details
+              summary Contexto
+              pre= json(run.retrieved_context_json)
+      else
+        p.trace-empty Sin ejecuciones de agente.
 
-      article.trace-section
-        h2 Agent runs
-        if agent_runs.length
-          each run in agent_runs
-            div.trace-card
-              strong= `${run.agent_key} · ${run.run_type}`
-              p= `${run.status} · ${run.created_at} -> ${run.completed_at || "-"}`
-              if run.error_message
-                p.trace-badge-error= run.error_message
-              details.json-details
-                summary Context
-                pre= json(run.retrieved_context_json)
-        else
-          div.empty No non-route agent runs recorded.
+  section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="operacion", hidden)
+    article.trace-section
+      h2 Escrituras operativas
+      if operational_writes.length
+        each write in operational_writes
+          div.trace-card
+            strong= write.type
+            pre= json(write.data)
+      else
+        p.trace-empty Sin escrituras operativas para este mensaje.
 
-      article.trace-section
-        h2 Operational Writes
-        if operational_writes.length
-          each write in operational_writes
-            div.trace-card
-              strong= write.type
-              pre= json(write.data)
-        else
-          div.empty No operational write found for this message.
+  section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="eventos", hidden)
+    article.trace-section
+      h2 Eventos de procesamiento
+      if processing_events.length
+        ul.clean-list
+          each event in processing_events
+            li
+              strong= event.event_stage
+              span.meta= ` · ${event.event_type} · ${event.status}`
+              if event.summary
+                div.meta= event.summary
+      else
+        p.trace-empty Sin eventos.
+    article.trace-section
+      h2 Guardrails
+      if guardrail_events.length
+        each event in guardrail_events
+          div.trace-card
+            strong= event.title || event.event_type
+            p.meta= event.summary || event.status
+      else
+        p.trace-empty Sin guardrails.
+    article.trace-section
+      h2 Revisión
+      if review_items.length
+        each item in review_items
+          div.trace-card
+            strong= item.reason
+            p.meta= item.status
+            details.json-details
+              summary Extraído
+              pre= json(item.extracted_json)
+      else
+        p.trace-empty Sin items de revisión.
+    article.trace-section
+      h2 Respuesta
+      if outbound_responses.length
+        each response_message in outbound_responses
+          div.trace-card
+            strong= datetime(response_message.created_at)
+            p= response_message.text_body
+      else
+        p.trace-empty Sin respuesta vinculada.
 
-    aside.inspector-sidebar
-      section.inspector-panel
-        h2 Compact summary
-        dl.compact
-          div
-            dt Intent
-            dd= compact_trace_summary.intent || "-"
-          div
-            dt Agent
-            dd= compact_trace_summary.selected_agent || "-"
-          div
-            dt Memory
-            dd= compact_trace_summary.memory_status || "-"
-          div
-            dt Embedding
-            dd= compact_trace_summary.embedding_status || "-"
-          div
-            dt Review
-            dd= compact_trace_summary.review_status || (compact_trace_summary.needs_review ? "yes" : "no")
+  section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="mensaje", hidden)
+    article.trace-section
+      h2 Detalle del mensaje
+      dl.compact
+        div
+          dt ID
+          dd.mono= message.id
+        div
+          dt External
+          dd.mono= message.external_message_id || "-"
+        div
+          dt Channel
+          dd= message.channel
+        div
+          dt Type
+          dd= message.message_type
+        div
+          dt Created
+          dd= datetime(message.created_at)
+      details.json-details
+        summary Raw payload
+        pre= json(message.raw_payload_json)
 
-      section.inspector-panel
-        h2 Memory
-        if memory_documents.length
-          each document in memory_documents
-            div.trace-card
-              strong= document.title || document.document_type
-              p= `${document.scope} · ${document.status} · ${document.embedding_status}`
-              p.meta= document.local_path || document.s3_key || "sin ubicación"
-              p= `hash ${document.content_hash}`
-              details.json-details
-                summary Metadata
-                pre= json(document.metadata_json)
-              details.json-details
-                summary Content preview
-                pre= document.content
-        else
-          div.empty No memory document found.
+  script
+    include ../../public/js/core/Tab_Navigator.js
 
-      section.inspector-panel
-        h2 AI Calls
-        if ai_calls.length
-          each call in ai_calls
-            div.trace-card
-              strong= `${call.provider} · ${call.function_name}`
-              p= `${call.status} · ${call.latency_ms || 0}ms`
-              if call.error_message
-                p.trace-badge-error= call.error_message
-              details.json-details
-                summary Input
-                pre= json(call.input_json)
-              details.json-details
-                summary Output
-                pre= json(call.output_json)
-        else
-          div.empty No AI calls found.
-
-      section.inspector-panel
-        h2 Review items
-        if review_items.length
-          each item in review_items
-            div.trace-card
-              strong= item.reason
-              p= item.status
-              details.json-details
-                summary Extracted
-                pre= json(item.extracted_json)
-        else
-          div.empty No review item.
-
-      section.inspector-panel
-        h2 Response
-        if outbound_responses.length
-          each response_message in outbound_responses
-            div.trace-card
-              strong= response_message.created_at
-              p= response_message.text_body
-        else
-          div.empty No outbound response linked.
-
-      section.inspector-panel
-        h2 Processing events
-        if processing_events.length
-          ul.clean-list
-            each event in processing_events
-              li
-                strong= event.event_stage
-                span= ` · ${event.event_type} · ${event.status}`
-                if event.summary
-                  div.meta= event.summary
-        else
-          div.empty No processing events.
+  script.
+    window.TabNavigator?.render("#trace-tabs");

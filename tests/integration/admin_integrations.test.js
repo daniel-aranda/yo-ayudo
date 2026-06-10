@@ -70,4 +70,27 @@ describe("admin integrations dashboard", () => {
     const app = create_admin_test_app(pool);
     await request(app).get("/admin").expect(302).expect("Location", "/admin/integrations");
   });
+
+  it("renders the interactions admin with catalog, external API usage and recent logs", async () => {
+    await pool.query(
+      "INSERT INTO action_audit_logs (action_id, status) VALUES ('buscar_negocios', 'executed'), ('buscar_negocios', 'failed')",
+    );
+    await record_integration_event(pool, { integration_key: "google_places", operation: "search", status: "success", latency_ms: 42 });
+    await pool.query(
+      "INSERT INTO ai_calls (provider, model, function_name, input_json, status, latency_ms) VALUES ('openai', 'gpt-5.5', 'classify_intent', '{}'::jsonb, 'completed', 120)",
+    );
+
+    const app = create_admin_test_app(pool);
+    const response = await request(app).get("/admin/interactions").expect(200);
+
+    // Catalog of interactions is always listed.
+    expect(response.text).toContain("Catálogo de interacciones");
+    expect(response.text).toContain("Buscar negocios");
+    // External API calls (AI + providers) are registered and measured.
+    expect(response.text).toContain("APIs externas");
+    expect(response.text).toContain("AI · openai");
+    // Recent activity feed + tab navigator are wired.
+    expect(response.text).toContain("Logs recientes");
+    expect(response.text).toContain("interactions-tabs");
+  });
 });

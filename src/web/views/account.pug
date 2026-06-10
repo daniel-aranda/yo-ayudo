@@ -4,6 +4,7 @@ block content
   if !account
     .empty Cuenta no encontrada.
   else
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.name || account.business_name }])
     section.page-header
       h1 #{account.business_name} / #{account.name}
       if capabilities && capabilities.operational

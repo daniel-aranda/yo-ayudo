@@ -8,6 +8,10 @@ block content
       try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
     };
 
+  .admin-subnav
+    a.is-active(href="/admin/integrations") Integraciones
+    a(href="/admin/interactions") Interacciones
+
   section.page-header
     h1 Integraciones
     p= `Estado de conexión y operación · actividad de las últimas ${since_hours}h`

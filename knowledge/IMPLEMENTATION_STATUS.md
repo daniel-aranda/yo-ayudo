@@ -72,6 +72,8 @@ La direccion actual es Bot Engine configurable:
 - Memory local/mock, S3 memory store stub, Bedrock embedding stub.
 - Conversation Inspector interno.
 - Processing events.
+- Observabilidad de APIs externas: toda llamada a AI (`ai_calls`, con latencia) y a proveedores (`integration_events`, ahora con latencia en google_places/elevenlabs/whatsapp) se registra y se mide; cada ejecucion de accion queda en `action_audit_logs`.
+- Admin de interacciones (`/admin/interactions`, `admin_interactions_service.js`): catalogo de interacciones + uso real (usos/OK/error/ultimo desde `action_audit_logs`), APIs externas (AI + proveedores, OK/error/latencia) y logs recientes unificados. Complementa el admin de integraciones (`/admin/integrations`: salud + eventos). Sub-nav entre ambos.
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
 - Tests unitarios e integracion del pipeline, router, memory, inspector y Bot Engine comercial.
@@ -118,6 +120,12 @@ Dashboard/review/inspector:
 - `GET /inspector/bots/:bot_id/conversations`
 - `GET /inspector/conversations/:conversation_id`
 - `GET /inspector/messages/:message_id`
+
+Admin:
+
+- `GET /admin` (redirige a `/admin/integrations`)
+- `GET /admin/integrations` (salud + eventos por integracion)
+- `GET /admin/interactions` (catalogo de interacciones + uso + APIs externas + logs)
 
 Internas Bot Engine/comercial:
 
@@ -191,7 +199,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 23 archivos, 80 tests (Vitest).
+- `npm test`: OK, 23 archivos, 81 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0011` en orden.
 
 Comandos locales disponibles:

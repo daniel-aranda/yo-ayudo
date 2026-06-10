@@ -1,14 +1,26 @@
 extends ../layout
 
 block content
+  -
+    const account_url = bot && bot.organization_id && bot.account_id ? `/dashboard/business/${bot.organization_id}/accounts/${bot.account_id}` : "/dashboard";
+    const bc = [{ label: "Dashboard", href: "/dashboard" }];
+    if (bot) {
+      bc.push({ label: bot.account_name || "Cuenta", href: account_url });
+      bc.push({ label: bot.name || "Bot", href: `/inspector/bots/${bot.id}` });
+    }
+    bc.push({ label: "Conversaciones" });
+  +breadcrumb(bc)
   section.page-header
-    h1 Conversations
-    p Senders y conversaciones del bot.
+    h1 Conversaciones
+    if bot
+      p= `Senders y conversaciones de ${bot.name}.`
+    else
+      p Senders y conversaciones del bot.
 
   section.panel
     form(method="get").filters
-      label(for="search") Search
-      input#search(name="search", value="")
+      label(for="search") Buscar
+      input#search(name="search", value=search || "")
       button(type="submit") Filtrar
 
   section.panel

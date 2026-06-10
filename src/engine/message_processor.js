@@ -567,6 +567,7 @@ async function process_inbound_message(dependencies, input) {
   const reply_text = build_multi_reply(operation_results);
 
   if (reply_text) {
+    const send_started_at = Date.now();
     const send_result = await dependencies.whatsapp_client.send_text({
       to: input.inbound_message.from,
       body: reply_text,
@@ -579,6 +580,7 @@ async function process_inbound_message(dependencies, input) {
         : send_result.raw_response?.reason === "missing_whatsapp_credentials"
           ? "not_configured"
           : "failure",
+      latency_ms: Date.now() - send_started_at,
       organization_id,
       account_id,
       bot_id: resolution.bot?.id ?? null,

@@ -1,0 +1,163 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const risk_labels = {
+      automatico: "Automático",
+      requiere_confirmacion: "Requiere confirmación",
+      solo_humano: "Solo humano",
+    };
+    const days = Math.round((since_hours || 168) / 24);
+
+  .admin-subnav
+    a(href="/admin/integrations") Integraciones
+    a.is-active(href="/admin/interactions") Interacciones
+
+  section.page-header
+    h1 Interacciones
+    p= `Catálogo, configuración y uso real · últimos ${days} días`
+
+  .metrics
+    article.metric
+      span.label Interacciones
+      strong= totals.interactions_count
+    article.metric
+      span.label Ejecutables
+      strong= totals.executable_count
+    article.metric
+      span.label Ejecuciones OK
+      strong= totals.interactions_success
+    article.metric
+      span.label Ejecuciones con error
+      strong= totals.interactions_error
+    article.metric
+      span.label Llamadas externas
+      strong= totals.external_total
+
+  .wamy-tabs.admin-tabs
+    #interactions-tabs.tabs(data-initial-tab="catalogo", role="tablist", aria-label="Admin de interacciones")
+      button.tab.active(type="button", data-section="catalogo", role="tab", aria-selected="true")
+        span Catálogo
+      button.tab(type="button", data-section="externas", role="tab", aria-selected="false")
+        span APIs externas
+      button.tab(type="button", data-section="logs", role="tab", aria-selected="false")
+        span Logs recientes
+
+  section.tab-section(data-parent-tab="interactions-tabs", data-section="catalogo")
+    .panel
+      h2 Catálogo de interacciones
+      p.meta Lo que el agente puede hacer. Las ejecutables llevan una acción del registry; el resto son de comportamiento (canal o consulta a humano).
+      .table-wrap
+        table.activity-table
+          thead
+            tr
+              th Interacción
+              th Acción / proveedor
+              th Riesgo
+              th Usos
+              th OK
+              th Error
+              th Último uso
+          tbody
+            each interaction in interactions
+              tr
+                td
+                  strong= interaction.label
+                  div.meta= interaction.type
+                td
+                  if interaction.executable
+                    code.mono= interaction.action_id
+                    if !interaction.handler_real
+                      span.status-pill.status-pending_provider  stub
+                    if interaction.provider
+                      div.meta= interaction.provider
+                  else
+                    span.meta Comportamiento
+                td.meta= interaction.nivel_riesgo ? (risk_labels[interaction.nivel_riesgo] || interaction.nivel_riesgo) : "—"
+                td= interaction.executable ? interaction.total : "—"
+                td
+                  if interaction.executable
+                    span.count-ok= interaction.success
+                  else
+                    span.meta —
+                td
+                  if interaction.executable && interaction.error
+                    span.count-error= interaction.error
+                  else if interaction.executable
+                    = 0
+                  else
+                    span.meta —
+                td.meta= when(interaction.last_at)
+
+  section.tab-section(data-parent-tab="interactions-tabs", data-section="externas", hidden)
+    .panel
+      h2 APIs externas (AI y proveedores)
+      p.meta Cada llamada a un proveedor externo o al modelo de AI se registra y se mide. Para el detalle de salud y conexión, ve a #[a(href="/admin/integrations") Integraciones].
+      if external.length
+        .table-wrap
+          table.activity-table
+            thead
+              tr
+                th API
+                th Tipo
+                th Llamadas
+                th OK
+                th Error
+                th Latencia prom.
+                th Último uso
+            tbody
+              each api in external
+                tr
+                  td
+                    strong= api.label
+                    div.meta= api.key
+                  td.meta= api.group === "ai" ? "AI" : "Proveedor"
+                  td= api.total
+                  td
+                    span.count-ok= api.success
+                  td
+                    if api.error
+                      span.count-error= api.error
+                    else
+                      = 0
+                  td.meta= api.avg_latency_ms != null ? `${api.avg_latency_ms} ms` : "—"
+                  td.meta= when(api.last_at)
+      else
+        p.trace-empty Aún no hay llamadas externas registradas en el periodo.
+
+  section.tab-section(data-parent-tab="interactions-tabs", data-section="logs", hidden)
+    .panel
+      h2 Logs recientes
+      p.meta Últimas ejecuciones de interacciones y llamadas externas, más recientes primero.
+      if recent.length
+        .table-wrap
+          table.activity-table
+            thead
+              tr
+                th Tipo
+                th Detalle
+                th Estado
+                th Cuándo
+            tbody
+              each row in recent
+                tr
+                  td.meta= row.kind
+                  td
+                    strong= row.label
+                    div.meta= row.sublabel
+                    if row.detail
+                      div.meta= row.detail
+                  td
+                    span(class=`status-pill ${row.status_class === "ok" ? "status-executed" : row.status_class === "error" ? "status-failed" : "status-pending_provider"}`)= row.status_text
+                  td.meta= when(row.created_at)
+      else
+        p.trace-empty Sin actividad reciente.
+
+  script
+    include ../../public/js/core/Tab_Navigator.js
+
+  script.
+    window.TabNavigator?.render("#interactions-tabs");

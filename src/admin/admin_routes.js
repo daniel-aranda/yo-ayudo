@@ -1,6 +1,7 @@
 import { config } from "../app/config.js";
 import { pool } from "../db/client.js";
 import { get_integrations_admin_view } from "./admin_integrations_service.js";
+import { get_interactions_admin_view } from "./admin_interactions_service.js";
 
 // Same internal gating as the inspector: 404 when disabled, token-protected in
 // production. Open in local development.
@@ -36,6 +37,18 @@ export function register_admin_routes(router, dependencies = {}) {
         s3_probe: dependencies.s3_probe,
       });
       response.render("admin/integrations", view);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/interactions", admin_auth, async (request, response, next) => {
+    try {
+      const since_hours = Number.parseInt(request.query.since_hours, 10);
+      const view = await get_interactions_admin_view(route_pool, {
+        since_hours: Number.isFinite(since_hours) && since_hours > 0 ? since_hours : undefined,
+      });
+      response.render("admin/interactions", view);
     } catch (error) {
       next(error);
     }

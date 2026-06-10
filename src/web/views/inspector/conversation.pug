@@ -8,67 +8,142 @@ block content
       if (value.startsWith("pending")) return "pending";
       return "blocked";
     };
-  section.page-header
-    h1 Inspector
-    if conversation
-      p= `${conversation.bot_name || "sin bot"} · ${conversation.organization_name || "business sin asignar"} · ${conversation.account_name || "account sin asignar"} · ${conversation.display_name || conversation.whatsapp_phone} · ${conversation.status}`
+    const confidence_pct = (value) => (value == null || value === "" ? null : Math.round(Number(value) * 100));
+    const contact_name = conversation ? (conversation.display_name || conversation.whatsapp_phone || "Contacto") : "Contacto";
+    const resolved_account_id = conversation ? (conversation.resolved_account_id || conversation.account_id) : null;
+    const resolved_org_id = conversation ? (conversation.resolved_organization_id || conversation.organization_id) : null;
+    const dashboard_url = resolved_org_id && resolved_account_id ? `/dashboard/business/${resolved_org_id}/accounts/${resolved_account_id}` : "/dashboard";
+    const conversations_url = conversation && conversation.bot_id ? `/inspector/bots/${conversation.bot_id}/conversations` : "/inspector";
+    const status_value = conversation ? (conversation.status || "open") : "open";
+    const status_label = status_value === "closed" ? "Cerrada" : status_value === "open" ? "Abierta" : status_value;
 
-  if conversation
-    div.inspector-layout
+  if !conversation
+    section.page-header
+      h1 Conversación
+    .empty No se encontró la conversación.
+  else
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: conversation.account_name || "Negocio", href: dashboard_url }, { label: conversation.bot_name || "Bot", href: conversation.bot_id ? `/inspector/bots/${conversation.bot_id}` : conversations_url }, { label: "Conversaciones", href: conversations_url }, { label: contact_name }])
+
+    section.page-header.conversation-header
+      .conversation-header-main
+        h1= `Conversación con ${contact_name}`
+        p.meta= `${conversation.bot_name || "sin bot"} · ${conversation.whatsapp_phone || "sin teléfono"}`
+      .conversation-header-aside
+        span.status-badge(class=`is-${status_value}`)= status_label
+        a.button.button-ghost(href=dashboard_url) ← Volver al dashboard
+
+    .inspector-layout.conversation-view
       section.inspector-main
-        h2 Timeline
-        if messages.length
-          each item in messages
-            - const message = item.message
-            - const trace = item.compact_trace_summary
-            article(class=`message-bubble ${message_alignment(message.direction)}`)
-              div.message-meta
-                strong= message.direction
-                span= ` · ${message.created_at}`
-              p= message.text_body || "(sin texto)"
-              div.trace-badges
-                if trace.intent
-                  span.trace-badge= trace.intent
-                if trace.confidence
-                  span.trace-badge= `conf ${trace.confidence}`
-                if trace.selected_agent
-                  span.trace-badge= trace.selected_agent
-                if trace.memory_status
-                  span.trace-badge= `memory ${trace.memory_status}`
-                if trace.embedding_status
-                  span.trace-badge= `embedding ${trace.embedding_status}`
-                if trace.needs_review || trace.review_status
-                  span.trace-badge.trace-badge-warning review
-                if trace.has_error
-                  span.trace-badge.trace-badge-error error
-              if trace.interactions && trace.interactions.length
-                div.interaction-fired
-                  span.interaction-fired-count(class=(trace.interaction_count > 1 ? "is-multi" : ""))= (trace.interaction_count > 1 ? "⚡ " : "") + (trace.interaction_count === 1 ? "1 interacción" : `${trace.interaction_count} interacciones`)
-                  div.interaction-chips
-                    each ix in trace.interactions
-                      span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
-              a(href=`/inspector/messages/${message.id}`) Ver trace completo
+        if turns && turns.length
+          .conversation-thread
+            each turn in turns
+              -
+                const trace = turn.incoming ? turn.incoming.compact_trace_summary : null;
+                const conf = trace ? confidence_pct(trace.confidence) : null;
+                const trace_id = turn.incoming ? turn.incoming.message.id : (turn.responses[0] && turn.responses[0].message.id);
+              article.turn(class=(trace && trace.has_error ? "turn--error" : ""))
+                if turn.incoming
+                  .turn-msg.turn-msg--user
+                    .msg-head
+                      span.msg-author Usuario
+                      span.msg-time= datetime(turn.incoming.message.created_at)
+                    p.msg-text= turn.incoming.message.text_body || "(sin texto)"
+                  //- Solo lo que importa: acción + confianza, a la derecha. El detalle
+                  //- técnico (intent, memoria, embedding) vive en "Ver trace completo".
+                  .turn-understanding(data-intent=(trace && trace.intent ? trace.intent : ""))
+                    if trace && trace.interactions && trace.interactions.length
+                      each ix in trace.interactions
+                        span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
+                    else
+                      span.u-none Sin acción
+                    if conf != null
+                      span.u-confidence(class=(conf < 72 ? "is-low" : "is-ok"))= `Confianza ${conf}%`
+                    if trace && trace.has_error
+                      span.u-tag.is-error Error
+                    else if trace && (trace.needs_review || trace.review_status)
+                      span.u-tag.is-warning Revisión
+                if turn.responses && turn.responses.length
+                  each response in turn.responses
+                    .turn-msg.turn-msg--agent
+                      .msg-head
+                        span.msg-author Agente
+                        span.msg-time= datetime(response.message.created_at)
+                      p.msg-text= response.message.text_body || "(sin texto)"
+                else if turn.incoming
+                  p.turn-pending Sin respuesta del agente todavía.
+                if trace_id
+                  .turn-foot
+                    a.trace-link(href=`/inspector/messages/${trace_id}`) Ver trace completo →
         else
-          div.empty Sin mensajes.
+          .empty Sin mensajes en esta conversación.
 
       aside.inspector-sidebar
         section.inspector-panel
-          h2 Contexto
+          h2 Contacto
+          dl.compact
+            div
+              dt Nombre
+              dd= contact_name
+            div
+              dt Teléfono
+              dd.with-copy
+                span= conversation.whatsapp_phone || "-"
+                if conversation.whatsapp_phone
+                  button.copy-btn(type="button", data-copy=conversation.whatsapp_phone, aria-label="Copiar teléfono") Copiar
+            div
+              dt Estado
+              dd
+                span.status-badge(class=`is-${status_value}`)= status_label
+
+        section.inspector-panel
+          h2 Agente
           dl.compact
             div
               dt Bot
               dd= conversation.bot_name || "sin bot"
             div
-              dt Account
+              dt Cuenta
               dd= conversation.account_name || "-"
             div
-              dt Org
+              dt Negocio
               dd= conversation.organization_name || "-"
-            div
-              dt Phone
-              dd= conversation.whatsapp_phone
-            div
-              dt Status
-              dd= conversation.status
-  else
-    div.empty No se encontró la conversación.
+
+        if operational_day
+          section.inspector-panel
+            h2 Estado del día
+            dl.compact
+              div
+                dt Venta acumulada
+                dd= money(operational_day.total_sales)
+              div
+                dt Caja inicial
+                dd= money(operational_day.opening_cash)
+              div
+                dt Última actualización
+                dd= datetime(operational_day.updated_at)
+
+        section.inspector-panel
+          h2 Acciones rápidas
+          .quick-actions
+            if conversation.bot_id
+              a.button.button-ghost(href=`/inspector/bots/${conversation.bot_id}`) Ver bot
+            a.button.button-ghost(href=dashboard_url) Ver dashboard del negocio
+            if conversation.whatsapp_phone
+              button.button.button-ghost.copy-btn(type="button", data-copy=conversation.whatsapp_phone) Copiar teléfono
+
+  script.
+    (() => {
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest(".copy-btn");
+        if (!button || !button.dataset.copy || !navigator.clipboard) return;
+        navigator.clipboard.writeText(button.dataset.copy).then(() => {
+          const original = button.textContent;
+          button.textContent = "Copiado";
+          button.classList.add("is-copied");
+          setTimeout(() => {
+            button.textContent = original;
+            button.classList.remove("is-copied");
+          }, 1400);
+        }).catch(() => {});
+      });
+    })();

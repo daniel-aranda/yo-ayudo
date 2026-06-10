@@ -145,6 +145,9 @@ block content
           p.section-sub= subtitle
 
   if bot
+    -
+      const bot_account_url = bot.organization_id && bot.account_id ? `/dashboard/business/${bot.organization_id}/accounts/${bot.account_id}` : "/dashboard";
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: bot.account_name || "Cuenta", href: bot_account_url }, { label: bot_name }])
     section.page-header.builder-header
       div
         h1= bot_name

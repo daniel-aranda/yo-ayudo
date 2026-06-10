@@ -122,3 +122,13 @@ Una accion futura puede existir como metadata y stub seguro si:
 - queremos registrar demanda real como capability gap.
 
 El stub no debe fingir ejecucion. Debe devolver `not_implemented`, `pending_provider`, `blocked` o `pending_confirmation` segun aplique.
+
+## Observabilidad De APIs Externas (registrar y medir todo)
+
+Las llamadas externas (AI y proveedores) son criticas, asi que **toda** llamada se registra y se mide. Tres streams:
+
+- `action_audit_logs` (arriba): exito/error por ejecucion de accion.
+- `integration_events`: cada llamada a un proveedor externo (`whatsapp`, `google_places`, `elevenlabs`, `s3`, ...) con `status` y **`latency_ms`**. Registrar via `safe_record_integration_event`; al integrar un proveedor nuevo, mide la latencia (`Date.now()` alrededor de la llamada) y registra el evento.
+- `ai_calls`: cada llamada al modelo (provider, function_name, status, `latency_ms`) via `observed_model_provider`.
+
+Agregados en el admin de interacciones (`/admin/interactions`): catalogo + uso (OK/error/ultimo) + APIs externas (AI + proveedores con latencia) + logs recientes. Salud/conexion en `/admin/integrations`.
