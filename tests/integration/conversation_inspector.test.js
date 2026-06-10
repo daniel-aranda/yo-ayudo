@@ -294,12 +294,16 @@ describe("Conversation Inspector", () => {
     await request(app)
       .get(`/inspector/conversations/${ids.rows[0].conversation_id}`)
       .expect(200)
-      .expect(/purchase/);
+      .expect(/purchase/)
+      .expect(/Lo que entendió el agente/);
     await request(app)
       .get(`/inspector/messages/${ids.rows[0].message_id}`)
       .expect(200)
       .expect(/Escrituras operativas/)
-      .expect(/Compra registrada/);
+      .expect(/Compra registrada/)
+      // The deterministic bot still routes: the routing tab explains the
+      // intent→interaction decision instead of showing an empty state.
+      .expect(/Ruteo determinístico por intención/);
   });
 
   it("saves structured bot builder fields without editing raw JSON", async () => {

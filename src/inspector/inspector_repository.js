@@ -4,6 +4,7 @@ import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repo
 import { get_bot_by_id, get_bot_with_definition, update_bot_configuration } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
+import { present_conversation_summary } from "./inspector_presenter.js";
 
 function as_array(value) {
   if (value === undefined || value === null) {
@@ -770,7 +771,7 @@ export async function get_bot_conversations(pool, input) {
       ),
     ]);
 
-    conversations.push({
+    const enriched = {
       ...conversation,
       last_activity: message_counts.rows[0]?.last_activity ?? conversation.last_message_at,
       messages_count: message_counts.rows[0]?.messages_count ?? 0,
@@ -778,7 +779,9 @@ export async function get_bot_conversations(pool, input) {
       last_intent: last_message.rows[0]?.parsed_intent ?? null,
       last_agent: last_agent.rows[0]?.agent_key ?? null,
       last_message: last_message.rows[0]?.text_body ?? null,
-    });
+    };
+    enriched.summary = present_conversation_summary(enriched);
+    conversations.push(enriched);
   }
 
   const bot = await get_bot_with_definition(pool, input.bot_id);

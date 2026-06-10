@@ -38,6 +38,22 @@ export function create_app() {
   app.use(express.urlencoded({ extended: false }));
   app.use("/public", express.static(path.join(process.cwd(), "src", "web", "public")));
 
+  // Expose the active top-nav section to every view (highlights the current
+  // section in the topbar). Derived from the first path segment.
+  app.use((request, response, next) => {
+    const request_path = request.path || "";
+    response.locals.active_nav = request_path.startsWith("/dashboard")
+      ? "dashboard"
+      : request_path.startsWith("/inspector")
+        ? "inspector"
+        : request_path.startsWith("/review")
+          ? "review"
+          : request_path.startsWith("/admin")
+            ? "admin"
+            : "";
+    next();
+  });
+
   router.get("/health", (_request, response) => {
     response.json({ ok: true, service: "yoayudo", environment: config.node_env });
   });

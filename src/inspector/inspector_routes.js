@@ -13,6 +13,7 @@ import {
   update_bot_builder_view,
 } from "./inspector_repository.js";
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
+import { present_conversation_turns } from "./inspector_presenter.js";
 import {
   create_knowledge_source,
   get_knowledge_source,
@@ -399,10 +400,11 @@ export function register_inspector_routes(router, dependencies = {}) {
 
   router.get("/inspector/conversations/:conversation_id", inspector_auth, async (request, response, next) => {
     try {
-      response.render(
-        "inspector/conversation",
-        await get_conversation_view(route_pool, route_value(request.params.conversation_id)),
-      );
+      const view = await get_conversation_view(route_pool, route_value(request.params.conversation_id));
+      response.render("inspector/conversation", {
+        ...view,
+        view_turns: present_conversation_turns(view.turns),
+      });
     } catch (error) {
       next(error);
     }

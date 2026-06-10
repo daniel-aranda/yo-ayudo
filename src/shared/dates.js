@@ -47,6 +47,41 @@ export function format_date_es(value) {
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
+// Relative time in es-MX, e.g. "justo ahora", "hace 5 min", "hace 3 h", "hace 2 d".
+// Older than a week falls back to the absolute date. Safe for null/invalid input.
+export function relative_time_es(value) {
+  if (value === undefined || value === null || value === "") {
+    return "";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 45) {
+    return "justo ahora";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `hace ${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `hace ${hours} h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return `hace ${days} d`;
+  }
+
+  return format_date_es(date);
+}
+
 // Human date + time in es-MX, e.g. "7 jun 2026, 3:58 p.m.".
 export function format_datetime_es(value) {
   if (value === undefined || value === null || value === "") {

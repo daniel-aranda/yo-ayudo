@@ -19,12 +19,13 @@ html(lang="es")
     title YoAyudo
     link(rel="stylesheet", href="/public/css/dashboard.css")
   body
+    - const nav_active = typeof active_nav !== "undefined" ? active_nav : "";
     header.topbar
       a.brand(href="/dashboard") YoAyudo
       nav.nav
-        a(href="/dashboard") Dashboard
-        a(href="/inspector") Inspector
-        a(href="/review") Review
-        a(href="/admin/integrations") Admin
+        a(href="/dashboard", class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
+        a(href="/inspector", class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
+        a(href="/review", class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
+        a(href="/admin/integrations", class=(nav_active === "admin" ? "is-active" : ""), aria-current=(nav_active === "admin" ? "page" : false)) Admin
     main.container
       block content

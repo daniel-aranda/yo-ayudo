@@ -205,7 +205,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 23 archivos, 85 tests (Vitest).
+- `npm test`: OK, 24 archivos, 96 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0011` en orden.
 
 Comandos locales disponibles:

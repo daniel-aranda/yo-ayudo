@@ -4,6 +4,7 @@ block content
   -
     const definition = bot?.definition_json || {};
     const identity = definition.identity || {};
+    const conv_pill_class = { ok: "status-executed", warn: "status-pending_provider", idle: "status-blocked" };
     const behavior = definition.behavior || {};
     const interactions = Array.isArray(definition.interactions) ? definition.interactions : [];
     const ai = definition.ai || {};
@@ -72,6 +73,7 @@ block content
       receipt: `${svg_open}<path d="M6 3h12v18l-3-1.5-3 1.5-3-1.5L6 21z"/><path d="M9 8h6M9 12h6"/></svg>`,
       cart: `${svg_open}<circle cx="9.5" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/><path d="M3 4h2l2.4 11.4a1 1 0 0 0 1 .8h8.5a1 1 0 0 0 1-.78L20.5 8H6.2"/></svg>`,
       box: `${svg_open}<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg>`,
+      code: `${svg_open}<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg>`,
     };
     const editor_icon = (name) => editor_icons[name] || `${svg_open}<circle cx="12" cy="12" r="9"/></svg>`;
     const interaction_icons = {
@@ -158,9 +160,28 @@ block content
           span.autosave-text
           button.autosave-retry(type="button", hidden) Reintentar
         a.activity-link(href=`/inspector/bots/${bot.id}/activity`) Actividad
-        details.json-toggle
-          summary Ver settings JSON
-          pre= JSON.stringify(settings_json, null, 2)
+        button#open_settings_json.json-view-button(type="button")
+          span.json-view-button__icon!= editor_icon("code")
+          span Ver settings JSON
+
+    //- Popup agnóstico (window.Popup): config cruda del bot, solo lectura. Va en
+    //- modal para no romper el layout del header con líneas largas de JSON.
+    #settings_json_popup.popup-overlay(
+      data-popup-overlay,
+      data-popup-overlay-close="true",
+      data-settings-json-popup,
+      data-autosave-ignore
+    )
+      .popup.popup--full.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title Settings JSON
+            .popup__subtitle Configuración cruda de este agente (solo lectura).
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
+        .popup__body
+          pre.json-dump= JSON.stringify(settings_json, null, 2)
+        .popup__footer
+          button.secondary-button(type="button", data-popup-close) Cerrar
 
     form(method="post", action=`/inspector/bots/${bot.id}`, id="bot-editor")
       div.bot-editor-tab-shell.wamy-tabs
@@ -217,7 +238,7 @@ block content
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="identidad")
         +section_head("gear", "Instrucciones operativas", "Configura el idioma, tono, modelo y las instrucciones para este agente.")
-        div.form-grid
+        div.form-grid.form-grid--operativas
           div
             label(for="behavior_language") Idioma
             div.field-control.has-leading
@@ -482,11 +503,22 @@ block content
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="conversaciones", hidden)
         +section_head("chat", "Conversaciones recientes", "Las conversaciones más recientes de este agente.")
         if conversations.length
-          ul.clean-list
+          ul.conv-list
             each conversation in conversations
               li
-                a(href=`/inspector/conversations/${conversation.id}`)= conversation.contact_display_name || conversation.contact_phone || conversation.id
-                span.meta= ` · ${conversation.status || "active"}`
+                a.conv-row(href=`/inspector/conversations/${conversation.id}`)
+                  div.conv-row__main
+                    div.conv-row__head
+                      span.conv-row__title= conversation.summary.title
+                      if conversation.summary.subtitle
+                        span.conv-row__phone= conversation.summary.subtitle
+                    span.conv-row__preview= conversation.summary.preview
+                  div.conv-row__aside
+                    span.conv-row__time= conversation.summary.relative_time
+                    div.conv-row__pills
+                      if conversation.summary.needs_human
+                        span.status-pill.status-pending_provider Atención humana
+                      span(class=`status-pill ${conv_pill_class[conversation.summary.status_tone] || "status-blocked"}`)= conversation.summary.status_label
         else
           div.empty Sin conversaciones recientes.
   else
@@ -515,6 +547,14 @@ block content
         ? new window.Popup({ overlay_selector: "[data-interaction-picker-popup]" })
         : null;
       interactionPopup?.iniciar();
+
+      const settingsJsonPopup = window.Popup
+        ? new window.Popup({ overlay_selector: "[data-settings-json-popup]" })
+        : null;
+      settingsJsonPopup?.iniciar();
+      document
+        .getElementById("open_settings_json")
+        ?.addEventListener("click", () => settingsJsonPopup?.open());
 
       function renderHumanGroupSelect() {
         const options = humanGroupOptions

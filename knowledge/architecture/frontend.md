@@ -66,16 +66,19 @@ El editor de bot (`src/web/views/inspector/bot.pug`) es server-rendered con Pug 
 - Tiene un sistema de iconos SVG inline mediante mixins de Pug (`+icon(name)`, `+section_head(icon, title, subtitle)`).
 - Autosave (`src/web/public/js/inspector/Bot_Editor_Autosave.js`): postea el form a `POST /inspector/bots/:bot_id` en `input`/`change`/`blur` y muestra un timestamp proactivo tipo "Guardado 3:58pm" o "Guardado 5 jun, 4pm" (es-MX 12h). No hay botón "Guardar cambios".
 - Interacciones: el botón "Agregar interacción" abre un **popup de selección múltiple** (no un dropdown) que lista las interacciones disponibles con su descripción; puedes marcar una o varias y agregarlas de golpe. Las interacciones ya configuradas se excluyen.
-- Identidad: las dos filas usan grids asimétricos (`.form-grid--identity` = Nombre 2.6fr / Estado 1.1fr / Tipo 1fr; `.form-grid--identity-detail` = Descripción 2.2fr / Objetivo 1fr) para que Nombre/Descripción dominen y Estado/Tipo/Objetivo queden compactos. Colapsan a 1 columna ≤780px.
+- Identidad: las dos filas usan grids asimétricos (`.form-grid--identity` = Nombre 2.6fr / Estado 1.1fr / Tipo 1fr; `.form-grid--identity-detail` = Descripción 2.2fr / Objetivo 1fr) para que Nombre/Descripción dominen y Estado/Tipo/Objetivo queden compactos. Colapsan a 1 columna ≤780px. Instrucciones operativas usa `.form-grid--operativas` (Idioma 1fr / Tono 1fr / Modelo IA 1.7fr) porque el modelo lleva etiquetas largas (proveedor + modelo).
+- "Ver settings JSON" (botón `.json-view-button` en el header) abre la config cruda en un **popup** (componente `Popup`), no en un `<details>` inline — el `<pre>` con líneas largas vivía en el flex del header y reventaba el ancho de la página; en el modal scrollea adentro.
 
 ## Componentes Core (JS)
 
 Viven en `src/web/public/js/core/` y se incluyen via `script` + `include` de Pug (no son módulos ES; se exponen en `window`).
 
 - `Tab_Navigator.js` (`window.TabNavigator`): tabs por `data-section` que muestran/ocultan paneles `.tab-section[data-parent-tab][data-section]`.
-- `Popup.js` (`window.Popup`): popup/modal **agnóstico y markup-driven**. Contrato: overlay `[data-popup-overlay]`, disparadores de cierre `[data-popup-close]`, `data-popup-overlay-close="true"` para cerrar al click en el backdrop; clases `is-open` (overlay) y `body--popup-open` (body); métodos `iniciar()/open()/close()/destroy()` y cierre con Escape. El CSS vive en `dashboard.css` (`.popup-overlay`, `.popup`, `.popup__header/__body/__footer/__close`, sizes `--sm/--md/--lg`). Reutilízalo para cualquier modal nuevo en vez de reinventarlo.
+- `Popup.js` (`window.Popup`): popup/modal **agnóstico y markup-driven**. Contrato: overlay `[data-popup-overlay]`, disparadores de cierre `[data-popup-close]`, `data-popup-overlay-close="true"` para cerrar al click en el backdrop; clases `is-open` (overlay) y `body--popup-open` (body); métodos `iniciar()/open()/close()/destroy()` y cierre con Escape. El CSS vive en `dashboard.css` (`.popup-overlay`, `.popup`, `.popup__header/__body/__footer/__close`, sizes `--sm/--md/--lg/--full`, donde `--full` es casi-pantalla-completa, 96vw×92vh, para visores densos como el JSON). Reutilízalo para cualquier modal nuevo en vez de reinventarlo.
 
 Mixin Pug compartido: `+breadcrumb(items)` en `layout.pug` (disponible en toda vista que haga `extends`). `items` = `[{ label, href? }]`; sin `href` = página actual. Úsalo en cualquier página nueva del inspector/dashboard para mantener la navegación consistente (CSS `.breadcrumb` en `dashboard.css`).
+
+Topbar: el link de la sección actual se resalta solo (`.nav a.is-active`, pill `accent-soft`). Un middleware en `server.js` deriva `response.locals.active_nav` del primer segmento del path (`dashboard`/`inspector`/`review`/`admin`) y `layout.pug` lo compara; funciona en toda página sin tocar cada ruta. El layout usa `typeof active_nav !== "undefined"` para no romper apps de test que renderizan sin el middleware.
 
 ## Seguridad De Vistas
 

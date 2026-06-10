@@ -68,7 +68,7 @@ block content
       button.tab(type="button", data-section="contexto", role="tab", aria-selected="false")
         span Memoria & AI
       button.tab(type="button", data-section="routing", role="tab", aria-selected="false")
-        span Routing
+        span Ruteo
       button.tab(type="button", data-section="operacion", role="tab", aria-selected="false")
         span Operación
       button.tab(type="button", data-section="eventos", role="tab", aria-selected="false")
@@ -154,14 +154,15 @@ block content
 
   section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="routing", hidden)
     article.trace-section
-      h2 Router
+      h2 Decisión de ruteo
       if router_runs.length
+        //- Bots configurables (LLM): el router elige el agente que atiende.
         each run in router_runs
           - const retrievedContext = run.retrieved_context_json || {}
           - const retrievedCount = Array.isArray(retrievedContext) ? retrievedContext.length : ((retrievedContext.business_knowledge || []).length + (retrievedContext.conversation_memory || []).length)
           div.trace-card
             strong= run.agent_key
-            p.meta= `${run.status} · retrieved ${retrievedCount}`
+            p.meta= `Router de agente · ${run.status} · retrieved ${retrievedCount}`
             if run.error_message
               p.trace-badge-error= run.error_message
             details.json-details
@@ -171,7 +172,24 @@ block content
               summary Output
               pre= json(run.output_json)
       else
-        p.trace-empty Sin routing (este bot usa el pipeline determinístico).
+        //- Pipeline determinístico: la intención clasificada es la que elige las
+        //- interacciones. No hay router de agente, pero sí hay una decisión.
+        div.trace-card
+          strong Ruteo determinístico por intención
+          p.meta Este bot no usa un router de agente (LLM): la intención clasificada decide qué interacciones se disparan.
+          div.route-decision
+            if summary.intent
+              span.fact-chip.is-intent= summary_intent_human || summary.intent
+              if summary_conf != null
+                span.u-confidence(class=(summary_conf < 72 ? "is-low" : "is-ok"))= `Confianza ${summary_conf}%`
+            else
+              span.fact-chip.is-none Sin intención clasificada
+            span.route-arrow(aria-hidden="true") →
+            if summary.interactions && summary.interactions.length
+              each ix in summary.interactions
+                span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
+            else
+              span.fact-chip.is-none Sin interacción seleccionada
     article.trace-section
       h2 Ejecuciones de agente
       if agent_runs.length
@@ -185,7 +203,7 @@ block content
               summary Contexto
               pre= json(run.retrieved_context_json)
       else
-        p.trace-empty Sin ejecuciones de agente.
+        p.trace-empty Sin ejecuciones de agente — el pipeline determinístico no invoca agentes LLM.
 
   section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="operacion", hidden)
     article.trace-section

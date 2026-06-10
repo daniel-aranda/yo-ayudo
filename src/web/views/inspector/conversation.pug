@@ -2,13 +2,6 @@ extends ../layout
 
 block content
   -
-    const interaction_status_class = (status) => {
-      const value = String(status || "");
-      if (value === "executed") return "ok";
-      if (value.startsWith("pending")) return "pending";
-      return "blocked";
-    };
-    const confidence_pct = (value) => (value == null || value === "" ? null : Math.round(Number(value) * 100));
     const contact_name = conversation ? (conversation.display_name || conversation.whatsapp_phone || "Contacto") : "Contacto";
     const resolved_account_id = conversation ? (conversation.resolved_account_id || conversation.account_id) : null;
     const resolved_org_id = conversation ? (conversation.resolved_organization_id || conversation.organization_id) : null;
@@ -34,46 +27,52 @@ block content
 
     .inspector-layout.conversation-view
       section.inspector-main
-        if turns && turns.length
+        if view_turns && view_turns.length
           .conversation-thread
-            each turn in turns
-              -
-                const trace = turn.incoming ? turn.incoming.compact_trace_summary : null;
-                const conf = trace ? confidence_pct(trace.confidence) : null;
-                const trace_id = turn.incoming ? turn.incoming.message.id : (turn.responses[0] && turn.responses[0].message.id);
-              article.turn(class=(trace && trace.has_error ? "turn--error" : ""))
-                if turn.incoming
-                  .turn-msg.turn-msg--user
-                    .msg-head
-                      span.msg-author Usuario
-                      span.msg-time= datetime(turn.incoming.message.created_at)
-                    p.msg-text= turn.incoming.message.text_body || "(sin texto)"
-                  //- Solo lo que importa: acción + confianza, a la derecha. El detalle
-                  //- técnico (intent, memoria, embedding) vive en "Ver trace completo".
-                  .turn-understanding(data-intent=(trace && trace.intent ? trace.intent : ""))
-                    if trace && trace.interactions && trace.interactions.length
-                      each ix in trace.interactions
-                        span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
-                    else
-                      span.u-none Sin acción
-                    if conf != null
-                      span.u-confidence(class=(conf < 72 ? "is-low" : "is-ok"))= `Confianza ${conf}%`
-                    if trace && trace.has_error
-                      span.u-tag.is-error Error
-                    else if trace && (trace.needs_review || trace.review_status)
-                      span.u-tag.is-warning Revisión
-                if turn.responses && turn.responses.length
-                  each response in turn.responses
-                    .turn-msg.turn-msg--agent
+            each turn in view_turns
+              article.turn(class=`turn--${turn.status_tone}`)
+                span.turn-status-bar(aria-hidden="true")
+                .turn-body
+                  if turn.user
+                    .turn-msg.turn-msg--user
                       .msg-head
-                        span.msg-author Agente
-                        span.msg-time= datetime(response.message.created_at)
-                      p.msg-text= response.message.text_body || "(sin texto)"
-                else if turn.incoming
-                  p.turn-pending Sin respuesta del agente todavía.
-                if trace_id
-                  .turn-foot
-                    a.trace-link(href=`/inspector/messages/${trace_id}`) Ver trace completo →
+                        span.msg-author Usuario
+                        span.msg-time= datetime(turn.user.at)
+                      p.msg-text= turn.user.text || "(sin texto)"
+                  if turn.understanding
+                    .turn-understanding
+                      span.understanding-title Lo que entendió el agente
+                      .understanding-actions
+                        if turn.understanding.has_action
+                          each action in turn.understanding.actions
+                            span.action-chip(class=`is-${action.tone}`, title=action.status)= action.label
+                        else
+                          span.understanding-none Sin acción ejecutada
+                      .understanding-meta
+                        if turn.understanding.intent_human
+                          span.understanding-fact
+                            span.understanding-fact-label Intención
+                            span.understanding-fact-value= turn.understanding.intent_human
+                        if turn.understanding.intent_raw
+                          code.understanding-code= turn.understanding.intent_raw
+                        if turn.understanding.confidence_pct != null
+                          span.u-confidence(class=`is-${turn.understanding.confidence_tone}`)= `Confianza ${turn.understanding.confidence_pct}%`
+                        if turn.understanding.memory_label
+                          span.understanding-tag= turn.understanding.memory_label
+                        if turn.understanding.embedding_label
+                          span.understanding-tag= turn.understanding.embedding_label
+                  if turn.responses && turn.responses.length
+                    each response in turn.responses
+                      .turn-msg.turn-msg--agent
+                        .msg-head
+                          span.msg-author Agente
+                          span.msg-time= datetime(response.at)
+                        p.msg-text= response.text || "(sin texto)"
+                  else if turn.user
+                    p.turn-pending Sin respuesta del agente todavía.
+                  if turn.trace_id
+                    .turn-foot
+                      a.trace-link(href=`/inspector/messages/${turn.trace_id}`) Ver trace completo →
         else
           .empty Sin mensajes en esta conversación.
 
