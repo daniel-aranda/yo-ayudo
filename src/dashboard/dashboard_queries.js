@@ -74,6 +74,83 @@ export async function get_business_dashboard_data(pool, business_id) {
   };
 }
 
+// Dashboard activity is for the business owner, not developers: action_audit_logs
+// (the operations the business registered) translated to plain Spanish, plus the
+// inbound messages that didn't trigger an operation. The technical pipeline trace
+// (webhook/parsing/agent/memory events) lives in the inspector, not here.
+const ACTIVITY_LABELS = {
+  registrar_inicio_dia: "Inicio del día",
+  registrar_venta: "Venta registrada",
+  registrar_compra: "Compra registrada",
+  registrar_inventario: "Inventario registrado",
+  registrar_cierre_dia: "Día cerrado",
+  registrar_nota_dia: "Nota del día",
+  generar_reporte_dia: "Reporte del día",
+  buscar_negocios: "Búsqueda de prospectos",
+  guardar_nota: "Nota guardada",
+  crear_tarea: "Tarea creada",
+  generar_resumen: "Resumen generado",
+  responder_con_voz: "Respuesta de voz",
+};
+const ACTIVITY_ERROR_STATUSES = ["failed", "blocked", "not_implemented", "pending_provider", "unknown_action"];
+
+async function get_account_activity(pool, account_id, limit = 10) {
+  const operations = await pool.query(
+    `
+      SELECT a.action_id, a.status, a.created_at, a.message_id,
+             m.text_body, contacts.display_name, contacts.whatsapp_phone
+      FROM action_audit_logs a
+      LEFT JOIN messages m ON m.id = a.message_id
+      LEFT JOIN contacts ON contacts.id = m.contact_id
+      WHERE a.account_id = $1
+      ORDER BY a.created_at DESC
+      LIMIT $2
+    `,
+    [account_id, limit],
+  );
+  const op_message_ids = new Set(operations.rows.map((row) => row.message_id).filter(Boolean));
+
+  const messages = await pool.query(
+    `
+      SELECT m.id, m.text_body, m.created_at, contacts.display_name, contacts.whatsapp_phone
+      FROM messages m
+      JOIN bots ON bots.id = m.bot_id
+      LEFT JOIN contacts ON contacts.id = m.contact_id
+      WHERE bots.account_id = $1
+        AND m.direction = 'inbound'
+      ORDER BY m.created_at DESC
+      LIMIT $2
+    `,
+    [account_id, limit],
+  );
+
+  const items = [];
+  for (const row of operations.rows) {
+    items.push({
+      title: ACTIVITY_LABELS[row.action_id] ?? row.action_id,
+      contact: row.display_name || row.whatsapp_phone || null,
+      detail: row.text_body || null,
+      status: row.status === "executed" ? "ok" : ACTIVITY_ERROR_STATUSES.includes(row.status) ? "error" : "pending",
+      created_at: row.created_at,
+    });
+  }
+  for (const row of messages.rows) {
+    // Skip inbound messages already represented by their operation above.
+    if (op_message_ids.has(row.id)) {
+      continue;
+    }
+    items.push({
+      title: "Mensaje recibido",
+      contact: row.display_name || row.whatsapp_phone || null,
+      detail: row.text_body || null,
+      status: "ok",
+      created_at: row.created_at,
+    });
+  }
+  items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return items.slice(0, limit);
+}
+
 export async function get_account_dashboard_data(pool, input) {
   const account = await pool.query(
     `
@@ -129,16 +206,7 @@ export async function get_account_dashboard_data(pool, input) {
     `,
     [input.account_id],
   );
-  const events = await pool.query(
-    `
-      SELECT *
-      FROM processing_events
-      WHERE account_id = $1
-      ORDER BY created_at DESC
-      LIMIT 10
-    `,
-    [input.account_id],
-  );
+  const activity = await get_account_activity(pool, input.account_id, 10);
   const stats = await pool.query(
     `
       SELECT
@@ -237,7 +305,7 @@ export async function get_account_dashboard_data(pool, input) {
     bots: bots.rows,
     channels: channels.rows,
     conversations: conversation_rows,
-    events: events.rows,
+    activity,
     stats: stats.rows[0] ?? {},
     capabilities,
     operational_day,

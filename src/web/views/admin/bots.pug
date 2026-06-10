@@ -1,0 +1,79 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const days = Math.round((since_hours || 168) / 24);
+    const current_hours = since_hours || 168;
+    const periods = [
+      { hours: 24, label: "24 h" },
+      { hours: 168, label: "7 días" },
+      { hours: 720, label: "30 días" },
+    ];
+
+  .admin-subnav
+    a(href="/admin/integrations") Integraciones
+    a(href="/admin/interactions") Interacciones
+    a.is-active(href="/admin/bots") Bots
+
+  section.page-header
+    h1 Bots
+    p= `Todos los bots de la plataforma y su uso · últimos ${days} días`
+
+  .period-filter
+    span.period-filter-label Periodo
+    each period in periods
+      a(href=`/admin/bots?since_hours=${period.hours}`, class=(current_hours === period.hours ? "is-active" : ""))= period.label
+
+  .metrics
+    article.metric
+      span.label Bots
+      strong= totals.bots
+    article.metric
+      span.label Activos
+      strong= totals.active
+    article.metric
+      span.label Mensajes
+      strong= totals.messages
+    article.metric
+      span.label Errores
+      strong= totals.errors
+
+  section.panel
+    h2 Bots / agentes
+    if bots && bots.length
+      .table-wrap
+        table.activity-table
+          thead
+            tr
+              th Bot
+              th Negocio / cuenta
+              th Tipo
+              th Estado
+              th Mensajes
+              th Conversaciones
+              th Errores
+              th Última actividad
+          tbody
+            each bot in bots
+              tr
+                td
+                  a(href=`/inspector/bots/${bot.id}`)= bot.name
+                  if bot.description
+                    div.meta= bot.description
+                td.meta= `${bot.organization_name} · ${bot.account_name}`
+                td.meta= bot.bot_type
+                td
+                  span(class=`status-pill ${bot.status === "active" ? "status-executed" : "status-pending_provider"}`)= bot.status
+                td= bot.messages
+                td= bot.conversations
+                td
+                  if bot.errors
+                    span.count-error= bot.errors
+                  else
+                    = 0
+                td.meta= when(bot.last_at)
+    else
+      .empty Sin bots registrados.

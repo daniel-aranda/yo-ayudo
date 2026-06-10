@@ -219,8 +219,15 @@ async function resolve_recipient_phone(pool, context) {
 }
 
 async function responder_con_voz(pool, context) {
+  // Provider config resolution: per-message input (in synthesize_voice_reply) >
+  // admin interaction config (model/voice) > env defaults.
+  const config = context.interaction_config ?? {};
   const voice_started_at = Date.now();
-  const voice = await synthesize_voice_reply(context.input_json ?? {}, context.voice_options ?? {});
+  const voice = await synthesize_voice_reply(context.input_json ?? {}, {
+    voice_id: config.voice_id,
+    model_id: config.model_id,
+    ...(context.voice_options ?? {}),
+  });
   const voice_latency_ms = Date.now() - voice_started_at;
 
   await safe_record_integration_event(pool, {

@@ -189,7 +189,7 @@ block content
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="identidad")
         +section_head("user", "Identidad del agente", "Define los datos principales y el propósito de este agente.")
-        div.form-grid
+        div.form-grid.form-grid--identity
           div
             label(for="name") Nombre
             div.field-control.has-trailing
@@ -207,7 +207,7 @@ block content
             select#bot_type(name="bot_type")
               each type_option in ["system", "custom"]
                 option(value=type_option, selected=(bot.bot_type || identity.type) === type_option)= type_option
-        div.form-grid
+        div.form-grid.form-grid--identity-detail
           div
             label(for="description") Descripción
             textarea#description(name="description", rows="3")= bot_description

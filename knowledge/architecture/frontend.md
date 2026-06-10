@@ -6,6 +6,16 @@ El dashboard es server-rendered con Pug, CSS propio y JavaScript mínimo. No se 
 
 La UI debe ser una cabina de control, no una landing page.
 
+## Sistema visual
+
+Tokens en `:root` (`dashboard.css`) — úsalos siempre, no hardcodees colores:
+
+- Color: `--bg` (paper cálido), `--surface` (blanco), `--surface-strong` (gris cálido para filas/burbujas), `--text`, `--muted`, `--line` / `--line-strong` (bordes), `--accent` (emerald/petrol) + `--accent-dark` + `--accent-soft` (tint de chips).
+- Profundidad: `--shadow-xs/sm/md`. Las superficies principales (`.panel`, `.metric`, `.card`, `.inspector-panel`, `.trace-section`, `.tabs`, `.conversation-thread`, `.trace-hero`) llevan `--shadow-sm`; las filas anidadas (`.trace-card`, `.config-card`, burbujas) van planas.
+- Foco: anillo `--accent-ring` en inputs/select/textarea/botones (`:focus-visible`).
+- Topbar sticky con `backdrop-filter` (frosted); nav en `--muted` con hover de pill. El verde se reserva para acciones primarias y acentos, no para la navegación.
+- Tipografía Inter con `letter-spacing` negativo en headings y `font-smoothing` antialiased.
+
 ## Ubicación
 
 ```text
@@ -25,11 +35,11 @@ src/dashboard
 
 ## Principios UI
 
-- Mostrar business, accounts, canales, bots, conversaciones y eventos del engine.
+- Mostrar business, accounts, canales, bots, conversaciones y actividad del negocio.
 - No hardcodear métricas verticales como ventas, compras, caja o inventario en el dashboard base.
 - Evitar dashboards decorativos.
 - Evitar cards dentro de cards.
-- No mostrar raw payloads en dashboard público.
+- No mostrar raw payloads ni eventos técnicos del pipeline en el dashboard: es la vista del dueño, no del desarrollador (eso vive en el inspector).
 - El texto debe caber en mobile y desktop.
 
 ## Dashboard Operativo De Cuenta
@@ -40,6 +50,14 @@ src/dashboard
 - **Single-day scoped**: muestra el último `op_business_days` de la cuenta. Todo el panel (ventas, caja, `purchases_total`/`count` y la tabla de compras) se scopea a ese `business_day_id`, así "Compras del día" y la tabla siempre concuerdan (días previos son historia, no la operación de hoy).
 - **State-driven (sin placeholders falsos)**: "Caja final" solo si el día está cerrado (`is_closed`); el desglose Efectivo/Tarjeta/Transferencia solo si hay datos (`has_sales_breakdown`), no tres $0. Sin `op_business_days` → estado vacío "Aún no hay actividad operativa". Sin capacidad operativa → no se renderiza el panel. Subsecciones con `h3.panel-subhead`.
 
+"Actividad reciente" (`get_account_activity`) es un feed **de negocio en lenguaje natural**, NO el trace técnico: traduce `action_audit_logs` a etiquetas como "Venta registrada"/"Inicio del día"/"Búsqueda de prospectos" (mapa `ACTIVITY_LABELS`) con el mensaje que la disparó como contexto + tiempo relativo + punto de estado (ok/error/pending), e incluye los mensajes entrantes sin operación como "Mensaje recibido" (dedupe por `message_id`). Los `processing_events` (webhook/parsing/agent/memory) ya no se muestran aquí; viven en el inspector.
+
+Las 4 métricas de arriba (Bots/Canales/Conversaciones/Eventos con error) son **anclas clickeables** (`a.metric.metric--link`) hacia su panel en la misma página (`#panel-bots`, `#panel-canales`, `#panel-conversaciones`, `#panel-actividad`); los paneles llevan `scroll-margin-top` para no quedar bajo el header.
+
+## Admin (server-rendered)
+
+Tres vistas en `src/web/views/admin/` que comparten patrón: `.admin-subnav` (links Integraciones / Interacciones / Bots, `.is-active` el actual), `.period-filter` (24h/7d/30d via `?since_hours=`), tira de `.metric` y tabla `.activity-table`. Las arma `register_admin_routes` (`src/admin/admin_routes.js`) desde `admin_*_service.js`. `bots.pug` lista todos los bots con conteos por bot (mensajes/conversaciones/errores/última actividad) y enlaza cada nombre a `/inspector/bots/:id`. Detalle de endpoints y servicios en `IMPLEMENTATION_STATUS.md`.
+
 ## Editor De Bot
 
 El editor de bot (`src/web/views/inspector/bot.pug`) es server-rendered con Pug y un mínimo de JavaScript propio en `src/web/public/js`.
@@ -48,6 +66,7 @@ El editor de bot (`src/web/views/inspector/bot.pug`) es server-rendered con Pug 
 - Tiene un sistema de iconos SVG inline mediante mixins de Pug (`+icon(name)`, `+section_head(icon, title, subtitle)`).
 - Autosave (`src/web/public/js/inspector/Bot_Editor_Autosave.js`): postea el form a `POST /inspector/bots/:bot_id` en `input`/`change`/`blur` y muestra un timestamp proactivo tipo "Guardado 3:58pm" o "Guardado 5 jun, 4pm" (es-MX 12h). No hay botón "Guardar cambios".
 - Interacciones: el botón "Agregar interacción" abre un **popup de selección múltiple** (no un dropdown) que lista las interacciones disponibles con su descripción; puedes marcar una o varias y agregarlas de golpe. Las interacciones ya configuradas se excluyen.
+- Identidad: las dos filas usan grids asimétricos (`.form-grid--identity` = Nombre 2.6fr / Estado 1.1fr / Tipo 1fr; `.form-grid--identity-detail` = Descripción 2.2fr / Objetivo 1fr) para que Nombre/Descripción dominen y Estado/Tipo/Objetivo queden compactos. Colapsan a 1 columna ≤780px.
 
 ## Componentes Core (JS)
 

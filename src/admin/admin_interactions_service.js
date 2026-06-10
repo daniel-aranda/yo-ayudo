@@ -2,6 +2,7 @@ import { available_agent_interactions } from "../inspector/inspector_repository.
 import { get_action } from "../actions/action_registry.js";
 import { get_integration_event_summary } from "../integrations/integration_event_repository.js";
 import { integration_definitions } from "../integrations/integration_registry.js";
+import { get_interaction_settings_map } from "../interactions/interaction_settings_repository.js";
 
 // Action execution statuses that count as an error (vs `executed` = success and
 // `pending_confirmation` = pending).
@@ -121,16 +122,18 @@ async function get_recent_activity(pool, limit) {
 // they drive, and a recent-activity feed across all three logging streams.
 export async function get_interactions_admin_view(pool, { since_hours = 168 } = {}) {
   const since = new Date(Date.now() - since_hours * 60 * 60 * 1000);
-  const [action_stats, ai_stats, integration_summary, recent] = await Promise.all([
+  const [action_stats, ai_stats, integration_summary, recent, settings_map] = await Promise.all([
     get_action_stats(pool, since),
     get_ai_call_stats(pool, since),
     get_integration_event_summary(pool, { since_hours }),
     get_recent_activity(pool, 20),
+    get_interaction_settings_map(pool),
   ]);
 
   const interactions = available_agent_interactions.map((interaction) => {
     const action = interaction.action_id ? get_action(interaction.action_id) : null;
     const stats = interaction.action_id ? action_stats.get(interaction.action_id) : null;
+    const setting = settings_map.get(interaction.type) ?? null;
     return {
       type: interaction.type,
       label: interaction.label,
@@ -142,6 +145,10 @@ export async function get_interactions_admin_view(pool, { since_hours = 168 } = 
       // A real handler is wired (vs a `stub_*` roadmap placeholder).
       handler_real: action ? Boolean(action.handler && !String(action.handler).startsWith("stub_")) : false,
       provider: interaction.action_id ? PROVIDER_BY_ACTION[interaction.action_id] ?? null : null,
+      // System-level settings (default: enabled, no config) + which fields are configurable.
+      enabled: setting ? setting.enabled !== false : true,
+      config: setting?.config_json ?? {},
+      settings_schema: Array.isArray(interaction.settings_schema) ? interaction.settings_schema : [],
       total: stats?.total ?? 0,
       success: stats?.success ?? 0,
       error: stats?.error ?? 0,

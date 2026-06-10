@@ -73,7 +73,9 @@ La direccion actual es Bot Engine configurable:
 - Conversation Inspector interno.
 - Processing events.
 - Observabilidad de APIs externas: toda llamada a AI (`ai_calls`, con latencia) y a proveedores (`integration_events`, ahora con latencia en google_places/elevenlabs/whatsapp) se registra y se mide; cada ejecucion de accion queda en `action_audit_logs`.
-- Admin de interacciones (`/admin/interactions`, `admin_interactions_service.js`): catalogo de interacciones + uso real (usos/OK/error/ultimo desde `action_audit_logs`), APIs externas (AI + proveedores, OK/error/latencia) y logs recientes unificados. Complementa el admin de integraciones (`/admin/integrations`: salud + eventos). Sub-nav entre ambos.
+- Admin de interacciones (`/admin/interactions`, `admin_interactions_service.js`): catalogo + uso real (usos/OK/error/ultimo desde `action_audit_logs`), APIs externas (AI + proveedores, OK/error/latencia), logs recientes unificados, **filtro de periodo** (24h/7d/30d) y tab **Configuración**.
+- Admin de bots global (`/admin/bots`, `admin_bots_service.js`): todos los bots de la plataforma (JOIN a accounts/organizations) con conteos operativos por bot —mensajes, conversaciones, errores (`action_audit_logs` failed/blocked/... + `bot_guardrail_events`) y ultima actividad— y totales arriba; filtro de periodo (24h/7d/30d). El nombre enlaza a `/inspector/bots/:id`. Sub-nav comun entre `/admin/integrations`, `/admin/interactions` y `/admin/bots`.
+- Interaction settings (capa system-level, migracion `0013`, tabla `interaction_settings`, `src/interactions/interaction_settings_repository.js`): habilitar/deshabilitar una interaccion a nivel plataforma y configurar su proveedor (ej. `responder_voz` -> modelo/voz de ElevenLabs). El `action_execution_service` **bloquea** (con guardrail `interaccion_deshabilitada`) cualquier accion cuya interaccion este deshabilitada, sin importar la config por bot; la config fluye al handler (`context.interaction_config`). Es la tercera capa: catalogo estatico (codigo) -> settings system-level -> config por bot (`definition_json.interactions`).
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
 - Tests unitarios e integracion del pipeline, router, memory, inspector y Bot Engine comercial.
@@ -86,6 +88,8 @@ Migraciones SQL explicitas aplicadas en orden por `npm run db:migrate` (registra
 - `0002_repair_business_account_schema.sql`, `0003_repair_bot_engine_schema.sql`: reparaciones de esquema.
 - `0004_message_idempotency.sql`: idempotencia inbound (dedupe por id externo de mensaje).
 - `0005`–`0011`: patron expand-migrate-contract para retirar `tenant`/`branch` y unificar en organization/account (`0005_unify_operational_account`, `0006_account_prep`, `0007_account_lookup_tables`, `0008_loosen_remaining_tenant`, `0009_account_remaining_tables`, `0010_drop_tenant_branch` borra fisicamente tenant/branch, `0011_sync_bot_organization` alinea `bots.organization_id` con su account).
+- `0012_integration_events.sql`: eventos de integraciones (llamadas a proveedores externos) con status y latencia.
+- `0013_interaction_settings.sql`: settings system-level por interaccion (`enabled` + `config_json`, con `action_id` denormalizado).
 
 El modelo de datos ya no tiene `tenant` ni `branch`: organization (negocio) -> account (cuenta) -> bot.
 
@@ -125,7 +129,9 @@ Admin:
 
 - `GET /admin` (redirige a `/admin/integrations`)
 - `GET /admin/integrations` (salud + eventos por integracion)
-- `GET /admin/interactions` (catalogo de interacciones + uso + APIs externas + logs)
+- `GET /admin/interactions` (catalogo de interacciones + uso + APIs externas + logs; `?since_hours=` y `?tab=config`)
+- `GET /admin/bots` (bots globales con conteos de mensajes/conversaciones/errores y ultima actividad; `?since_hours=`)
+- `POST /admin/interactions/settings` (enable/disable + config por interaccion)
 
 Internas Bot Engine/comercial:
 
@@ -199,7 +205,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 23 archivos, 81 tests (Vitest).
+- `npm test`: OK, 23 archivos, 85 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0011` en orden.
 
 Comandos locales disponibles:

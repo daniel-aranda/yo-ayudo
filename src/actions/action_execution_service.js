@@ -3,6 +3,7 @@ import { execute_internal_action_handler } from "./internal_action_handlers.js";
 import { get_action } from "./action_registry.js";
 import { get_bot_by_id } from "../bots/bot_repository.js";
 import { create_bot_guardrail_event } from "../bot_engine/bot_guardrail_event_repository.js";
+import { get_action_runtime_setting } from "../interactions/interaction_settings_repository.js";
 
 function schema_type_matches(schema, value) {
   if (!schema?.type) {
@@ -131,6 +132,20 @@ export class action_execution_service {
       });
     }
 
+    // System-level interaction setting: an admin can globally disable an
+    // interaction (kill-switch) or configure its provider. Disabled = blocked
+    // everywhere, regardless of per-bot config.
+    const runtime_setting = await get_action_runtime_setting(this.pool, action.action_id);
+    if (runtime_setting && runtime_setting.enabled === false) {
+      return this.block_with_guardrail(input, action, {
+        tipo: "interaccion_deshabilitada",
+        status: "blocked",
+        descripcion: `La interacción de ${action.action_id} está deshabilitada por el administrador.`,
+        severidad: "media",
+      });
+    }
+    const interaction_config = runtime_setting?.config_json ?? {};
+
     const bot = input.bot_id ? await get_bot_by_id(this.pool, input.bot_id) : null;
 
     // Every action (including operational writes routed from the parser) must be a
@@ -191,7 +206,7 @@ export class action_execution_service {
       }));
       result = pending_confirmation_result(action, input.input_json ?? {});
     } else {
-      result = await execute_internal_action_handler(this.pool, action, input);
+      result = await execute_internal_action_handler(this.pool, action, { ...input, interaction_config });
       result ??= stub_result(action);
       result.action_id ??= action.action_id;
 

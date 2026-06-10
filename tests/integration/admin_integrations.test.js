@@ -7,6 +7,7 @@ import {
   record_integration_event,
   get_integration_event_summary,
 } from "../../src/integrations/integration_event_repository.js";
+import { get_interaction_settings_map } from "../../src/interactions/interaction_settings_repository.js";
 import { create_test_pool } from "../helpers/test_pool.js";
 
 function http_response(status) {
@@ -92,5 +93,47 @@ describe("admin integrations dashboard", () => {
     // Recent activity feed + tab navigator are wired.
     expect(response.text).toContain("Logs recientes");
     expect(response.text).toContain("interactions-tabs");
+  });
+
+  it("saves and reads back interaction settings (enable/disable + provider config)", async () => {
+    const app = create_admin_test_app(pool);
+
+    // `enabled` checkbox omitted => disabled; config fields are namespaced config_<key>.
+    await request(app)
+      .post("/admin/interactions/settings")
+      .type("form")
+      .send({ type: "responder_voz", config_model_id: "eleven_turbo_v2", config_voice_id: "abc123" })
+      .expect(302)
+      .expect("Location", "/admin/interactions?tab=config");
+
+    const settings = await get_interaction_settings_map(pool);
+    const voice = settings.get("responder_voz");
+    expect(voice.enabled).toBe(false);
+    expect(voice.action_id).toBe("responder_con_voz");
+    expect(voice.config_json).toMatchObject({ model_id: "eleven_turbo_v2", voice_id: "abc123" });
+
+    const page = await request(app).get("/admin/interactions?tab=config").expect(200);
+    expect(page.text).toContain("Configuración de interacciones");
+    expect(page.text).toContain("eleven_turbo_v2");
+    expect(page.text).toContain("Inactiva");
+  });
+
+  it("renders the global bots admin with per-bot counts", async () => {
+    const bot = (await pool.query("SELECT id, name FROM bots LIMIT 1")).rows[0];
+    // One blocked action execution => one error counted for this bot.
+    await pool.query(
+      "INSERT INTO action_audit_logs (bot_id, action_id, status) VALUES ($1, 'buscar_negocios', 'blocked')",
+      [bot.id],
+    );
+
+    const app = create_admin_test_app(pool);
+    const response = await request(app).get("/admin/bots").expect(200);
+
+    expect(response.text).toContain("Bots / agentes");
+    expect(response.text).toContain(bot.name);
+    expect(response.text).toContain("Mensajes");
+    expect(response.text).toContain("Errores");
+    // Subnav cross-links to the bots admin.
+    expect(response.text).toContain('href="/inspector/bots/');
   });
 });

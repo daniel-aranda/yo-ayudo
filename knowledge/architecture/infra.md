@@ -78,7 +78,7 @@ No hay `npm run build` por diseño: no hay paso de compilacion.
 
 ## Tests
 
-Tests con Vitest (actualmente 23 archivos / 81 tests):
+Tests con Vitest (actualmente 23 archivos / 84 tests):
 
 ```bash
 npm test

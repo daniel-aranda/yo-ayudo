@@ -81,7 +81,7 @@ Pendiente: conectar el inbound al Prompt Compiler / seleccion de acciones por AI
 
 ### Cadena de validacion
 
-Cada `action_request`/operacion pasa por `action_execution_service.execute_action`, que aplica la cadena en orden: existe en el registry -> habilitada en el registry -> habilitada para el bot (via `acciones_habilitadas_json`) -> permisos -> `input_schema` -> riesgo/confirmacion. Luego corre el handler real (`execute_internal_action_handler`) o un stub seguro. Siempre escribe `action_audit_logs` y, cuando aplica, `bot_guardrail_events`.
+Cada `action_request`/operacion pasa por `action_execution_service.execute_action`, que aplica la cadena en orden: existe en el registry -> habilitada en el registry -> **habilitada a nivel sistema** (`interaction_settings`; deshabilitada = `blocked` + guardrail `interaccion_deshabilitada`) -> habilitada para el bot (via `acciones_habilitadas_json`) -> permisos -> `input_schema` -> riesgo/confirmacion. Luego corre el handler real (`execute_internal_action_handler`, que recibe la config de la interaccion en `context.interaction_config`) o un stub seguro. Siempre escribe `action_audit_logs` y, cuando aplica, `bot_guardrail_events`. Las tres capas de configuracion: catalogo estatico (codigo) -> `interaction_settings` (system-level: admin) -> `definition_json.interactions` (por bot).
 
 ## Conceptos
 

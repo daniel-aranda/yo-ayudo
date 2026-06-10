@@ -1,6 +1,18 @@
 extends layout
 
 block content
+  -
+    const relative_time = (value) => {
+      if (!value) return "";
+      const ms = Date.now() - new Date(value).getTime();
+      if (Number.isNaN(ms)) return "";
+      const min = Math.round(ms / 60000);
+      if (min < 1) return "ahora";
+      if (min < 60) return `hace ${min} min`;
+      const hours = Math.round(min / 60);
+      if (hours < 24) return `hace ${hours} h`;
+      return `hace ${Math.round(hours / 24)} d`;
+    };
   if !account
     .empty Cuenta no encontrada.
   else
@@ -13,16 +25,16 @@ block content
         p Bots, canales y conversaciones de esta cuenta
 
     .metrics
-      article.metric
+      a.metric.metric--link(href="#panel-bots")
         span.label Bots asignados
         strong= stats.bots_count || 0
-      article.metric
+      a.metric.metric--link(href="#panel-canales")
         span.label Canales conectados
         strong= stats.channels_count || 0
-      article.metric
+      a.metric.metric--link(href="#panel-conversaciones")
         span.label Conversaciones
         strong= stats.conversations_count || 0
-      article.metric
+      a.metric.metric--link(href="#panel-actividad")
         span.label Eventos con error
         strong= stats.error_events_count || 0
 
@@ -85,7 +97,7 @@ block content
           .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
 
     .two-column
-      section.panel
+      section.panel#panel-canales
         h2 Canales conectados
         if channels && channels.length
           table
@@ -104,7 +116,7 @@ block content
         else
           .empty Sin canales conectados.
 
-      section.panel
+      section.panel#panel-bots
         h2 Bots asignados
         if bots && bots.length
           table
@@ -127,7 +139,7 @@ block content
           .empty Sin bots asignados.
 
     .two-column
-      section.panel
+      section.panel#panel-conversaciones
         h2 Conversaciones recientes
         if conversations && conversations.length
           table
@@ -150,15 +162,20 @@ block content
         else
           .empty Sin conversaciones.
 
-      section.panel
-        h2 Eventos recientes
-        if events && events.length
-          ul.clean-list
-            each event in events
-              li
-                strong= event.title || event.event_type
-                span.meta= ` · ${event.event_stage} · ${event.status}`
-                if event.summary
-                  div= event.summary
+      section.panel#panel-actividad
+        h2 Actividad reciente
+        if activity && activity.length
+          ul.activity-feed
+            each item in activity
+              li.activity-item
+                span.activity-dot(class=`is-${item.status}`, aria-hidden="true")
+                div.activity-body
+                  div.activity-line
+                    strong.activity-title= item.title
+                    if item.contact
+                      span.activity-contact= item.contact
+                    span.activity-time= relative_time(item.created_at)
+                  if item.detail
+                    p.activity-detail= item.detail
         else
-          .empty Sin eventos recientes.
+          .empty Sin actividad reciente. En cuanto el negocio opere por WhatsApp, aparecerá aquí.

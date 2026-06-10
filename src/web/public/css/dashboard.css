@@ -1,13 +1,22 @@
 :root {
   color-scheme: light;
-  --bg: #f7f7f4;
+  /* Warm paper base, near-black ink, refined warm-neutral lines. */
+  --bg: #f6f4ee;
   --surface: #ffffff;
-  --surface-strong: #f0efe9;
-  --text: #1c1c1a;
-  --muted: #666963;
-  --line: #d9d8cf;
-  --accent: #116a5b;
-  --accent-dark: #0a4c41;
+  --surface-strong: #f0ede4;
+  --text: #1a1a16;
+  --muted: #6c6f64;
+  --line: #e7e2d6;
+  --line-strong: #d8d2c4;
+  /* Emerald / petrol green primary. */
+  --accent: #0f6a5a;
+  --accent-dark: #0a4a3f;
+  --accent-soft: #e4f1ea;
+  --accent-ring: rgba(15, 106, 90, 0.24);
+  /* Soft, layered elevation — premium depth instead of flat 1px borders. */
+  --shadow-xs: 0 1px 2px rgba(26, 26, 18, 0.05);
+  --shadow-sm: 0 1px 3px rgba(26, 26, 18, 0.06), 0 1px 2px rgba(26, 26, 18, 0.04);
+  --shadow-md: 0 12px 32px rgba(26, 26, 18, 0.09), 0 3px 8px rgba(26, 26, 18, 0.05);
 }
 
 * {
@@ -20,6 +29,8 @@ body {
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -29,24 +40,41 @@ a {
 
 .topbar {
   align-items: center;
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
   border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-xs);
   display: flex;
   justify-content: space-between;
   padding: 14px 28px;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 20;
 }
 
 .brand {
   color: var(--text);
-  font-weight: 750;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .nav {
   display: flex;
-  gap: 18px;
+  gap: 2px;
+}
+
+.nav a {
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 7px 12px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nav a:hover {
+  background: var(--surface-strong);
+  color: var(--text);
 }
 
 .container {
@@ -183,7 +211,8 @@ td a:not(.button):hover {
 button {
   background: var(--accent);
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
+  box-shadow: var(--shadow-xs);
   color: #fff;
   cursor: pointer;
   display: inline-flex;
@@ -191,12 +220,19 @@ button {
   font-weight: 650;
   justify-content: center;
   margin-top: 12px;
-  padding: 9px 12px;
+  padding: 9px 14px;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 80ms ease;
 }
 
 .button:hover,
 button:hover {
   background: var(--accent-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+.button:active,
+button:active {
+  transform: translateY(1px);
 }
 
 .secondary-button {
@@ -710,6 +746,23 @@ button:disabled {
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   margin-bottom: 12px;
+}
+
+/* Identidad: el Nombre es lo importante, así que domina; Estado y Tipo (selects
+   cortos) y Objetivo se achican. */
+.form-grid--identity {
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1.1fr) minmax(0, 1fr);
+}
+
+.form-grid--identity-detail {
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+}
+
+@media (max-width: 780px) {
+  .form-grid--identity,
+  .form-grid--identity-detail {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-grid input,
@@ -2284,4 +2337,284 @@ pre {
 .count-error {
   color: #9a3412;
   font-weight: 650;
+}
+
+/* Time-period filter */
+.period-filter {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+
+.period-filter-label {
+  color: var(--muted);
+  font-size: 13px;
+  margin-right: 4px;
+}
+
+.period-filter a {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  padding: 4px 12px;
+  text-decoration: none;
+}
+
+.period-filter a:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.period-filter a.is-active {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+  color: #fff;
+}
+
+/* Configuración tab: one card per interaction (enable/disable + provider config) */
+.config-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  margin-top: 12px;
+}
+
+.config-card {
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.config-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.config-card-title .meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.config-toggle {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 6px;
+  margin: 0;
+}
+
+.config-toggle input {
+  height: 16px;
+  width: 16px;
+}
+
+.config-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.config-field {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.config-field-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.config-field input {
+  width: 100%;
+}
+
+.config-none {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.config-save {
+  margin: 0;
+}
+
+/* ============================================================
+   Visual refresh — depth, focus, typography finish (look & feel only)
+   ============================================================ */
+
+/* Soft elevation on the primary surfaces so structure reads through depth,
+   not heavy lines. Nested rows (.trace-card, .config-card, bubbles) stay flat. */
+.metric,
+.panel,
+.card,
+.inspector-panel,
+.trace-section,
+.conversation-thread,
+.trace-hero,
+.tabs {
+  box-shadow: var(--shadow-sm);
+}
+
+/* Tighter tracking on headings reads more editorial / premium. */
+h1,
+h2,
+h3,
+.page-header h1 {
+  letter-spacing: -0.018em;
+}
+
+/* Premium focus rings: a soft accent halo on controls instead of the default
+   browser outline. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.button:focus-visible,
+button:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+a:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Quiet, refined scrollbars (WebKit) — desktop polish. */
+::-webkit-scrollbar {
+  height: 12px;
+  width: 12px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(26, 26, 18, 0.15);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 26, 18, 0.26);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Dark code blocks get a matching light thumb so it doesn't vanish. */
+pre::-webkit-scrollbar-thumb {
+  background: rgba(247, 247, 244, 0.22);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+
+/* Business activity feed (account dashboard) — plain-language, not pipeline logs. */
+.activity-feed {
+  display: grid;
+  gap: 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.activity-item {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.activity-dot {
+  background: var(--accent);
+  border-radius: 999px;
+  height: 9px;
+  margin-top: 6px;
+  width: 9px;
+}
+
+.activity-dot.is-error {
+  background: #c0492f;
+}
+
+.activity-dot.is-pending {
+  background: #c98a16;
+}
+
+.activity-body {
+  min-width: 0;
+}
+
+.activity-line {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-title {
+  color: var(--text);
+}
+
+.activity-contact {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.activity-contact::before {
+  content: "· ";
+}
+
+.activity-time {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.activity-detail {
+  color: var(--muted);
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Clickable metric cards (dashboard) — jump to their section, lift on hover. */
+.metric--link {
+  color: inherit;
+  transition: box-shadow 140ms ease, transform 80ms ease, border-color 140ms ease;
+}
+
+.metric--link:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Anchored panels clear the sticky topbar when jumped to. */
+.panel[id] {
+  scroll-margin-top: 84px;
 }

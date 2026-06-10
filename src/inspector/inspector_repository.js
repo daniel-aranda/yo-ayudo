@@ -79,6 +79,9 @@ export const available_agent_interactions = [
     instructions_placeholder:
       "Describe para qué y cómo buscar negocios. Ej: prospección de clientes, cómo elegir los mejores (cherry-pick), y cómo guardar o excluir los que ya contactaste.",
     action_id: "buscar_negocios",
+    settings_schema: [
+      { key: "max_results", label: "Máx. resultados por búsqueda", placeholder: "10" },
+    ],
   },
   {
     type: "guardar_nota",
@@ -115,6 +118,10 @@ export const available_agent_interactions = [
     instructions_placeholder:
       "Describe cuándo responder con voz en lugar de texto (p. ej. saludos, explicaciones largas o seguimiento), y el tono que debe usar.",
     action_id: "responder_con_voz",
+    settings_schema: [
+      { key: "model_id", label: "Modelo (ElevenLabs)", placeholder: "eleven_multilingual_v2" },
+      { key: "voice_id", label: "Voice ID", placeholder: "21m00Tcm4TlvDq8ikWAM" },
+    ],
   },
   {
     type: "registrar_inicio_dia",

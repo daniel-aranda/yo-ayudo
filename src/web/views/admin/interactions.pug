@@ -11,14 +11,27 @@ block content
       solo_humano: "Solo humano",
     };
     const days = Math.round((since_hours || 168) / 24);
+    const current_hours = since_hours || 168;
+    const periods = [
+      { hours: 24, label: "24 h" },
+      { hours: 168, label: "7 días" },
+      { hours: 720, label: "30 días" },
+    ];
+    const initial_tab = typeof tab === "string" && tab === "config" ? "config" : "catalogo";
 
   .admin-subnav
     a(href="/admin/integrations") Integraciones
     a.is-active(href="/admin/interactions") Interacciones
+    a(href="/admin/bots") Bots
 
   section.page-header
     h1 Interacciones
     p= `Catálogo, configuración y uso real · últimos ${days} días`
+
+  .period-filter
+    span.period-filter-label Periodo
+    each period in periods
+      a(href=`/admin/interactions?since_hours=${period.hours}`, class=(current_hours === period.hours ? "is-active" : ""))= period.label
 
   .metrics
     article.metric
@@ -38,15 +51,17 @@ block content
       strong= totals.external_total
 
   .wamy-tabs.admin-tabs
-    #interactions-tabs.tabs(data-initial-tab="catalogo", role="tablist", aria-label="Admin de interacciones")
-      button.tab.active(type="button", data-section="catalogo", role="tab", aria-selected="true")
+    #interactions-tabs.tabs(data-initial-tab=initial_tab, role="tablist", aria-label="Admin de interacciones")
+      button.tab(type="button", data-section="catalogo", role="tab")
         span Catálogo
-      button.tab(type="button", data-section="externas", role="tab", aria-selected="false")
+      button.tab(type="button", data-section="config", role="tab")
+        span Configuración
+      button.tab(type="button", data-section="externas", role="tab")
         span APIs externas
-      button.tab(type="button", data-section="logs", role="tab", aria-selected="false")
+      button.tab(type="button", data-section="logs", role="tab")
         span Logs recientes
 
-  section.tab-section(data-parent-tab="interactions-tabs", data-section="catalogo")
+  section.tab-section(data-parent-tab="interactions-tabs", data-section="catalogo", hidden=(initial_tab !== "catalogo"))
     .panel
       h2 Catálogo de interacciones
       p.meta Lo que el agente puede hacer. Las ejecutables llevan una acción del registry; el resto son de comportamiento (canal o consulta a humano).
@@ -61,6 +76,7 @@ block content
               th OK
               th Error
               th Último uso
+              th Estado
           tbody
             each interaction in interactions
               tr
@@ -91,6 +107,38 @@ block content
                   else
                     span.meta —
                 td.meta= when(interaction.last_at)
+                td
+                  if interaction.executable
+                    span(class=`status-pill ${interaction.enabled ? "status-executed" : "status-failed"}`)= interaction.enabled ? "Activa" : "Inactiva"
+                  else
+                    span.meta —
+
+  section.tab-section(data-parent-tab="interactions-tabs", data-section="config", hidden=(initial_tab !== "config"))
+    .panel
+      h2 Configuración de interacciones
+      p.meta Habilita o deshabilita cada interacción a nivel plataforma y ajusta su proveedor. Deshabilitar bloquea la interacción en todos los bots (con guardrail).
+      .config-grid
+        each interaction in interactions
+          if interaction.executable
+            form.config-card(method="post", action="/admin/interactions/settings")
+              input(type="hidden", name="type", value=interaction.type)
+              .config-card-head
+                div.config-card-title
+                  strong= interaction.label
+                  div.meta= interaction.provider ? `${interaction.action_id} · ${interaction.provider}` : interaction.action_id
+                label.config-toggle
+                  input(type="checkbox", name="enabled", checked=interaction.enabled)
+                  span.config-toggle-label Activa
+              if interaction.settings_schema && interaction.settings_schema.length
+                .config-fields
+                  each field in interaction.settings_schema
+                    label.config-field
+                      span.config-field-label= field.label
+                      input(type="text", name=`config_${field.key}`, value=(interaction.config && interaction.config[field.key]) || "", placeholder=field.placeholder || "")
+              else
+                p.config-none Sin parámetros configurables (usa los defaults del sistema).
+              .config-actions
+                button.config-save(type="submit") Guardar
 
   section.tab-section(data-parent-tab="interactions-tabs", data-section="externas", hidden)
     .panel

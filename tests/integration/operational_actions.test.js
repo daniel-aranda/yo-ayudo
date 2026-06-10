@@ -1,5 +1,6 @@
 import { afterEach as after_each, beforeEach as before_each, describe, expect, it } from "vitest";
 import { action_execution_service } from "../../src/actions/action_execution_service.js";
+import { upsert_interaction_setting } from "../../src/interactions/interaction_settings_repository.js";
 import { create_test_pool } from "../helpers/test_pool.js";
 
 describe("operational actions (ventas/compras/cierre as engine actions)", () => {
@@ -67,5 +68,26 @@ describe("operational actions (ventas/compras/cierre as engine actions)", () => 
     const audit = await pool.query("SELECT * FROM action_audit_logs WHERE action_id = 'registrar_compra'");
     expect(audit.rowCount).toBe(1);
     expect(audit.rows[0].status).toBe("executed");
+  });
+
+  it("blocks an action whose interaction is globally disabled by an admin", async () => {
+    await upsert_interaction_setting(pool, { type: "registrar_venta", action_id: "registrar_venta", enabled: false });
+
+    const result = await run("registrar_venta", { accumulated_sales: 1000, cash_sales: 1000 });
+
+    expect(result.status).toBe("blocked");
+    expect(result.guardrail_events.some((event) => event.tipo === "interaccion_deshabilitada")).toBe(true);
+    // Nothing was executed while disabled.
+    expect((await pool.query("SELECT * FROM op_sales_updates")).rowCount).toBe(0);
+  });
+
+  it("executes again once the interaction is re-enabled", async () => {
+    await upsert_interaction_setting(pool, { type: "registrar_venta", action_id: "registrar_venta", enabled: false });
+    await upsert_interaction_setting(pool, { type: "registrar_venta", action_id: "registrar_venta", enabled: true });
+
+    const result = await run("registrar_venta", { accumulated_sales: 1000, cash_sales: 1000 });
+
+    expect(result.status).toBe("executed");
+    expect((await pool.query("SELECT * FROM op_sales_updates")).rowCount).toBe(1);
   });
 });
