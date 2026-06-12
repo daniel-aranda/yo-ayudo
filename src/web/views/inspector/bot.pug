@@ -16,6 +16,8 @@ block content
     const supported_channel_rows = Array.isArray(supported_channels) ? supported_channels : [];
     const whatsapp_channel_rows = Array.isArray(whatsapp_channels) ? whatsapp_channels : [];
     const primary_whatsapp_channel = whatsapp_channel_rows[0] || {};
+    const instagram_channel_rows = Array.isArray(instagram_channels) ? instagram_channels : [];
+    const primary_instagram_channel = instagram_channel_rows[0] || {};
     const human_group_options = Array.isArray(human_groups) ? human_groups : [];
     const human_group_options_json = JSON.stringify(human_group_options).replace(/</g, "\\u003c");
     const assigned_knowledge_sources = Array.isArray(knowledge_sources) ? knowledge_sources : [];
@@ -322,14 +324,14 @@ block content
               input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="canales", hidden)
-        +section_head("broadcast", "Canales soportados", "Conecta el número de WhatsApp por donde te escriben tus clientes.")
+        +section_head("broadcast", "Canales soportados", "Conecta los canales por donde te escriben tus clientes.")
         if supported_channel_rows.length
           each channel in supported_channel_rows
             if channel.channel === "whatsapp"
               div.channel-config
                 div.channel-header
                   div.channel-title
-                    span.channel-icon(aria-hidden="true") WA
+                    span.channel-icon.channel-icon--whatsapp(aria-hidden="true") WA
                     div
                       h3= channel.label
                       p.meta El número por donde tus clientes le escriben a este agente.
@@ -373,6 +375,58 @@ block content
                               span.status= whatsapp_channel.status
                 else
                   p.channel-hint Llena ambos campos para conectar el número. Los cambios se guardan automáticamente.
+            else if channel.channel === "instagram"
+              div.channel-config
+                div.channel-header
+                  div.channel-title
+                    span.channel-icon.channel-icon--instagram(aria-hidden="true")
+                      svg.channel-glyph(viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke-width="2", stroke-linecap="round", stroke-linejoin="round")
+                        rect(x="3.5", y="3.5", width="17", height="17", rx="5")
+                        circle(cx="12", cy="12", r="4")
+                        circle(cx="17.2", cy="6.8", r="1.1", fill="currentColor", stroke="none")
+                    div
+                      h3= channel.label
+                      p.meta La cuenta de Instagram por donde tus clientes le escriben a este agente.
+                  if instagram_channel_rows.length
+                    span.channel-status.is-connected Conectado
+                  else
+                    span.channel-status.is-idle Sin conectar
+                div.form-grid
+                  div
+                    label(for="instagram_username") Usuario de Instagram
+                    input#instagram_username(
+                      type="text",
+                      name="instagram_username",
+                      value=primary_instagram_channel.username || "",
+                      placeholder="@tunegocio"
+                    )
+                    p.field-hint El @usuario que ven tus clientes.
+                  div
+                    label(for="instagram_account_id") ID de la cuenta en Meta
+                    input#instagram_account_id(
+                      type="text",
+                      name="instagram_account_id",
+                      value=primary_instagram_channel.external_account_id || "",
+                      placeholder="17841400000000000"
+                    )
+                    p.field-hint En Meta → Instagram (Instagram Business Account ID).
+                if instagram_channel_rows.length
+                  div.table-wrap
+                    table
+                      thead
+                        tr
+                          th Usuario
+                          th ID Meta
+                          th Estado
+                      tbody
+                        each instagram_channel in instagram_channel_rows
+                          tr
+                            td= instagram_channel.username ? `@${instagram_channel.username}` : "Sin usuario"
+                            td= instagram_channel.external_account_id
+                            td
+                              span.status= instagram_channel.status
+                else
+                  p.channel-hint Llena ambos campos para conectar la cuenta. Los cambios se guardan automáticamente.
         else
           div.empty Ningún canal soportado disponible.
 

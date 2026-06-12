@@ -91,11 +91,12 @@ describe("present_conversation_turns", () => {
     expect(turn.understanding.has_action).toBe(true);
     expect(turn.understanding.actions[0]).toMatchObject({ label: "Registrar inicio del día", tone: "ok" });
     expect(turn.understanding.intent_human).toBe("Inicio del día");
-    expect(turn.understanding.intent_raw).toBe("day_start");
     expect(turn.understanding.confidence_pct).toBe(92);
     expect(turn.understanding.confidence_tone).toBe("ok");
-    expect(turn.understanding.memory_label).toBe("Memoria guardada");
-    expect(turn.understanding.embedding_label).toBe("Embedding completado");
+    // The minimal view shows only labels; intent code, memory and embedding are gone.
+    expect(turn.understanding).not.toHaveProperty("intent_raw");
+    expect(turn.understanding).not.toHaveProperty("memory_label");
+    expect(turn.understanding).not.toHaveProperty("embedding_label");
     expect(turn.responses).toHaveLength(1);
     expect(turn.trace_id).toBe("in");
   });

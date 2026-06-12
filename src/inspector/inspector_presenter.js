@@ -15,6 +15,7 @@ const CONVERSATION_INTENT_LABELS = {
   daily_note: "Nota del día",
   report_request: "Reporte solicitado",
   inventory: "Inventario",
+  human_help: "Pide ayuda humana",
 };
 
 const CONVERSATION_STATUS = {
@@ -119,8 +120,6 @@ export function message_alignment(direction) {
   return direction === "outbound" ? "message-bubble-outbound" : "message-bubble-inbound";
 }
 
-const MEMORY_LABELS = { stored: "Memoria guardada", failed: "Memoria falló" };
-const EMBEDDING_LABELS = { completed: "Embedding completado", failed: "Embedding falló" };
 const CONFIDENCE_LOW_THRESHOLD = 72;
 
 function action_tone(status) {
@@ -131,9 +130,10 @@ function action_tone(status) {
 }
 
 // A conversation turn (one inbound + its replies, already grouped server-side)
-// → a view-model the timeline can render directly: the user message, what the
-// agent understood (action, intent, confidence, memory, embedding), the agent
-// replies, and an overall status tone. No backend contract changes.
+// → a view-model the timeline can render directly: the user message, the action
+// label(s) the agent fired (the rest of the interpretation — intent + confidence
+// — lives in a click popover), the agent replies, and an overall status tone.
+// No backend contract changes.
 export function present_conversation_turns(turns) {
   return (Array.isArray(turns) ? turns : []).map((turn) => {
     const trace = turn.incoming?.compact_trace_summary ?? null;
@@ -170,14 +170,9 @@ export function present_conversation_turns(turns) {
       ? {
           actions,
           has_action: actions.length > 0,
-          intent_raw: trace?.intent ?? null,
           intent_human: conversation_intent_label(trace?.intent) ?? trace?.intent ?? null,
           confidence_pct,
           confidence_tone: confidence_pct == null ? null : confidence_pct < CONFIDENCE_LOW_THRESHOLD ? "low" : "ok",
-          memory_label: MEMORY_LABELS[trace?.memory_status] ?? null,
-          embedding_label: EMBEDDING_LABELS[trace?.embedding_status] ?? null,
-          has_error: Boolean(trace?.has_error),
-          needs_review: Boolean(trace?.needs_review || trace?.review_status),
         }
       : null;
 
@@ -193,4 +188,45 @@ export function present_conversation_turns(turns) {
       trace_id: turn.incoming ? turn.incoming.message.id : responses.length ? turn.responses[0].message.id : null,
     };
   });
+}
+
+// Conversation-level rollup for the (generic) summary strip + sidebar diagnostics.
+// Derived only from the presented turns — NO domain metrics (sales/cash); those
+// are capability-driven and live in "Estado del día". The view formats dates and
+// shows "No disponible" for nulls.
+export function present_conversation_overview(turns) {
+  const list = Array.isArray(turns) ? turns : [];
+  let last_action = null;
+  let last_intent = null;
+  let last_at = null;
+  let errors_count = 0;
+  let success_count = 0;
+
+  for (const turn of list) {
+    if (turn.status_tone === "error") {
+      errors_count += 1;
+    } else if (turn.understanding?.has_action) {
+      success_count += 1;
+    }
+    if (turn.understanding?.actions?.length) {
+      last_action = turn.understanding.actions[0].label;
+    }
+    if (turn.understanding?.intent_human) {
+      last_intent = turn.understanding.intent_human;
+    }
+    for (const at of [turn.user?.at, ...(turn.responses ?? []).map((reply) => reply.at)]) {
+      if (at && (!last_at || new Date(at).getTime() > new Date(last_at).getTime())) {
+        last_at = at;
+      }
+    }
+  }
+
+  return {
+    turns_count: list.length,
+    success_count,
+    errors_count,
+    last_action,
+    last_intent,
+    last_at,
+  };
 }

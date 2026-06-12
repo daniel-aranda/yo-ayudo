@@ -14,14 +14,13 @@ export async function get_dashboard_home(pool) {
 
   const business_rows = [];
   for (const business of businesses.rows) {
-    const [primary_account, account_count, bot_count] = await Promise.all([
-      get_primary_account_for_business(pool, business.id),
-      pool.query("SELECT count(*)::int AS count FROM accounts WHERE organization_id = $1", [business.id]),
+    // Counts are active-only, matching the business page (which lists active accounts).
+    const [account_count, bot_count] = await Promise.all([
+      pool.query("SELECT count(*)::int AS count FROM accounts WHERE organization_id = $1 AND status = 'active'", [business.id]),
       pool.query("SELECT count(*)::int AS count FROM bots WHERE organization_id = $1 AND status = 'active'", [business.id]),
     ]);
     business_rows.push({
       ...business,
-      primary_account_id: primary_account?.id ?? null,
       account_count: account_count.rows[0]?.count ?? 0,
       bot_count: bot_count.rows[0]?.count ?? 0,
     });
@@ -49,28 +48,47 @@ export async function get_primary_account_for_business(pool, business_id) {
 export async function get_business_dashboard_data(pool, business_id) {
   const business = await pool.query("SELECT * FROM organizations WHERE id = $1", [business_id]);
   const accounts = await pool.query(
-    `
-      SELECT
-        accounts.*,
-        COUNT(DISTINCT bots.id)::int AS bot_count,
-        COUNT(DISTINCT whatsapp_phone_numbers.id)::int AS channel_count,
-        COUNT(DISTINCT conversations.id)::int AS conversation_count,
-        MAX(conversations.last_message_at) AS last_activity
-      FROM accounts
-      LEFT JOIN bots ON bots.account_id = accounts.id AND bots.status = 'active'
-      LEFT JOIN whatsapp_phone_numbers ON whatsapp_phone_numbers.account_id = accounts.id AND whatsapp_phone_numbers.status = 'active'
-      LEFT JOIN conversations ON conversations.bot_id = bots.id
-      WHERE accounts.organization_id = $1
-        AND accounts.status = 'active'
-      GROUP BY accounts.id
-      ORDER BY accounts.name
-    `,
+    "SELECT * FROM accounts WHERE organization_id = $1 AND status = 'active' ORDER BY name",
     [business_id],
   );
 
+  // Per-account counts via grouped queries + JS merge (pg-mem rejects correlated
+  // subqueries and the GROUP-BY-with-table.* form).
+  const [bot_counts, channel_counts, conversation_stats] = await Promise.all([
+    pool.query(
+      "SELECT account_id, count(*)::int AS count FROM bots WHERE organization_id = $1 AND status = 'active' GROUP BY account_id",
+      [business_id],
+    ),
+    pool.query(
+      "SELECT account_id, count(*)::int AS count FROM whatsapp_phone_numbers WHERE organization_id = $1 AND status = 'active' GROUP BY account_id",
+      [business_id],
+    ),
+    pool.query(
+      "SELECT account_id, count(*)::int AS count, max(last_message_at) AS last_activity FROM conversations WHERE organization_id = $1 GROUP BY account_id",
+      [business_id],
+    ),
+  ]);
+
+  const index_by_account = (rows) => {
+    const map = new Map();
+    for (const row of rows) {
+      map.set(row.account_id, row);
+    }
+    return map;
+  };
+  const bots_by_account = index_by_account(bot_counts.rows);
+  const channels_by_account = index_by_account(channel_counts.rows);
+  const conversations_by_account = index_by_account(conversation_stats.rows);
+
   return {
     business: business.rows[0] ?? null,
-    accounts: accounts.rows,
+    accounts: accounts.rows.map((account) => ({
+      ...account,
+      bot_count: bots_by_account.get(account.id)?.count ?? 0,
+      channel_count: channels_by_account.get(account.id)?.count ?? 0,
+      conversation_count: conversations_by_account.get(account.id)?.count ?? 0,
+      last_activity: conversations_by_account.get(account.id)?.last_activity ?? null,
+    })),
   };
 }
 

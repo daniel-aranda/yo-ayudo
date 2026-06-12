@@ -3,7 +3,13 @@ import { config } from "../app/config.js";
 import { upsert_account as upsert_account_record } from "../accounts/account_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { upsert_bot as upsert_bot_record } from "../bots/bot_repository.js";
+import { create_action_audit_log } from "../actions/action_audit_repository.js";
+import { create_agent_run } from "../agents/agent_run_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
+import {
+  assign_bot_to_instagram_account,
+  upsert_instagram_account,
+} from "../channels/instagram/instagram_account_repository.js";
 import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { memory_document_service } from "../memory/memory_document_service.js";
@@ -1366,6 +1372,276 @@ async function seed_operational_demo_day(pool, account_id, organization_id) {
   return business_day_id;
 }
 
+// A demo conversation that showcases multi-execution: some inbound messages fire
+// MORE THAN ONE interaction (the bot's edge). Seeded on a dedicated contact so it
+// never collides with runtime/simulated conversations. Past-dated and idempotent
+// (skipped if it already exists), so re-seeding never duplicates it.
+export async function seed_demo_conversation(pool, { account_id, organization_id, bot_id }) {
+  const contact = (
+    await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
+        VALUES ($1, $2, '5215550000111', 'Tienda Demo', 'encargado', '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()
+        RETURNING id
+      `,
+      [account_id, organization_id],
+    )
+  ).rows[0];
+
+  const existing = await pool.query(
+    "SELECT id FROM conversations WHERE account_id = $1 AND bot_id = $2 AND contact_id = $3 LIMIT 1",
+    [account_id, bot_id, contact.id],
+  );
+  if (existing.rows.length) {
+    return;
+  }
+
+  const base = new Date("2026-06-08T16:00:00.000Z").getTime();
+  const at = (minutes) => new Date(base + minutes * 60000).toISOString();
+
+  const conversation = (
+    await pool.query(
+      `
+        INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at, created_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', $5, $6)
+        RETURNING id
+      `,
+      [account_id, organization_id, bot_id, contact.id, at(31), at(0)],
+    )
+  ).rows[0];
+
+  const turns = [
+    {
+      text: "abrimos con 1800 en caja",
+      intent: "day_start",
+      confidence: 0.93,
+      actions: ["registrar_inicio_dia"],
+      reply: "Inicio del día registrado con $1,800 en caja.",
+    },
+    {
+      text: "ya vendimos 2500 y compré 600 de fruta",
+      intent: "sales_update",
+      confidence: 0.88,
+      actions: ["registrar_venta", "registrar_compra"],
+      reply: "Listo: venta acumulada $2,500 y compra de $600 registradas.",
+    },
+    {
+      text: "cerramos con 7300 de venta y anota que el cliente del crédito pasa mañana",
+      intent: "daily_close",
+      confidence: 0.9,
+      actions: ["registrar_cierre_dia", "registrar_nota_dia"],
+      reply: "Cierre del día registrado ($7,300) y nota guardada.",
+    },
+  ];
+
+  let minute = 5;
+  for (const turn of turns) {
+    const inbound = (
+      await pool.query(
+        `
+          INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, message_type, raw_payload_json, text_body, parsed_intent, confidence, processing_status, created_at)
+          VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', 'text', '{}'::jsonb, $6, $7, $8, 'processed', $9)
+          RETURNING id
+        `,
+        [account_id, organization_id, bot_id, conversation.id, contact.id, turn.text, turn.intent, turn.confidence.toFixed(4), at(minute)],
+      )
+    ).rows[0];
+
+    for (const action_id of turn.actions) {
+      await create_action_audit_log(pool, {
+        organization_id,
+        account_id,
+        bot_id,
+        conversation_id: conversation.id,
+        message_id: inbound.id,
+        action_id,
+        status: "executed",
+        input_json: { source: "seed_demo" },
+        output_json: { ok: true },
+        actor_type: "bot",
+      });
+    }
+
+    await pool.query(
+      `
+        INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, reply_to_message_id, message_type, raw_payload_json, text_body, processing_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, 'text', '{}'::jsonb, $7, 'sent', $8)
+      `,
+      [account_id, organization_id, bot_id, conversation.id, contact.id, inbound.id, turn.reply, at(minute + 1)],
+    );
+    minute += 10;
+  }
+}
+
+// A demo conversation that showcases AGENT ROUTING: each inbound message is
+// routed (via an LLM/strategy router) to a different specialized agent, recorded
+// as an agent_run of run_type 'route'. This is what populates the "Ruteo" tab in
+// the message trace (vs the deterministic bots, which never pick an agent).
+// Dev-only + idempotent, same pattern as seed_demo_conversation.
+export async function seed_routed_demo_conversation(pool, { account_id, organization_id, bot_id }) {
+  const contact = (
+    await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
+        VALUES ($1, $2, '5215550000222', 'Cliente Multi-Agente', 'cliente', '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()
+        RETURNING id
+      `,
+      [account_id, organization_id],
+    )
+  ).rows[0];
+
+  const existing = await pool.query(
+    "SELECT id FROM conversations WHERE account_id = $1 AND bot_id = $2 AND contact_id = $3 LIMIT 1",
+    [account_id, bot_id, contact.id],
+  );
+  if (existing.rows.length) {
+    return;
+  }
+
+  const base = new Date("2026-06-07T17:00:00.000Z").getTime();
+  const at = (minutes) => new Date(base + minutes * 60000).toISOString();
+
+  const conversation = (
+    await pool.query(
+      `
+        INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at, created_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', $5, $6)
+        RETURNING id
+      `,
+      [account_id, organization_id, bot_id, contact.id, at(21), at(0)],
+    )
+  ).rows[0];
+
+  const turns = [
+    {
+      text: "¿cómo vamos de ventas hoy?",
+      intent: "report_request",
+      confidence: 0.9,
+      agent_key: "reports_agent",
+      agent_name: "Agente de reportes",
+      routing_reason: "Pregunta por el estado del día → agente de reportes.",
+      routing_confidence: 0.9,
+      candidates: ["reports_agent", "operations_agent", "unknown_agent"],
+      actions: ["generar_resumen"],
+      reply: "Hoy llevas $7,300 en ventas y $600 en compras. Te dejo el resumen.",
+    },
+    {
+      text: "abrimos con 1800 en caja",
+      intent: "day_start",
+      confidence: 0.95,
+      agent_key: "operations_agent",
+      agent_name: "Agente de operación",
+      routing_reason: "Mensaje operativo de inicio del día → agente de operación.",
+      routing_confidence: 0.96,
+      candidates: ["operations_agent", "reports_agent"],
+      actions: ["registrar_inicio_dia"],
+      reply: "Inicio del día registrado con $1,800 en caja.",
+    },
+    {
+      text: "necesito que me llame una persona, es urgente",
+      intent: "human_help",
+      confidence: 0.88,
+      agent_key: "human_handoff_agent",
+      agent_name: "Agente de derivación a humano",
+      routing_reason: "Solicitud explícita de atención humana → derivación.",
+      routing_confidence: 0.89,
+      candidates: ["human_handoff_agent", "sales_agent"],
+      handoff: true,
+      handoff_reason: "El cliente pidió hablar con una persona (urgente).",
+      actions: ["crear_tarea"],
+      reply: "Claro, te conecto con una persona. Dejé una tarea para que te llamen lo antes posible.",
+    },
+  ];
+
+  let minute = 3;
+  for (const turn of turns) {
+    const inbound = (
+      await pool.query(
+        `
+          INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, message_type, raw_payload_json, text_body, parsed_intent, confidence, processing_status, created_at)
+          VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', 'text', '{}'::jsonb, $6, $7, $8, 'processed', $9)
+          RETURNING id
+        `,
+        [account_id, organization_id, bot_id, conversation.id, contact.id, turn.text, turn.intent, turn.confidence.toFixed(4), at(minute)],
+      )
+    ).rows[0];
+
+    const route_run = await create_agent_run(pool, {
+      account_id,
+      organization_id,
+      bot_id,
+      contact_id: contact.id,
+      conversation_id: conversation.id,
+      message_id: inbound.id,
+      agent_key: turn.agent_key,
+      run_type: "route",
+      status: "executed",
+      input_json: { message: turn.text, parsed_intent: turn.intent },
+      retrieved_context_json: [
+        { source: "business_knowledge", title: "Contexto del negocio" },
+        { source: "conversation_memory", title: "Historial reciente" },
+      ],
+      output_json: { selected_agent: turn.agent_key, confidence: turn.routing_confidence },
+      selected_agent_name: turn.agent_name,
+      routing_reason: turn.routing_reason,
+      routing_confidence: turn.routing_confidence,
+      routing_candidates_json: turn.candidates.map((agent_key) => ({ agent_key })),
+      handoff_recommended: turn.handoff ?? false,
+      handoff_reason: turn.handoff_reason ?? null,
+      completed_at: at(minute),
+    });
+
+    const respond_run = await create_agent_run(pool, {
+      account_id,
+      organization_id,
+      bot_id,
+      contact_id: contact.id,
+      conversation_id: conversation.id,
+      message_id: inbound.id,
+      agent_key: turn.agent_key,
+      run_type: "respond",
+      status: "executed",
+      input_json: { message: turn.text },
+      output_json: { reply: turn.reply },
+      completed_at: at(minute),
+    });
+
+    // create_agent_run defaults created_at to now(); pin it to the demo timeline.
+    await pool.query("UPDATE agent_runs SET created_at = $1 WHERE id = ANY($2::uuid[])", [
+      at(minute),
+      [route_run.id, respond_run.id],
+    ]);
+
+    for (const action_id of turn.actions) {
+      await create_action_audit_log(pool, {
+        organization_id,
+        account_id,
+        bot_id,
+        conversation_id: conversation.id,
+        message_id: inbound.id,
+        action_id,
+        status: "executed",
+        input_json: { source: "seed_routed_demo" },
+        output_json: { ok: true },
+        actor_type: "bot",
+      });
+    }
+
+    await pool.query(
+      `
+        INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, reply_to_message_id, message_type, raw_payload_json, text_body, processing_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, 'text', '{}'::jsonb, $7, 'sent', $8)
+      `,
+      [account_id, organization_id, bot_id, conversation.id, contact.id, inbound.id, turn.reply, at(minute + 1)],
+    );
+    minute += 7;
+  }
+}
+
 export async function seed_development_data(pool) {
   await ensure_seed_schema(pool);
   const solution_template_id = await upsert_solution_template(pool);
@@ -1432,6 +1708,21 @@ export async function seed_development_data(pool) {
     bot_id: yoayudo_commercial_bot_id,
     metadata_json: { source: "seed", purpose: "main_configurable_agent" },
   });
+  // The main agent also operates on Instagram (same parity as WhatsApp).
+  const instagram_account = await upsert_instagram_account(pool, {
+    organization_id,
+    account_id,
+    external_account_id: "demo-yoayudo-instagram-id",
+    username: "yoayudo.ventas",
+    status: "active",
+  });
+  await assign_bot_to_instagram_account(pool, {
+    organization_id,
+    account_id,
+    instagram_account_id: instagram_account.id,
+    bot_id: yoayudo_commercial_bot_id,
+    metadata_json: { source: "seed", purpose: "main_configurable_agent" },
+  });
 
   await upsert_contact(pool, account_id, organization_id);
   await upsert_business_settings(pool, account_id, organization_id);
@@ -1490,7 +1781,19 @@ export async function seed_development_data(pool) {
 if (is_entrypoint(import.meta.url)) {
   const seed_pool = new pg.Pool({ connectionString: config.database_url });
   seed_development_data(seed_pool)
-    .then(async () => {
+    .then(async (result) => {
+      // Demo-only: a multi-execution conversation for the dev app. Kept out of
+      // seed_development_data so the test fixture stays a clean, countable slate.
+      await seed_demo_conversation(seed_pool, {
+        account_id: result.account_id,
+        organization_id: result.organization_id,
+        bot_id: result.yoayudo_commercial_bot_id,
+      });
+      await seed_routed_demo_conversation(seed_pool, {
+        account_id: result.account_id,
+        organization_id: result.organization_id,
+        bot_id: result.yoayudo_commercial_bot_id,
+      });
       await seed_pool.end();
     })
     .catch(async (error) => {

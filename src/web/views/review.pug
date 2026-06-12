@@ -1,9 +1,19 @@
 extends layout
 
 block content
+  - const account_scope = (typeof scoped_account !== "undefined" && scoped_account) ? scoped_account : null;
   section.page-header
-    h1 Review queue
+    if account_scope
+      p.page-eyebrow= `Cuenta · Negocio: ${account_scope.organization_name}`
+      h1= `Review queue · ${account_scope.name}`
+    else
+      h1 Review queue
     p Mensajes con baja confianza o datos incompletos
+
+  if account_scope
+    .scope-banner
+      span Mostrando solo los pendientes de #{account_scope.name}.
+      a(href="/review") Ver todos
 
   if !review_items || review_items.length === 0
     .empty No hay pendientes.
@@ -15,6 +25,9 @@ block content
           p.meta #{item.business_name || "Business sin asignar"} #{item.account_name ? "· " + item.account_name : ""} #{item.bot_name ? "· " + item.bot_name : ""}
           p= item.raw_text
           form(method="post", action=`/review/${item.id}/resolve`)
+            if account_scope
+              input(type="hidden", name="business", value=account_scope.organization_id)
+              input(type="hidden", name="account", value=account_scope.id)
             label(for=`note-${item.id}`) Resolución
             textarea(id=`note-${item.id}`, name="note", rows="3")
             button.button(type="submit") Resolver

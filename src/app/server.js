@@ -14,6 +14,7 @@ import { register_admin_routes } from "../admin/admin_routes.js";
 import { register_review_routes } from "../review/review_routes.js";
 import { register_whatsapp_routes } from "../channels/whatsapp/whatsapp_webhook_routes.js";
 import { json_text, message_alignment } from "../inspector/inspector_presenter.js";
+import { navigation_context } from "./navigation_middleware.js";
 
 export function create_app() {
   const app = express();
@@ -38,21 +39,8 @@ export function create_app() {
   app.use(express.urlencoded({ extended: false }));
   app.use("/public", express.static(path.join(process.cwd(), "src", "web", "public")));
 
-  // Expose the active top-nav section to every view (highlights the current
-  // section in the topbar). Derived from the first path segment.
-  app.use((request, response, next) => {
-    const request_path = request.path || "";
-    response.locals.active_nav = request_path.startsWith("/dashboard")
-      ? "dashboard"
-      : request_path.startsWith("/inspector")
-        ? "inspector"
-        : request_path.startsWith("/review")
-          ? "review"
-          : request_path.startsWith("/admin")
-            ? "admin"
-            : "";
-    next();
-  });
+  // Top-nav state (active section + account scope) for every view.
+  app.use(navigation_context);
 
   router.get("/health", (_request, response) => {
     response.json({ ok: true, service: "yoayudo", environment: config.node_env });

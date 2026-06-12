@@ -3,6 +3,7 @@ import path from "node:path";
 import request from "supertest";
 import { afterEach as after_each, beforeEach as before_each, describe, expect, it } from "vitest";
 import { register_dashboard_routes } from "../../src/dashboard/dashboard_routes.js";
+import { navigation_context } from "../../src/app/navigation_middleware.js";
 import { format_money } from "../../src/shared/money.js";
 import { format_date_es, format_datetime_es } from "../../src/shared/dates.js";
 import { create_test_pool } from "../helpers/test_pool.js";
@@ -18,6 +19,7 @@ function create_dashboard_test_app(pool) {
   app.locals.datetime = format_datetime_es;
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  app.use(navigation_context);
 
   register_dashboard_routes(router, { pool });
   app.use(router);
@@ -92,24 +94,24 @@ describe("Operational dashboard", () => {
     expect(response.text).not.toContain("Standard Time");
   });
 
-  it("routes a business dashboard URL directly to the primary account dashboard", async () => {
+  it("shows the business page with its accounts (no auto-redirect into an account)", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
 
-    await request(app)
-      .get(`/dashboard/business/${organization_id}`)
-      .expect(302)
-      .expect("Location", `/dashboard/business/${organization_id}/accounts/${account_id}`);
+    const response = await request(app).get(`/dashboard/business/${organization_id}`).expect(200);
+
+    expect(response.text).toContain("Cuentas");
+    expect(response.text).toContain(`/dashboard/business/${organization_id}/accounts/${account_id}`);
   });
 
-  it("links businesses directly to account dashboards from the dashboard home", async () => {
-    const { account_id, organization_id } = await account_with_bots(pool);
+  it("links the dashboard home to the business page (explicit Negocio → Cuenta hierarchy)", async () => {
+    const { organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
 
     const response = await request(app).get("/dashboard").expect(200);
 
-    expect(response.text).toContain(`/dashboard/business/${organization_id}/accounts/${account_id}`);
-    expect(response.text).not.toContain(`href="/dashboard/business/${organization_id}"`);
+    // "Abrir" goes to the Negocio page, not straight into a Cuenta.
+    expect(response.text).toContain(`href="/dashboard/business/${organization_id}"`);
   });
 
   it("shows the empty operational state when there is no business day", async () => {
@@ -140,6 +142,36 @@ describe("Operational dashboard", () => {
     // Even with operational data present, no operational bot => no operational dashboard.
     expect(response.text).not.toContain("Dashboard operativo");
     expect(response.text).not.toContain("Ventas del día");
+  });
+
+  it("scopes the top nav to the account when one is in the URL (Inspector/Review carry it; Admin stays global)", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const app = create_dashboard_test_app(pool);
+
+    const response = await request(app)
+      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
+      .expect(200);
+
+    // Pug HTML-escapes `&` to `&amp;` in attributes (browsers decode it back).
+    const qs = `?business=${organization_id}&amp;account=${account_id}`;
+    // Dashboard points back at this account's dashboard; Inspector/Review carry the scope.
+    expect(response.text).toContain(`href="/dashboard/business/${organization_id}/accounts/${account_id}"`);
+    expect(response.text).toContain(`href="/inspector${qs}"`);
+    expect(response.text).toContain(`href="/review${qs}"`);
+    // Admin is intentionally global — never scoped.
+    expect(response.text).toContain('href="/admin/integrations"');
+    expect(response.text).not.toContain(`href="/admin/integrations${qs}"`);
+  });
+
+  it("leaves the top nav unscoped on the global dashboard (no account context)", async () => {
+    const app = create_dashboard_test_app(pool);
+
+    const response = await request(app).get("/dashboard").expect(200);
+
+    // Plain nav targets, no ?business=&account= scope query.
+    expect(response.text).toContain('href="/inspector"');
+    expect(response.text).toContain('href="/review"');
+    expect(response.text).not.toContain("?business=");
   });
 
   it("does not duplicate bots in the account view (one link per active bot)", async () => {

@@ -13,7 +13,7 @@ import {
   update_bot_builder_view,
 } from "./inspector_repository.js";
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
-import { present_conversation_turns } from "./inspector_presenter.js";
+import { present_conversation_overview, present_conversation_turns } from "./inspector_presenter.js";
 import {
   create_knowledge_source,
   get_knowledge_source,
@@ -135,17 +135,19 @@ export function register_inspector_routes(router, dependencies = {}) {
     limits: { fileSize: config.knowledge_upload_max_bytes },
   });
 
-  router.get("/inspector", inspector_auth, async (_request, response, next) => {
+  router.get("/inspector", inspector_auth, async (request, response, next) => {
     try {
-      response.render("inspector/index", await get_inspector_home(route_pool));
+      const account_id = route_value(request.query.account) || null;
+      response.render("inspector/index", await get_inspector_home(route_pool, { account_id }));
     } catch (error) {
       next(error);
     }
   });
 
-  router.get("/inspector/organizations", inspector_auth, async (_request, response, next) => {
+  router.get("/inspector/organizations", inspector_auth, async (request, response, next) => {
     try {
-      response.render("inspector/index", await get_inspector_home(route_pool));
+      const account_id = route_value(request.query.account) || null;
+      response.render("inspector/index", await get_inspector_home(route_pool, { account_id }));
     } catch (error) {
       next(error);
     }
@@ -401,9 +403,11 @@ export function register_inspector_routes(router, dependencies = {}) {
   router.get("/inspector/conversations/:conversation_id", inspector_auth, async (request, response, next) => {
     try {
       const view = await get_conversation_view(route_pool, route_value(request.params.conversation_id));
+      const view_turns = present_conversation_turns(view.turns);
       response.render("inspector/conversation", {
         ...view,
-        view_turns: present_conversation_turns(view.turns),
+        view_turns,
+        overview: present_conversation_overview(view_turns),
       });
     } catch (error) {
       next(error);

@@ -1,9 +1,20 @@
 extends ../layout
 
 block content
+  - const scoped_account = (typeof account !== "undefined" && account) ? account : null;
   section.page-header
-    h1= business ? business.name : "YoAyudo"
-    p Inspector de bots y agentes
+    if scoped_account
+      p.page-eyebrow= `Cuenta · Negocio: ${scoped_account.organization_name}`
+      h1= scoped_account.name
+      p Inspector de bots y agentes de esta cuenta
+    else
+      h1= business ? business.name : "YoAyudo"
+      p Inspector de bots y agentes
+
+  if scoped_account
+    .scope-banner
+      span Mostrando solo los bots de #{scoped_account.name}.
+      a(href="/inspector") Ver todos los bots
 
   section.panel
     h2 Bots / agentes

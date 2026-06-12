@@ -45,6 +45,8 @@ En producto/UI una fila de `organizations` es un "Negocio"; el dashboard lista N
 
 `phone_number_bot_assignments` asigna un bot activo a un numero de WhatsApp. En fase 1 la regla de producto es un bot activo por numero; las asignaciones inactivas conservan historial.
 
+`instagram_accounts` + `instagram_account_bot_assignments` (migracion `0014`) son el espejo exacto de WhatsApp para el canal Instagram: una cuenta IG (`external_account_id` UNIQUE, `username`) por org/account, asignada a un bot activo (`UNIQUE(instagram_account_id, active_key)`). Mismo patron de upsert + assign (`src/channels/instagram/instagram_account_repository.js`).
+
 ### Core Negocio
 
 - `organizations`
@@ -53,6 +55,8 @@ En producto/UI una fila de `organizations` es un "Negocio"; el dashboard lista N
 - `contacts`
 - `whatsapp_phone_numbers`
 - `phone_number_bot_assignments`
+- `instagram_accounts`
+- `instagram_account_bot_assignments`
 
 ### Conversaciones Y Mensajes
 

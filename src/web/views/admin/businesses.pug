@@ -1,0 +1,84 @@
+extends ../layout
+
+block content
+  -
+    const status_pill = (status) =>
+      status === "active" ? "status-executed" : status === "paused" ? "status-pending_provider" : "status-blocked";
+
+  mixin status_actions(action_base, id, status)
+    .entity-actions
+      if status !== "active"
+        form(method="post", action=`${action_base}/${id}/status`)
+          input(type="hidden", name="status", value="active")
+          button.secondary-button(type="submit") Activar
+      if status === "active"
+        form(method="post", action=`${action_base}/${id}/status`)
+          input(type="hidden", name="status", value="paused")
+          button.secondary-button(type="submit") Pausar
+      if status !== "archived"
+        form(method="post", action=`${action_base}/${id}/status`)
+          input(type="hidden", name="status", value="archived")
+          button.secondary-button(type="submit") Archivar
+
+  .admin-subnav
+    a(href="/admin/integrations") Integraciones
+    a(href="/admin/interactions") Interacciones
+    a(href="/admin/bots") Bots
+    a.is-active(href="/admin/businesses") Negocios
+
+  section.page-header
+    h1 Negocios y cuentas
+    p= `${totals.businesses} negocios · ${totals.accounts} cuentas`
+
+  section.panel
+    h2 Crear negocio
+    form.inline-form(method="post", action="/admin/businesses")
+      input(type="text", name="name", placeholder="Nombre del negocio", aria-label="Nombre del negocio", required)
+      button(type="submit") Crear negocio
+
+  if businesses && businesses.length
+    each business in businesses
+      section.panel
+        .entity-head
+          div
+            p.page-eyebrow Negocio
+            h2= business.name
+            p.meta= business.slug
+          .entity-head-aside
+            span(class=`status-pill ${status_pill(business.status)}`)= business.status
+            +status_actions("/admin/businesses", business.id, business.status)
+
+        h3.panel-subhead Cuentas
+        if business.accounts && business.accounts.length
+          .table-wrap
+            table.activity-table
+              thead
+                tr
+                  th Cuenta
+                  th Estado
+                  th Bots
+                  th Canales
+                  th Conversaciones
+                  th Acciones
+              tbody
+                each account in business.accounts
+                  tr
+                    td
+                      strong= account.name
+                      div.meta= account.slug
+                    td
+                      span(class=`status-pill ${status_pill(account.status)}`)= account.status
+                    td= account.bot_count
+                    td= account.channel_count
+                    td= account.conversation_count
+                    td
+                      +status_actions("/admin/accounts", account.id, account.status)
+        else
+          p.meta Sin cuentas todavía.
+
+        form.inline-form(method="post", action="/admin/accounts")
+          input(type="hidden", name="organization_id", value=business.id)
+          input(type="text", name="name", placeholder="Nombre de la cuenta", aria-label="Nombre de la cuenta", required)
+          button(type="submit") Crear cuenta
+  else
+    .empty Sin negocios.

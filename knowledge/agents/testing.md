@@ -3,8 +3,10 @@
 ## Runner
 
 - `npm test` corre Vitest (`vitest run`).
-- Hoy son 24 archivos de test / 96 tests, todos en verde.
+- Hoy son 25 archivos de test / 104 tests, todos en verde.
 - Los archivos viven en `tests/unit/` y `tests/integration/`.
+- `vitest.config.js` fija `testTimeout`/`hookTimeout` en 20s: la suite es DB-backed (pg-mem) y bajo carga paralela un test lento ocasionalmente pasaba el default de 5s (flaky por timeout, no por lógica).
+- `seed_development_data` (lo usa `create_test_pool`) debe ser un **slate limpio y contable**: muchos tests cuentan filas exactas (mensajes, audit logs, conversaciones) tras `simulate`. Data demo de relleno (`seed_demo_conversation` = multi-ejecución; `seed_routed_demo_conversation` = ruteo a agentes) va **solo en el entrypoint dev de `seed.js`**, NO en `seed_development_data`. Si un test la necesita, la invoca explícito.
 
 ## Filosofía
 

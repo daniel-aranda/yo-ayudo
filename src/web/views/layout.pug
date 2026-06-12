@@ -19,13 +19,19 @@ html(lang="es")
     title YoAyudo
     link(rel="stylesheet", href="/public/css/dashboard.css")
   body
-    - const nav_active = typeof active_nav !== "undefined" ? active_nav : "";
+    -
+      const nav_active = typeof active_nav !== "undefined" ? active_nav : "";
+      const nav_ctx = (typeof nav_context !== "undefined" && nav_context) ? nav_context : null;
+      // When an account is in context, Dashboard/Inspector/Review stay scoped to it.
+      // Admin stays global on purpose.
+      const ctx_qs = nav_ctx ? `?business=${nav_ctx.business_id}&account=${nav_ctx.account_id}` : "";
+      const dashboard_href = nav_ctx ? `/dashboard/business/${nav_ctx.business_id}/accounts/${nav_ctx.account_id}` : "/dashboard";
     header.topbar
       a.brand(href="/dashboard") YoAyudo
       nav.nav
-        a(href="/dashboard", class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
-        a(href="/inspector", class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
-        a(href="/review", class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
+        a(href=dashboard_href, class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
+        a(href=`/inspector${ctx_qs}`, class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
+        a(href=`/review${ctx_qs}`, class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
         a(href="/admin/integrations", class=(nav_active === "admin" ? "is-active" : ""), aria-current=(nav_active === "admin" ? "page" : false)) Admin
     main.container
       block content

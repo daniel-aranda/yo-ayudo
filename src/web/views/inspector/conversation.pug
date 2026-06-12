@@ -28,6 +28,22 @@ block content
     .inspector-layout.conversation-view
       section.inspector-main
         if view_turns && view_turns.length
+          //- Franja genérica de conversación: aplica a CUALQUIER bot. Las métricas
+          //- de dominio (venta acumulada, caja, etc.) son capability-driven y viven
+          //- en "Estado del día" (sidebar), no aquí.
+          .conv-summary
+            .conv-summary-item
+              span.conv-summary-key Turnos
+              span.conv-summary-val= overview.turns_count
+            .conv-summary-item
+              span.conv-summary-key Última acción
+              span.conv-summary-val= overview.last_action || "Sin acción"
+            .conv-summary-item
+              span.conv-summary-key Errores
+              span.conv-summary-val(class=(overview.errors_count ? "is-error" : ""))= overview.errors_count
+            .conv-summary-item
+              span.conv-summary-key Última actualización
+              span.conv-summary-val= overview.last_at ? datetime(overview.last_at) : "No disponible"
           .conversation-thread
             each turn in view_turns
               article.turn(class=`turn--${turn.status_tone}`)
@@ -40,27 +56,30 @@ block content
                         span.msg-time= datetime(turn.user.at)
                       p.msg-text= turn.user.text || "(sin texto)"
                   if turn.understanding
-                    .turn-understanding
-                      span.understanding-title Lo que entendió el agente
-                      .understanding-actions
+                    //- Labels de acción derivados del mensaje del usuario (flecha
+                    //- conectora). El detalle (intención + confianza) vive en un
+                    //- popover al hacer click, para no robar atención al mensaje.
+                    .turn-actions
+                      span.turn-actions-arrow(aria-hidden="true")
+                        svg(width="18", height="18", viewBox="0 0 20 20", fill="none", stroke="currentColor", stroke-width="1.6", stroke-linecap="round", stroke-linejoin="round")
+                          path(d="M6 3v6.5a2.5 2.5 0 0 0 2.5 2.5H15")
+                          path(d="M12.5 9.5 15 12l-2.5 2.5")
+                      .turn-actions-list
                         if turn.understanding.has_action
                           each action in turn.understanding.actions
-                            span.action-chip(class=`is-${action.tone}`, title=action.status)= action.label
+                            button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
                         else
-                          span.understanding-none Sin acción ejecutada
-                      .understanding-meta
-                        if turn.understanding.intent_human
-                          span.understanding-fact
-                            span.understanding-fact-label Intención
-                            span.understanding-fact-value= turn.understanding.intent_human
-                        if turn.understanding.intent_raw
-                          code.understanding-code= turn.understanding.intent_raw
-                        if turn.understanding.confidence_pct != null
-                          span.u-confidence(class=`is-${turn.understanding.confidence_tone}`)= `Confianza ${turn.understanding.confidence_pct}%`
-                        if turn.understanding.memory_label
-                          span.understanding-tag= turn.understanding.memory_label
-                        if turn.understanding.embedding_label
-                          span.understanding-tag= turn.understanding.embedding_label
+                          span.turn-action-none Sin acción ejecutada
+                      if turn.understanding.intent_human || turn.understanding.confidence_pct != null
+                        .turn-detail(role="dialog", aria-label="Interpretación del agente", hidden)
+                          if turn.understanding.intent_human
+                            .turn-detail-row
+                              span.turn-detail-key Intención
+                              span.turn-detail-val= turn.understanding.intent_human
+                          if turn.understanding.confidence_pct != null
+                            .turn-detail-row
+                              span.turn-detail-key Confianza
+                              span.turn-detail-val(class=`is-${turn.understanding.confidence_tone}`)= `${turn.understanding.confidence_pct}%`
                   if turn.responses && turn.responses.length
                     each response in turn.responses
                       .turn-msg.turn-msg--agent
@@ -99,27 +118,42 @@ block content
           dl.compact
             div
               dt Bot
-              dd= conversation.bot_name || "sin bot"
+              dd
+                if conversation.bot_id
+                  a.entity-link(href=`/inspector/bots/${conversation.bot_id}`)= conversation.bot_name || "sin bot"
+                else
+                  = conversation.bot_name || "sin bot"
             div
               dt Cuenta
-              dd= conversation.account_name || "-"
+              dd
+                if resolved_org_id && resolved_account_id
+                  a.entity-link(href=dashboard_url)= conversation.account_name || "-"
+                else
+                  = conversation.account_name || "-"
             div
               dt Negocio
-              dd= conversation.organization_name || "-"
+              dd
+                if resolved_org_id
+                  a.entity-link(href=`/dashboard/business/${resolved_org_id}`)= conversation.organization_name || "-"
+                else
+                  = conversation.organization_name || "-"
 
-        if operational_day
+        if overview && overview.turns_count
           section.inspector-panel
-            h2 Estado del día
+            h2 Diagnóstico
             dl.compact
               div
-                dt Venta acumulada
-                dd= money(operational_day.total_sales)
+                dt Turnos
+                dd= overview.turns_count
               div
-                dt Caja inicial
-                dd= money(operational_day.opening_cash)
+                dt Acciones exitosas
+                dd= overview.success_count
               div
-                dt Última actualización
-                dd= datetime(operational_day.updated_at)
+                dt Errores
+                dd(class=(overview.errors_count ? "is-error" : ""))= overview.errors_count
+              div
+                dt Última intención
+                dd= overview.last_intent || "No disponible"
 
         section.inspector-panel
           h2 Acciones rápidas
@@ -144,5 +178,33 @@ block content
             button.classList.remove("is-copied");
           }, 1400);
         }).catch(() => {});
+      });
+
+      function closeDetails(except) {
+        document.querySelectorAll(".turn-detail:not([hidden])").forEach((detail) => {
+          if (detail === except) return;
+          detail.hidden = true;
+          detail.closest(".turn-actions")?.querySelectorAll(".turn-action-chip[aria-expanded='true']")
+            .forEach((chip) => chip.setAttribute("aria-expanded", "false"));
+        });
+      }
+
+      document.addEventListener("click", (event) => {
+        const chip = event.target.closest(".turn-action-chip");
+        if (!chip) {
+          closeDetails(null);
+          return;
+        }
+        const detail = chip.closest(".turn-actions")?.querySelector(".turn-detail");
+        if (!detail) return;
+        const willOpen = detail.hidden;
+        closeDetails(willOpen ? detail : null);
+        detail.hidden = !willOpen;
+        chip.closest(".turn-actions").querySelectorAll(".turn-action-chip")
+          .forEach((sibling) => sibling.setAttribute("aria-expanded", String(willOpen)));
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeDetails(null);
       });
     })();

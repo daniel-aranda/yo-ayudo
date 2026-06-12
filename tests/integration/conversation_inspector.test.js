@@ -8,8 +8,9 @@ import { create_simulated_whatsapp_payload } from "../../src/channels/whatsapp/w
 import { resolve_whatsapp_identity_by_phone_number_id } from "../../src/channels/whatsapp/whatsapp_identity_resolver.js";
 import { handle_whatsapp_webhook_payload } from "../../src/engine/message_processor.js";
 import { register_inspector_routes } from "../../src/inspector/inspector_routes.js";
-import { json_text, message_alignment } from "../../src/inspector/inspector_presenter.js";
+import { json_text, message_alignment, present_conversation_turns } from "../../src/inspector/inspector_presenter.js";
 import { compact_trace_summary } from "../../src/inspector/inspector_presenter.js";
+import { seed_demo_conversation, seed_routed_demo_conversation } from "../../src/db/seed.js";
 import { build_message_trace } from "../../src/inspector/trace_builder.js";
 import { get_conversation_view } from "../../src/inspector/inspector_repository.js";
 import { local_memory_store } from "../../src/memory/local_memory_store.js";
@@ -294,8 +295,12 @@ describe("Conversation Inspector", () => {
     await request(app)
       .get(`/inspector/conversations/${ids.rows[0].conversation_id}`)
       .expect(200)
-      .expect(/purchase/)
-      .expect(/Lo que entendió el agente/);
+      // Minimal view: the action label chip + the intent in the click popover.
+      .expect(/turn-action-chip/)
+      .expect(/Intención/)
+      // Phase 2: top summary strip + sidebar diagnostics.
+      .expect(/conv-summary/)
+      .expect(/Diagnóstico/);
     await request(app)
       .get(`/inspector/messages/${ids.rows[0].message_id}`)
       .expect(200)
@@ -304,6 +309,95 @@ describe("Conversation Inspector", () => {
       // The deterministic bot still routes: the routing tab explains the
       // intent→interaction decision instead of showing an empty state.
       .expect(/Ruteo determinístico por intención/);
+  });
+
+  it("scopes the inspector home to a single account when ?account= is present", async () => {
+    await simulate(pool, client, "hola");
+    const account = (
+      await pool.query(`
+        SELECT accounts.id, accounts.name, organizations.name AS organization_name
+        FROM accounts
+        JOIN organizations ON organizations.id = accounts.organization_id
+        JOIN bots ON bots.account_id = accounts.id
+        LIMIT 1
+      `)
+    ).rows[0];
+    const app = create_inspector_test_app(pool);
+
+    // Scoped: shows the account header + a way back to the unscoped list.
+    const scoped = await request(app).get(`/inspector?account=${account.id}`).expect(200);
+    expect(scoped.text).toContain(account.name);
+    expect(scoped.text).toContain("Ver todos los bots");
+    expect(scoped.text).toContain("scope-banner");
+
+    // Unscoped: no scope banner.
+    const unscoped = await request(app).get("/inspector").expect(200);
+    expect(unscoped.text).not.toContain("scope-banner");
+  });
+
+  it("seeds a multi-execution demo conversation (a single turn fires more than one interaction)", async () => {
+    const bot = (
+      await pool.query("SELECT id, account_id, organization_id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
+    ).rows[0];
+    await seed_demo_conversation(pool, {
+      account_id: bot.account_id,
+      organization_id: bot.organization_id,
+      bot_id: bot.id,
+    });
+    const conversation = (
+      await pool.query(
+        `SELECT c.id FROM conversations c
+         JOIN contacts ct ON ct.id = c.contact_id
+         WHERE ct.whatsapp_phone = '5215550000111' AND c.bot_id = $1 LIMIT 1`,
+        [bot.id],
+      )
+    ).rows[0];
+
+    const view = await get_conversation_view(pool, conversation.id);
+    const turns = present_conversation_turns(view.turns);
+    const multi = turns.filter((turn) => turn.understanding && turn.understanding.actions.length > 1);
+
+    expect(multi.length).toBeGreaterThanOrEqual(1);
+    expect(multi[0].understanding.actions.map((action) => action.label)).toEqual(
+      expect.arrayContaining(["Registrar venta", "Registrar compra"]),
+    );
+  });
+
+  it("seeds an agent-routed demo conversation (router picks a specialized agent per message)", async () => {
+    const bot = (
+      await pool.query("SELECT id, account_id, organization_id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
+    ).rows[0];
+    await seed_routed_demo_conversation(pool, {
+      account_id: bot.account_id,
+      organization_id: bot.organization_id,
+      bot_id: bot.id,
+    });
+    const message = (
+      await pool.query(
+        `SELECT m.id FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         JOIN contacts ct ON ct.id = c.contact_id
+         WHERE ct.whatsapp_phone = '5215550000222' AND m.direction = 'inbound' AND m.parsed_intent = 'report_request'
+         LIMIT 1`,
+      )
+    ).rows[0];
+
+    const trace = await build_message_trace(pool, { message_id: message.id });
+    // The "Ruteo" tab reads router_runs (agent_runs run_type='route') + agent_runs.
+    expect(trace.router_runs.length).toBeGreaterThanOrEqual(1);
+    expect(trace.router_runs[0].agent_key).toBe("reports_agent");
+    expect(Number(trace.router_runs[0].routing_confidence)).toBeGreaterThan(0.8);
+    expect(trace.agent_runs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows Instagram as a connected channel (parity with WhatsApp) for the seeded agent", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot = (await pool.query("SELECT id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")).rows[0];
+    const page = await request(app).get(`/inspector/bots/${bot.id}`).expect(200);
+    expect(page.text).toContain("Instagram");
+    expect(page.text).toContain("yoayudo.ventas");
+    // Both channels are seeded for this agent, so the Canales tab shows them connected.
+    expect(page.text).toContain('name="instagram_username"');
   });
 
   it("saves structured bot builder fields without editing raw JSON", async () => {

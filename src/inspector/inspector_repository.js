@@ -3,6 +3,10 @@ import { get_action } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, get_bot_with_definition, update_bot_configuration } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
+import {
+  assign_bot_to_instagram_account,
+  upsert_instagram_account,
+} from "../channels/instagram/instagram_account_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
 import { present_conversation_summary } from "./inspector_presenter.js";
 
@@ -193,6 +197,11 @@ export const supported_bot_channels = [
   {
     channel: "whatsapp",
     label: "WhatsApp",
+    status: "supported",
+  },
+  {
+    channel: "instagram",
+    label: "Instagram",
     status: "supported",
   },
 ];
@@ -441,6 +450,29 @@ async function get_bot_whatsapp_channels(pool, bot_id) {
   return result.rows;
 }
 
+async function get_bot_instagram_channels(pool, bot_id) {
+  const result = await pool.query(
+    `
+      SELECT
+        instagram_accounts.*,
+        instagram_account_bot_assignments.id AS assignment_id,
+        instagram_account_bot_assignments.assignment_type,
+        instagram_account_bot_assignments.assigned_at
+      FROM instagram_account_bot_assignments
+      JOIN instagram_accounts
+        ON instagram_accounts.id = instagram_account_bot_assignments.instagram_account_id
+      WHERE instagram_account_bot_assignments.bot_id = $1
+        AND instagram_account_bot_assignments.status = 'active'
+        AND instagram_account_bot_assignments.active_key = 'active'
+        AND instagram_accounts.status = 'active'
+      ORDER BY instagram_account_bot_assignments.assigned_at DESC
+    `,
+    [bot_id],
+  );
+
+  return result.rows;
+}
+
 async function sync_whatsapp_channel_from_body(pool, bot, body) {
   const display_phone_number = normalize_whatsapp_number(body.whatsapp_display_phone_number);
   const phone_number_id = normalize_whatsapp_phone_number_id(body.whatsapp_phone_number_id, display_phone_number);
@@ -471,7 +503,72 @@ async function sync_whatsapp_channel_from_body(pool, bot, body) {
   return whatsapp_phone_number;
 }
 
-export async function get_inspector_home(pool) {
+async function sync_instagram_channel_from_body(pool, bot, body) {
+  const username = String(body.instagram_username ?? "").trim().replace(/^@/, "");
+  const external_account_id = String(body.instagram_account_id ?? "").trim() || username;
+
+  if (!username && !external_account_id) {
+    return null;
+  }
+
+  const instagram_account = await upsert_instagram_account(pool, {
+    organization_id: bot.organization_id,
+    account_id: bot.account_id,
+    external_account_id,
+    username: username || null,
+    status: "active",
+  });
+
+  await assign_bot_to_instagram_account(pool, {
+    organization_id: bot.organization_id,
+    account_id: bot.account_id,
+    instagram_account_id: instagram_account.id,
+    bot_id: bot.id,
+    assignment_type: "primary",
+    metadata_json: {
+      configured_from: "inspector_bot_builder",
+    },
+  });
+
+  return instagram_account;
+}
+
+export async function get_inspector_home(pool, options = {}) {
+  const account_id = options.account_id ?? null;
+
+  // Account-scoped: only that account's bots, plus the account/business for the header.
+  if (account_id) {
+    const [account_row, bots] = await Promise.all([
+      pool.query(
+        `
+          SELECT accounts.id, accounts.name, accounts.organization_id, organizations.name AS organization_name
+          FROM accounts
+          JOIN organizations ON organizations.id = accounts.organization_id
+          WHERE accounts.id = $1
+          LIMIT 1
+        `,
+        [account_id],
+      ),
+      pool.query(
+        `
+          SELECT bots.*, accounts.name AS account_name, organizations.name AS organization_name
+          FROM bots
+          JOIN accounts ON accounts.id = bots.account_id
+          JOIN organizations ON organizations.id = accounts.organization_id
+          WHERE bots.account_id = $1 AND bots.status = 'active'
+          ORDER BY bots.updated_at DESC
+        `,
+        [account_id],
+      ),
+    ]);
+    const account = account_row.rows[0] ?? null;
+    return {
+      business: account ? { id: account.organization_id, name: account.organization_name } : null,
+      account,
+      bots: bots.rows,
+    };
+  }
+
   const [business, bots] = await Promise.all([
     pool.query("SELECT * FROM organizations WHERE status = 'active' ORDER BY created_at DESC LIMIT 1"),
     pool.query(`
@@ -491,6 +588,7 @@ export async function get_inspector_home(pool) {
 
   return {
     business: business.rows[0] ?? null,
+    account: null,
     bots: bots.rows,
   };
 }
@@ -607,6 +705,7 @@ export async function get_bot_view(pool, bot_id) {
     available_knowledge_sources,
     supported_channels: supported_bot_channels,
     whatsapp_channels: bot_row ? await get_bot_whatsapp_channels(pool, bot_id) : [],
+    instagram_channels: bot_row ? await get_bot_instagram_channels(pool, bot_id) : [],
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,
@@ -679,6 +778,7 @@ export async function update_bot_builder_view(pool, bot_id, body) {
 
   const definition_json = builder_definition_from_body(bot.definition_json ?? {}, body);
   await sync_whatsapp_channel_from_body(pool, bot, body);
+  await sync_instagram_channel_from_body(pool, bot, body);
 
   return update_bot_configuration(pool, bot_id, {
     name: definition_json.identity?.name || bot.name,

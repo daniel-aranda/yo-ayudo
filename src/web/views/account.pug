@@ -16,9 +16,10 @@ block content
   if !account
     .empty Cuenta no encontrada.
   else
-    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.name || account.business_name }])
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.business_name, href: `/dashboard/business/${account.organization_id}` }, { label: account.name }])
     section.page-header
-      h1 #{account.business_name} / #{account.name}
+      p.page-eyebrow= `Cuenta · Negocio: ${account.business_name}`
+      h1= account.name
       if capabilities && capabilities.operational
         p Operación del negocio registrada por WhatsApp
       else

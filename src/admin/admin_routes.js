@@ -3,8 +3,17 @@ import { pool } from "../db/client.js";
 import { get_integrations_admin_view } from "./admin_integrations_service.js";
 import { get_interactions_admin_view } from "./admin_interactions_service.js";
 import { get_bots_admin_view } from "./admin_bots_service.js";
+import { get_businesses_admin_view } from "./admin_businesses_service.js";
 import { available_agent_interactions } from "../inspector/inspector_repository.js";
 import { upsert_interaction_setting } from "../interactions/interaction_settings_repository.js";
+import {
+  create_organization,
+  is_valid_entity_status,
+  set_account_status,
+  set_organization_status,
+  slugify,
+} from "../organizations/organization_repository.js";
+import { upsert_account } from "../accounts/account_repository.js";
 
 // Same internal gating as the inspector: 404 when disabled, token-protected in
 // production. Open in local development.
@@ -65,6 +74,71 @@ export function register_admin_routes(router, dependencies = {}) {
         since_hours: Number.isFinite(since_hours) && since_hours > 0 ? since_hours : undefined,
       });
       response.render("admin/bots", view);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/businesses", admin_auth, async (_request, response, next) => {
+    try {
+      response.render("admin/businesses", await get_businesses_admin_view(route_pool));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/businesses", admin_auth, async (request, response, next) => {
+    try {
+      const name = String(request.body?.name ?? "").trim();
+      if (!name) {
+        response.status(400).send("Falta el nombre del negocio");
+        return;
+      }
+      await create_organization(route_pool, { name });
+      response.redirect("/admin/businesses");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/businesses/:organization_id/status", admin_auth, async (request, response, next) => {
+    try {
+      const status = String(request.body?.status ?? "");
+      if (!is_valid_entity_status(status)) {
+        response.status(400).send("Estado inválido");
+        return;
+      }
+      await set_organization_status(route_pool, request.params.organization_id, status);
+      response.redirect("/admin/businesses");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/accounts", admin_auth, async (request, response, next) => {
+    try {
+      const organization_id = String(request.body?.organization_id ?? "").trim();
+      const name = String(request.body?.name ?? "").trim();
+      if (!organization_id || !name) {
+        response.status(400).send("Falta el negocio o el nombre de la cuenta");
+        return;
+      }
+      await upsert_account(route_pool, { organization_id, name, slug: slugify(name) });
+      response.redirect("/admin/businesses");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/accounts/:account_id/status", admin_auth, async (request, response, next) => {
+    try {
+      const status = String(request.body?.status ?? "");
+      if (!is_valid_entity_status(status)) {
+        response.status(400).send("Estado inválido");
+        return;
+      }
+      await set_account_status(route_pool, request.params.account_id, status);
+      response.redirect("/admin/businesses");
     } catch (error) {
       next(error);
     }

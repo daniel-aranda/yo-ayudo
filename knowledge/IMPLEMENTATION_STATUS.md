@@ -74,11 +74,14 @@ La direccion actual es Bot Engine configurable:
 - Processing events.
 - Observabilidad de APIs externas: toda llamada a AI (`ai_calls`, con latencia) y a proveedores (`integration_events`, ahora con latencia en google_places/elevenlabs/whatsapp) se registra y se mide; cada ejecucion de accion queda en `action_audit_logs`.
 - Admin de interacciones (`/admin/interactions`, `admin_interactions_service.js`): catalogo + uso real (usos/OK/error/ultimo desde `action_audit_logs`), APIs externas (AI + proveedores, OK/error/latencia), logs recientes unificados, **filtro de periodo** (24h/7d/30d) y tab **Configuración**.
-- Admin de bots global (`/admin/bots`, `admin_bots_service.js`): todos los bots de la plataforma (JOIN a accounts/organizations) con conteos operativos por bot —mensajes, conversaciones, errores (`action_audit_logs` failed/blocked/... + `bot_guardrail_events`) y ultima actividad— y totales arriba; filtro de periodo (24h/7d/30d). El nombre enlaza a `/inspector/bots/:id`. Sub-nav comun entre `/admin/integrations`, `/admin/interactions` y `/admin/bots`.
+- Admin de bots global (`/admin/bots`, `admin_bots_service.js`): todos los bots de la plataforma (JOIN a accounts/organizations) con conteos operativos por bot —mensajes, conversaciones, errores (`action_audit_logs` failed/blocked/... + `bot_guardrail_events`) y ultima actividad— y totales arriba; filtro de periodo (24h/7d/30d). El nombre enlaza a `/inspector/bots/:id`. Sub-nav comun entre `/admin/integrations`, `/admin/interactions`, `/admin/bots` y `/admin/businesses`.
+- Admin de Negocios/Cuentas (`/admin/businesses`, `admin_businesses_service.js`): lista todos los negocios (organizations) y sus cuentas (accounts) en cualquier estado, con conteos por cuenta (bots/canales/conversaciones). Permite **crear negocio**, **crear cuenta**, y **pausar/archivar/activar** ambos (status `active`/`paused`/`archived`). Repo `src/organizations/organization_repository.js` (`create_organization`, `set_organization_status`, `set_account_status`, `slugify`) + `upsert_account`.
+- Navegacion dashboard explicita Negocio → Cuenta: `/dashboard/business/:id` YA NO redirige a la cuenta primaria; muestra la pagina del negocio con sus cuentas. El home y el visor de conversacion enlazan al negocio; la pagina de cuenta lleva breadcrumb `Dashboard › Negocio › Cuenta` y eyebrow "Cuenta · Negocio: X". Ver `architecture/frontend.md`.
+- Navegacion scopeada por cuenta: cuando hay una cuenta en contexto (ruta del dashboard de cuenta o `?business=&account=`), el top nav se queda en esa cuenta — Dashboard → su dashboard, Inspector/Review → filtrados a la cuenta (`?account=`), Admin siempre global. Lo expone el middleware `navigation_context` (`src/app/navigation_middleware.js`); las vistas scopeadas muestran `.scope-banner` con link de escape. Ver `architecture/frontend.md`.
 - Interaction settings (capa system-level, migracion `0013`, tabla `interaction_settings`, `src/interactions/interaction_settings_repository.js`): habilitar/deshabilitar una interaccion a nivel plataforma y configurar su proveedor (ej. `responder_voz` -> modelo/voz de ElevenLabs). El `action_execution_service` **bloquea** (con guardrail `interaccion_deshabilitada`) cualquier accion cuya interaccion este deshabilitada, sin importar la config por bot; la config fluye al handler (`context.interaction_config`). Es la tercera capa: catalogo estatico (codigo) -> settings system-level -> config por bot (`definition_json.interactions`).
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
-- Tests unitarios e integracion del pipeline, router, memory, inspector y Bot Engine comercial.
+- Tests unitarios e integracion del pipeline, router, memory, inspector y Bot Engine comercial. **104 tests / 25 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope por cuenta de la review queue) y el scope del top nav en `operational_dashboard.test.js`.
 
 ## Migraciones
 
@@ -90,6 +93,8 @@ Migraciones SQL explicitas aplicadas en orden por `npm run db:migrate` (registra
 - `0005`–`0011`: patron expand-migrate-contract para retirar `tenant`/`branch` y unificar en organization/account (`0005_unify_operational_account`, `0006_account_prep`, `0007_account_lookup_tables`, `0008_loosen_remaining_tenant`, `0009_account_remaining_tables`, `0010_drop_tenant_branch` borra fisicamente tenant/branch, `0011_sync_bot_organization` alinea `bots.organization_id` con su account).
 - `0012_integration_events.sql`: eventos de integraciones (llamadas a proveedores externos) con status y latencia.
 - `0013_interaction_settings.sql`: settings system-level por interaccion (`enabled` + `config_json`, con `action_id` denormalizado).
+- `0014_instagram_channels.sql`: Instagram como canal de primera clase, espejo de WhatsApp — `instagram_accounts` (org/account, `external_account_id` UNIQUE, `username`) + `instagram_account_bot_assignments` (bot↔cuenta, `UNIQUE(instagram_account_id, active_key)`). Repo `src/channels/instagram/instagram_account_repository.js` (`upsert_instagram_account`, `assign_bot_to_instagram_account`). El bot semilla principal queda asignado a una cuenta IG (`@yoayudo.ventas`); la pestaña Canales lo edita/guarda igual que WhatsApp (`sync_instagram_channel_from_body`).
+- `0015_agent_runs_routing_columns.sql`: re-aplica idempotente (`ADD COLUMN IF NOT EXISTS`) las columnas de decisión de ruteo en `agent_runs` (`selected_agent_*`, `routing_reason`, `routing_confidence`, `routing_candidates_json`, `used_context_summary_json`, `handoff_*`). Están en `0001` vía ALTER, pero DBs que aplicaron un `0001` viejo (antes de esas columnas) nunca las recibieron y no re-corren `0001`; sin ellas `create_agent_run` falla. Brinca DBs frescas/pg-mem (ya las tienen).
 
 El modelo de datos ya no tiene `tenant` ni `branch`: organization (negocio) -> account (cuenta) -> bot.
 
@@ -108,9 +113,9 @@ Dashboard/review/inspector:
 - `GET /dashboard`
 - `GET /dashboard/business/:business_id`
 - `GET /dashboard/business/:business_id/accounts/:account_id`
-- `GET /review`
-- `POST /review/:review_item_id/resolve`
-- `GET /inspector`
+- `GET /review` (`?account=` filtra los pendientes a una cuenta; muestra `.scope-banner` + link de escape)
+- `POST /review/:review_item_id/resolve` (reenvía `business`/`account` para preservar el scope en el redirect)
+- `GET /inspector` (`?account=` filtra los bots a una cuenta)
 - `GET /inspector/organizations`
 - `GET /inspector/organizations/:organization_id`
 - `GET /inspector/accounts/:account_id`
@@ -131,6 +136,9 @@ Admin:
 - `GET /admin/integrations` (salud + eventos por integracion)
 - `GET /admin/interactions` (catalogo de interacciones + uso + APIs externas + logs; `?since_hours=` y `?tab=config`)
 - `GET /admin/bots` (bots globales con conteos de mensajes/conversaciones/errores y ultima actividad; `?since_hours=`)
+- `GET /admin/businesses` (negocios + cuentas con conteos y estado)
+- `POST /admin/businesses` (crear negocio) · `POST /admin/businesses/:id/status` (pausar/archivar/activar)
+- `POST /admin/accounts` (crear cuenta) · `POST /admin/accounts/:id/status` (pausar/archivar/activar)
 - `POST /admin/interactions/settings` (enable/disable + config por interaccion)
 
 Internas Bot Engine/comercial:
@@ -205,7 +213,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 24 archivos, 96 tests (Vitest).
+- `npm test`: OK, 24 archivos, 100 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0011` en orden.
 
 Comandos locales disponibles:

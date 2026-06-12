@@ -30,8 +30,8 @@ src/dashboard
 - `GET /dashboard`
 - `GET /dashboard/business/:business_id`
 - `GET /dashboard/business/:business_id/accounts/:account_id`
-- `GET /inspector`
-- `GET /review`
+- `GET /inspector` (acepta `?account=` para filtrar a una cuenta)
+- `GET /review` (acepta `?account=` para filtrar a una cuenta)
 
 ## Principios UI
 
@@ -41,6 +41,14 @@ src/dashboard
 - Evitar cards dentro de cards.
 - No mostrar raw payloads ni eventos técnicos del pipeline en el dashboard: es la vista del dueño, no del desarrollador (eso vive en el inspector).
 - El texto debe caber en mobile y desktop.
+
+## Jerarquía Negocio → Cuenta
+
+Modelo: **Negocio** = `organizations`, **Cuenta** = `accounts` (ambos con `status` active/paused/archived). La navegación es explícita y NO salta niveles:
+- `/dashboard` (`dashboard.pug`): lista Negocios; "Abrir" → la página del Negocio (no a una cuenta).
+- `/dashboard/business/:id` (`business.pug`): página del Negocio con sus Cuentas (ya **no** redirige a la cuenta primaria). Eyebrow "Negocio" + lista de cuentas (solo `active`) con "Abrir cuenta".
+- `/dashboard/business/:id/accounts/:id` (`account.pug`): la Cuenta. Breadcrumb `Dashboard › {Negocio} › {Cuenta}`, eyebrow "Cuenta · Negocio: X", h1 = nombre de la cuenta. Métricas de dominio (venta/caja) viven aquí (capability-driven), nunca en vistas genéricas.
+- Admin CRUD en `/admin/businesses` (`admin/businesses.pug`): crear Negocio/Cuenta y pausar/archivar/activar ambos. Muestra TODOS los estados (la vista de dashboard solo `active`). `.page-eyebrow` etiqueta el tipo de entidad; `.inline-form`/`.entity-actions` para crear y cambiar estado.
 
 ## Dashboard Operativo De Cuenta
 
@@ -78,7 +86,18 @@ Viven en `src/web/public/js/core/` y se incluyen via `script` + `include` de Pug
 
 Mixin Pug compartido: `+breadcrumb(items)` en `layout.pug` (disponible en toda vista que haga `extends`). `items` = `[{ label, href? }]`; sin `href` = página actual. Úsalo en cualquier página nueva del inspector/dashboard para mantener la navegación consistente (CSS `.breadcrumb` en `dashboard.css`).
 
-Topbar: el link de la sección actual se resalta solo (`.nav a.is-active`, pill `accent-soft`). Un middleware en `server.js` deriva `response.locals.active_nav` del primer segmento del path (`dashboard`/`inspector`/`review`/`admin`) y `layout.pug` lo compara; funciona en toda página sin tocar cada ruta. El layout usa `typeof active_nav !== "undefined"` para no romper apps de test que renderizan sin el middleware.
+Topbar: el link de la sección actual se resalta solo (`.nav a.is-active`, pill `accent-soft`). El middleware `navigation_context` (`src/app/navigation_middleware.js`, montado en `server.js`) expone dos locals en cada request: `active_nav` (sección actual, del primer segmento del path) y `nav_context` (scope de cuenta, ver abajo). Funciona en toda página sin tocar cada ruta. El layout usa `typeof active_nav !== "undefined"` y `typeof nav_context !== "undefined"` para no romper apps de test que renderizan sin el middleware (las apps de test que sí lo quieren lo importan, p. ej. `operational_dashboard.test.js`).
+
+### Navegación scopeada por cuenta
+
+Cuando hay una cuenta en contexto, el menú de arriba **se queda en esa cuenta**; Admin es global a propósito ("otro animal"). `navigation_context` deriva `nav_context = { business_id, account_id }` de la ruta del dashboard de cuenta (`/dashboard/business/:b/accounts/:a`) o de `?business=&account=` en las secciones scopeables. `layout.pug` lo usa para los hrefs del nav:
+
+- **Dashboard** → el dashboard de esa cuenta (`/dashboard/business/:b/accounts/:a`) si hay scope; si no, `/dashboard`.
+- **Inspector** → `/inspector?business=&account=` (filtra los bots a esa cuenta).
+- **Review** → `/review?business=&account=` (filtra los pendientes a esa cuenta).
+- **Admin** → siempre `/admin/integrations`, sin scope.
+
+Las vistas scopeadas (`inspector/index.pug`, `review.pug`) muestran un `.scope-banner` (CSS en `dashboard.css`: fill `accent-soft`, borde `accent-ring`) con el nombre de la cuenta y un link de escape ("Ver todos") a la versión sin scope, más un `.page-eyebrow` "Cuenta · Negocio: X". El POST de resolver review reenvía `business`/`account` (hidden inputs) para preservar el scope en el redirect.
 
 ## Seguridad De Vistas
 

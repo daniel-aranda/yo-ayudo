@@ -4,29 +4,35 @@ block content
   if !business
     .empty Negocio no encontrado.
   else
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: business.name }])
     section.page-header
+      p.page-eyebrow Negocio
       h1= business.name
-      p= business.slug
+      p= `${accounts ? accounts.length : 0} ${accounts && accounts.length === 1 ? "cuenta" : "cuentas"} · ${business.status}`
 
-    if !accounts || accounts.length === 0
-      .empty Este negocio aún no tiene cuentas. Crea una cuenta para conectar canales de WhatsApp y asignar bots.
-    else
-      .grid
-        each account in accounts
-          article.card
-            h2= account.name
-            p.meta= account.status
-            dl.compact
-              div
-                dt Bots
-                dd= account.bot_count
-              div
-                dt Canales
-                dd= account.channel_count
-              div
-                dt Conversaciones
-                dd= account.conversation_count
-              div
-                dt Última actividad
-                dd= account.last_activity || "sin actividad"
-            a.button(href=`/dashboard/business/${business.id}/accounts/${account.id}`) Abrir cuenta
+    section.panel
+      h2 Cuentas
+      p.meta Cada cuenta agrupa sus canales de WhatsApp, bots y conversaciones.
+      if !accounts || accounts.length === 0
+        .empty Este negocio aún no tiene cuentas. Crea una cuenta para conectar canales de WhatsApp y asignar bots.
+      else
+        .grid
+          each account in accounts
+            article.card
+              p.page-eyebrow Cuenta
+              h3= account.name
+              p.meta= account.status
+              dl.compact
+                div
+                  dt Bots
+                  dd= account.bot_count
+                div
+                  dt Canales
+                  dd= account.channel_count
+                div
+                  dt Conversaciones
+                  dd= account.conversation_count
+                div
+                  dt Última actividad
+                  dd= account.last_activity ? datetime(account.last_activity) : "sin actividad"
+              a.button(href=`/dashboard/business/${business.id}/accounts/${account.id}`) Abrir cuenta

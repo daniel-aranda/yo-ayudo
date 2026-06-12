@@ -136,4 +136,41 @@ describe("admin integrations dashboard", () => {
     // Subnav cross-links to the bots admin.
     expect(response.text).toContain('href="/inspector/bots/');
   });
+
+  it("admin can create, list, pause and archive businesses and accounts", async () => {
+    const app = create_admin_test_app(pool);
+
+    await request(app)
+      .post("/admin/businesses")
+      .type("form")
+      .send({ name: "Negocio Admin Test" })
+      .expect(302)
+      .expect("Location", "/admin/businesses");
+    const org = (await pool.query("SELECT id, status FROM organizations WHERE slug = 'negocio-admin-test' LIMIT 1")).rows[0];
+    expect(org).toBeTruthy();
+    expect(org.status).toBe("active");
+
+    await request(app)
+      .post("/admin/accounts")
+      .type("form")
+      .send({ organization_id: org.id, name: "Cuenta Admin Test" })
+      .expect(302);
+    const account = (
+      await pool.query("SELECT id FROM accounts WHERE organization_id = $1 AND slug = 'cuenta-admin-test' LIMIT 1", [org.id])
+    ).rows[0];
+    expect(account).toBeTruthy();
+
+    await request(app).post(`/admin/accounts/${account.id}/status`).type("form").send({ status: "paused" }).expect(302);
+    await request(app).post(`/admin/businesses/${org.id}/status`).type("form").send({ status: "archived" }).expect(302);
+    expect((await pool.query("SELECT status FROM accounts WHERE id = $1", [account.id])).rows[0].status).toBe("paused");
+    expect((await pool.query("SELECT status FROM organizations WHERE id = $1", [org.id])).rows[0].status).toBe("archived");
+
+    // Invalid status is rejected.
+    await request(app).post(`/admin/businesses/${org.id}/status`).type("form").send({ status: "bogus" }).expect(400);
+
+    const page = await request(app).get("/admin/businesses").expect(200);
+    expect(page.text).toContain("Negocio Admin Test");
+    expect(page.text).toContain("Cuenta Admin Test");
+    expect(page.text).toContain("Crear negocio");
+  });
 });

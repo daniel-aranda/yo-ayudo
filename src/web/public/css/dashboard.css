@@ -94,6 +94,38 @@ a {
   margin-bottom: 22px;
 }
 
+/* Small uppercase label above a title that names what kind of entity it is
+   (Negocio / Cuenta), so the hierarchy is unambiguous. */
+.page-eyebrow {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.25rem;
+  text-transform: uppercase;
+}
+
+/* Banner shown when a section is filtered to a single account; offers a way out. */
+.scope-banner {
+  align-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: 10px;
+  color: var(--accent-dark);
+  display: flex;
+  font-size: 0.875rem;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+}
+
+.scope-banner a {
+  color: var(--accent-dark);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .page-header h1 {
   font-size: 28px;
   line-height: 1.15;
@@ -364,6 +396,17 @@ button:active {
   min-width: 0;
   overflow-wrap: anywhere;
   text-align: right;
+}
+
+/* Panel values that link to their own page (bot/account/business). */
+.entity-link {
+  color: var(--accent-dark);
+  text-decoration: none;
+}
+
+.entity-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* Technical values (ids, hashes, paths): monospace + break so they never
@@ -1429,7 +1472,7 @@ td input {
 
 .channel-icon {
   align-items: center;
-  background: #25d366;
+  background: var(--surface-strong);
   border-radius: 9px;
   color: #fff;
   display: inline-flex;
@@ -1440,6 +1483,20 @@ td input {
   justify-content: center;
   letter-spacing: 0.5px;
   width: 36px;
+}
+
+.channel-icon--whatsapp {
+  background: #25d366;
+}
+
+/* Instagram brand gradient so the channel is instantly recognizable. */
+.channel-icon--instagram {
+  background: radial-gradient(circle at 28% 108%, #fdf497 0%, #fdf497 8%, #fd5949 38%, #d6249f 60%, #285aeb 100%);
+}
+
+.channel-glyph {
+  height: 1.25rem;
+  width: 1.25rem;
 }
 
 .channel-status {
@@ -2137,6 +2194,42 @@ pre {
 }
 
 /* Conversation thread — a single chat-window wrapper, not floating cards */
+/* Compact rollup strip above the thread: turns, last action, sales, errors. */
+.conv-summary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+  padding: 0.875rem 1.25rem;
+}
+
+.conv-summary-item {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.conv-summary-key {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.conv-summary-val {
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.conv-summary-val.is-error,
+.compact dd.is-error {
+  color: #9a3412;
+}
+
 .conversation-thread {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2230,69 +2323,103 @@ pre {
   margin: 0;
 }
 
-/* Understanding: only what matters — action + confidence — right-aligned. The
-   technical detail (intent code, memory, embedding) lives in "Ver trace
-   completo"; the raw intent stays as data-intent for tooling. */
-.turn-understanding {
-  background: var(--surface-strong);
-  border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  display: grid;
+/* The action label(s) the agent fired, connected to the user message above with
+   a "derived-from" arrow. Distinct from both bubbles (white + accent border) so
+   they read as the action taken, not another message. Click opens .turn-detail. */
+.turn-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.75rem 0.875rem;
+  padding-left: 0.625rem;
+  position: relative;
 }
 
-.understanding-title {
+.turn-actions-arrow {
+  align-items: center;
   color: var(--muted);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  display: inline-flex;
+  flex: none;
 }
 
-.understanding-actions {
+.turn-actions-list {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
 }
 
-.action-chip {
-  background: var(--accent);
+/* Scoped under .turn-actions (specificity 0,2,0) so the chip's flat, borderless
+   look beats the global button/button:hover styles without repeating each prop. */
+.turn-actions .turn-action-chip {
+  background: #f2f1ed;
+  border: 0;
   border-radius: 999px;
-  color: #fff;
+  box-shadow: none;
+  color: #5f5e57;
+  cursor: pointer;
   font-size: 0.8125rem;
-  font-weight: 650;
-  padding: 0.25rem 0.6875rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.25rem 0.625rem;
+  transition: filter 120ms ease;
 }
 
-.action-chip.is-pending {
-  background: #d99409;
+.turn-actions .turn-action-chip:hover,
+.turn-actions .turn-action-chip[aria-expanded="true"] {
+  filter: brightness(0.96);
 }
 
-.action-chip.is-blocked {
-  background: #d6553d;
+.turn-actions .turn-action-chip:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 1px;
 }
 
-.understanding-none {
+.turn-actions .turn-action-chip.is-pending {
+  background: #fbf0db;
+  color: #8a5a00;
+}
+
+.turn-actions .turn-action-chip.is-blocked {
+  background: #fbe9e4;
+  color: #9a3412;
+}
+
+.turn-action-none {
   color: var(--muted);
   font-size: 0.8125rem;
   font-style: italic;
 }
 
-.understanding-meta {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
+/* Modern click popover: intent + confidence, anchored under the chips. */
+.turn-detail[hidden] {
+  display: none;
 }
 
-.understanding-fact {
+.turn-detail {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.625rem;
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 0.5rem;
+  left: 0;
+  margin-top: 0.375rem;
+  min-width: 12rem;
+  padding: 0.75rem 0.875rem;
+  position: absolute;
+  top: 100%;
+  z-index: 30;
+}
+
+.turn-detail-row {
   align-items: baseline;
-  display: inline-flex;
-  gap: 0.375rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
 }
 
-.understanding-fact-label {
+.turn-detail-key {
   color: var(--muted);
   font-size: 0.6875rem;
   font-weight: 700;
@@ -2300,29 +2427,18 @@ pre {
   text-transform: uppercase;
 }
 
-.understanding-fact-value {
+.turn-detail-val {
   color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 650;
 }
 
-.understanding-code {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 0.375rem;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
-  padding: 0.0625rem 0.375rem;
+.turn-detail-val.is-ok {
+  color: var(--accent-dark);
 }
 
-.understanding-tag {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
+.turn-detail-val.is-low {
+  color: #8a5a00;
 }
 
 .u-confidence {
@@ -2434,8 +2550,7 @@ pre {
     position: static;
   }
 
-  .turn-msg,
-  .turn-understanding {
+  .turn-msg {
     max-width: 100%;
   }
 }
@@ -2556,6 +2671,55 @@ pre {
 .admin-subnav a.is-active {
   background: var(--accent-dark);
   color: #fff;
+}
+
+/* Admin CRUD (Negocios/Cuentas): inline create forms + entity header/actions. */
+.inline-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.inline-form input {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.inline-form button {
+  margin-top: 0;
+}
+
+.entity-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.entity-head-aside {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.entity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.entity-actions form {
+  margin: 0;
+}
+
+.entity-actions button {
+  font-size: 0.75rem;
+  margin-top: 0;
+  padding: 0.25rem 0.625rem;
 }
 
 .admin-tabs {
