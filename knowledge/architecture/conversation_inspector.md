@@ -31,7 +31,8 @@ organization
 - `GET /inspector/organizations`
 - `GET /inspector/organizations/:organization_id`
 - `GET /inspector/accounts/:account_id`
-- `GET /inspector/bots/:bot_id`
+- `GET /inspector/bots/:bot_id` (editor; vista admin/plataforma)
+- `GET /inspector/bots/:bot_id/business/account` (mismo editor, framing con contexto de cuenta; ver `frontend.md`)
 - `POST /inspector/bots/:bot_id` (guardado/autosave del editor de bot)
 - `POST /inspector/bots/:bot_id/test-message`
 - `GET /inspector/bots/:bot_id/conversations`

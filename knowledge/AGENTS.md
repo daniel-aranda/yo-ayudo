@@ -53,7 +53,8 @@ Antes de cerrar o hacer commit de una tarea, deja el folder al 100%:
 - Si una capacidad modifica el mundo, debe ser Action.
 - En la UI no hay lista separada de "Acciones del bot": todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`.
 - No usar `tenant` ni `branch`: el modelo es organization (negocio) -> account (cuenta) -> bot.
-- `bot_type` (`system`/`custom`) es PROCEDENCIA, no capacidad: `system` = lo crea/mantiene la plataforma; `custom` = lo creo un usuario (default). Prohibido branchear runtime por `bot_type`; el motor ejecuta ambos igual.
+- `bot_type` (`system`/`custom`) es PROCEDENCIA, no capacidad: `system` = lo crea/mantiene la plataforma; `custom` = lo creo un usuario (default). Prohibido branchear runtime por `bot_type`; el motor ejecuta ambos igual. (Branchear en la UI sí: p. ej. el system bot agrega un textarea "Knowledge esperado" además del picker de fuentes, que en su caso son las de la cuenta oficial y solo sirven para probar.)
+- Negocio/cuenta oficial de YoAyudo (donde viven los bots de sistema) es configurable por env `YO_AYUDO_BUSINESS_ID`/`YO_AYUDO_ACCOUNT_ID` (el seed los fija; estables por entorno). No hardcodear esos ids.
 - Si una accion no existe, no esta habilitada, no tiene proveedor o no puede ejecutarse, registrar guardrail event.
 - No fingir ejecuciones de AI.
 - No duplicar reglas de negocio dentro de subagentes.

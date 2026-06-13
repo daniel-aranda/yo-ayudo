@@ -174,6 +174,21 @@ export function register_inspector_routes(router, dependencies = {}) {
     }
   });
 
+  // Vista del bot con contexto de cuenta (business/account explícitos). Misma
+  // vista que la admin (/inspector/bots/:id); solo cambia el framing del header.
+  router.get("/inspector/bots/:bot_id/business/account", inspector_auth, async (request, response, next) => {
+    try {
+      const view = await get_bot_view(route_pool, route_value(request.params.bot_id));
+      if (!view.bot) {
+        response.status(404).send("Bot not found");
+        return;
+      }
+      response.render("inspector/bot", { ...view, show_account_scope: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/inspector/bots/:bot_id/activity", inspector_auth, async (request, response, next) => {
     try {
       const view = await get_bot_activity_view(route_pool, route_value(request.params.bot_id));

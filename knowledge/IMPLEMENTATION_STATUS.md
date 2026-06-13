@@ -82,7 +82,7 @@ La direccion actual es Bot Engine configurable:
 - Interaction settings (capa system-level, migracion `0013`, tabla `interaction_settings`, `src/interactions/interaction_settings_repository.js`): habilitar/deshabilitar una interaccion a nivel plataforma y configurar su proveedor (ej. `responder_voz` -> modelo/voz de ElevenLabs). El `action_execution_service` **bloquea** (con guardrail `interaccion_deshabilitada`) cualquier accion cuya interaccion este deshabilitada, sin importar la config por bot; la config fluye al handler (`context.interaction_config`). Es la tercera capa: catalogo estatico (codigo) -> settings system-level -> config por bot (`definition_json.interactions`).
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
-- Tests unitarios e integracion del pipeline, router, memory, inspector, auth y Bot Engine comercial. **117 tests / 27 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope por cuenta de la review queue) y el scope del top nav en `operational_dashboard.test.js`.
+- Tests unitarios e integracion del pipeline, router, memory, inspector, auth y Bot Engine comercial. **122 tests / 28 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope por cuenta de la review queue) y el scope del top nav en `operational_dashboard.test.js`.
 
 ## Migraciones
 
@@ -221,7 +221,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 27 archivos, 117 tests (Vitest).
+- `npm test`: OK, 28 archivos, 122 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0016` en orden.
 
 Comandos locales disponibles:

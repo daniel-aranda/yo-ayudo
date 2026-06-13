@@ -39,6 +39,7 @@ Variables actuales:
 - `LOG_LEVEL`
 - `AUTH_ENABLED` (default `false`; activa login y la politica owner/usuario-de-negocio)
 - `SESSION_SECRET` (obligatorio en production si `AUTH_ENABLED=true`; en dev hay default)
+- `YO_AYUDO_BUSINESS_ID` / `YO_AYUDO_ACCOUNT_ID` (opcionales, uuid): negocio/cuenta oficial de YoAyudo donde viven los bots de sistema. El seed los usa como id explícito al crear (estables y distintos por entorno dev/prod); vacío = el seed genera uuid y resuelve por slug `yoayudo-demo`/`yoayudo-ventas`. Una vez creados por slug, el id existente se conserva (el seed no hace churn).
 
 El default de `DATABASE_URL` usa `127.0.0.1:5433`, no `localhost`. Node 18+ resuelve `localhost` a IPv6 (`::1`) primero, pero el Postgres local de Docker escucha en IPv4 `127.0.0.1:5433`, asi que `localhost` daria `ECONNREFUSED`.
 

@@ -248,7 +248,9 @@ describe("Conversation Inspector", () => {
     expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
     expect(bot_page.text).toContain("Interacciones");
     expect(bot_page.text).toContain("Grupos humanos");
-    expect(bot_page.text).toContain("Selecciona grupo humano");
+    // Multi-select de grupos: checkboxes (no un dropdown de un solo valor).
+    expect(bot_page.text).toContain("human-group-multi");
+    expect(bot_page.text).toContain("data-human-group");
     expect(bot_page.text).toContain("Founder");
     expect(bot_page.text).toContain("Ventas");
     expect(bot_page.text).toContain("Soporte");
@@ -507,6 +509,65 @@ describe("Conversation Inspector", () => {
     expect(resolved_identity.whatsapp_phone_number.display_phone_number).toBe("+525512345678");
   });
 
+  it("assigns multiple human groups to a consult_human interaction (multi-select, comma-joined)", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_id = (await pool.query("SELECT id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")).rows[0].id;
+
+    // El editor renderiza el multi-select de grupos como checkboxes + hidden input.
+    const page = await request(app).get(`/inspector/bots/${bot_id}`).expect(200);
+    expect(page.text).toContain("human-group-multi");
+    expect(page.text).toContain("data-human-group");
+
+    // Cada interacción manda UN campo interaction_human_group_ids con los ids
+    // comma-joined; el server los separa y valida (multiples grupos por interacción).
+    await request(app)
+      .post(`/inspector/bots/${bot_id}`)
+      .type("form")
+      .send({
+        name: "Agente multi-grupo",
+        goal: "Escalar a varios equipos.",
+        status: "active",
+        bot_type: "custom",
+        behavior_language: "es-MX",
+        behavior_tone: "direct",
+        instrucciones_operativas: "Atiende y escala.",
+        constraints_text: "No fingir.",
+        interactions_present: "1",
+        interaction_type: ["consult_human"],
+        interaction_instructions: ["Escala a los equipos correctos."],
+        interaction_human_group_ids: ["ventas,soporte,founder"],
+        interaction_enabled: ["0"],
+      })
+      .expect(302);
+
+    const updated = await pool.query("SELECT definition_json FROM bots WHERE id = $1", [bot_id]);
+    const consult = updated.rows[0].definition_json.interactions.find((i) => i.type === "consult_human");
+    expect(consult.human_group_ids).toEqual(["ventas", "soporte", "founder"]);
+
+    // Ids inválidos se descartan; sin grupos válidos queda lista vacía.
+    await request(app)
+      .post(`/inspector/bots/${bot_id}`)
+      .type("form")
+      .send({
+        name: "Agente multi-grupo",
+        goal: "Escalar a varios equipos.",
+        status: "active",
+        bot_type: "custom",
+        behavior_language: "es-MX",
+        behavior_tone: "direct",
+        instrucciones_operativas: "Atiende y escala.",
+        constraints_text: "No fingir.",
+        interactions_present: "1",
+        interaction_type: ["consult_human"],
+        interaction_instructions: ["Escala a los equipos correctos."],
+        interaction_human_group_ids: ["no-existe,otro-invalido"],
+        interaction_enabled: ["0"],
+      })
+      .expect(302);
+    const cleared = await pool.query("SELECT definition_json FROM bots WHERE id = $1", [bot_id]);
+    expect(cleared.rows[0].definition_json.interactions.find((i) => i.type === "consult_human").human_group_ids).toEqual([]);
+  });
+
   it("autosaves bot builder fields through the JSON route", async () => {
     const app = create_inspector_test_app(pool);
     const bot_result = await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1");
@@ -724,22 +785,58 @@ describe("Conversation Inspector", () => {
     expect(updated.rows[0].definition_json.knowledge_source_ids).toContain(source.rows[0].id);
   });
 
-  it("system bots declare expected knowledge (a note) instead of assigning account sources", async () => {
+  it("frames the bot header by type/scope: system bot is platform-level in admin view, account-scoped on its account URL", async () => {
+    const app = create_inspector_test_app(pool);
+    const system_bot = (await pool.query("SELECT * FROM bots WHERE slug = 'bot-whatsapp-yoayudo' LIMIT 1")).rows[0];
+    const custom_bot = (await pool.query("SELECT * FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")).rows[0];
+
+    // Vista admin de un bot de sistema: chip "Sistema", framing de plataforma,
+    // sin business/account, breadcrumb desde Inspector (no del dashboard de cuenta).
+    const admin_system = await request(app).get(`/inspector/bots/${system_bot.id}`).expect(200);
+    expect(admin_system.text).toContain("Plataforma YoAyudo");
+    expect(admin_system.text).toContain("bot-type-chip is-system");
+    expect(admin_system.text).toContain("Sistema");
+    expect(admin_system.text).not.toContain("YoAyudo Demo / YoAyudo Ventas");
+    expect(admin_system.text).toContain("Ver en cuenta (prueba)");
+    // El nombre es editable desde el header (input inline).
+    expect(admin_system.text).toContain('id="bot_title_input"');
+
+    // Vista nivel-cuenta del mismo system bot: sí muestra business/account.
+    const account_system = await request(app).get(`/inspector/bots/${system_bot.id}/business/account`).expect(200);
+    expect(account_system.text).toContain("YoAyudo Demo / YoAyudo Ventas");
+    expect(account_system.text).toContain("Ver a nivel plataforma");
+
+    // Un bot custom siempre muestra su business/account (pertenece a una cuenta).
+    const admin_custom = await request(app).get(`/inspector/bots/${custom_bot.id}`).expect(200);
+    expect(admin_custom.text).toContain("bot-type-chip is-custom");
+    expect(admin_custom.text).toContain("YoAyudo Demo / YoAyudo Ventas");
+    expect(admin_custom.text).not.toContain("Ver en cuenta (prueba)");
+  });
+
+  it("system bots declare expected knowledge AND can assign official-account knowledge for testing", async () => {
     const app = create_inspector_test_app(pool);
     const bot = (await pool.query("SELECT * FROM bots WHERE slug = 'bot-whatsapp-yoayudo' LIMIT 1")).rows[0];
     expect(bot.bot_type).toBe("system");
 
-    // El tab Knowledge de un bot de sistema muestra la nota de knowledge esperado,
-    // no el picker de fuentes de cuenta ni el link al Knowledge Center.
+    // El tab Knowledge de un bot de sistema muestra la nota de knowledge esperado
+    // Y también el picker de fuentes de la cuenta oficial (solo para probar).
     const page = await request(app).get(`/inspector/bots/${bot.id}`).expect(200);
     expect(page.text).toContain("Knowledge esperado");
     expect(page.text).toContain('name="expected_knowledge"');
-    // El elemento del picker no se renderiza (la cadena suelta vive en el JS inline,
-    // por eso se valida el markup del elemento, no el texto crudo).
-    expect(page.text).not.toContain('id="knowledge_source_picker"');
-    expect(page.text).not.toContain("Ir a Knowledge Center");
+    expect(page.text).toContain("Knowledge para probar");
+    expect(page.text).toContain('id="knowledge_source_picker"');
+    expect(page.text).toContain("Ir a Knowledge Center");
 
-    // La nota se persiste en definition_json.expected_knowledge.
+    // Fuente de la cuenta oficial (donde vive el system bot) disponible para probar.
+    const source = (
+      await pool.query(
+        "SELECT id FROM knowledge_sources WHERE account_id = $1 AND source_family = 'business_knowledge' AND status != 'archived' LIMIT 1",
+        [bot.account_id],
+      )
+    ).rows[0];
+    expect(source).toBeTruthy();
+
+    // La nota y la fuente de prueba se persisten juntas.
     await request(app)
       .post(`/inspector/bots/${bot.id}`)
       .type("form")
@@ -756,6 +853,7 @@ describe("Conversation Inspector", () => {
           ? bot.definition_json.behavior.constraints.join("\n")
           : bot.definition_json.behavior.constraints,
         expected_knowledge: "Catálogo de productos con precios y políticas de envío.",
+        knowledge_source_ids: [source.id],
       })
       .expect(302);
 
@@ -763,8 +861,7 @@ describe("Conversation Inspector", () => {
     expect(updated.rows[0].definition_json.expected_knowledge).toBe(
       "Catálogo de productos con precios y políticas de envío.",
     );
-    // Sin picker, no se asignan fuentes de cuenta.
-    expect(updated.rows[0].definition_json.knowledge_source_ids).toEqual([]);
+    expect(updated.rows[0].definition_json.knowledge_source_ids).toContain(source.id);
   });
 
   it("uploads document knowledge through the S3 uploader contract", async () => {

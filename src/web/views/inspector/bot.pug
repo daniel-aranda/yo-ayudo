@@ -152,12 +152,31 @@ block content
 
   if bot
     -
+      // /inspector/bots/:id es la vista admin/plataforma; /inspector/bots/:id/business/account
+      // es la vista con contexto de cuenta. Un bot de sistema en la vista admin NO
+      // muestra business/account (es de la plataforma); sí los muestra en la vista de cuenta.
+      const account_scope = typeof show_account_scope !== "undefined" && show_account_scope;
+      const show_account_context = account_scope || !is_system_bot;
       const bot_account_url = bot.organization_id && bot.account_id ? `/dashboard/business/${bot.organization_id}/accounts/${bot.account_id}` : "/dashboard";
-    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: bot.account_name || "Cuenta", href: bot_account_url }, { label: bot_name }])
+      const type_chip_label = is_system_bot ? "Sistema" : "Personalizado";
+    if show_account_context
+      +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: bot.account_name || "Cuenta", href: bot_account_url }, { label: bot_name }])
+    else
+      +breadcrumb([{ label: "Inspector", href: "/inspector" }, { label: bot_name }])
     section.page-header.builder-header
       div
-        h1= bot_name
-        p= `${bot.organization_name || "Organization"} / ${bot.account_name || "Account"}`
+        div.builder-title
+          input#bot_title_input.builder-title-input(type="text", value=bot_name, aria-label="Nombre del agente", autocomplete="off")
+          span(class=`bot-type-chip is-${is_system_bot ? "system" : "custom"}`)= type_chip_label
+        if show_account_context
+          p= `${bot.organization_name || "Organization"} / ${bot.account_name || "Account"}`
+        else
+          p Plataforma YoAyudo · Bot de sistema
+        if is_system_bot
+          if account_scope
+            a.entity-link.builder-scope-link(href=`/inspector/bots/${bot.id}`) ← Ver a nivel plataforma
+          else
+            a.entity-link.builder-scope-link(href=`/inspector/bots/${bot.id}/business/account`) Ver en cuenta (prueba) →
       div.builder-actions
         div#autosave-indicator.autosave-indicator.idle(aria-live="polite", data-saved-at=last_saved_at_iso)
           span.autosave-dot(aria-hidden="true")
@@ -190,23 +209,22 @@ block content
     //- Knowledge Center embebido (iframe de la página real) para crear/editar
     //- knowledge sin salir del editor. Al cerrarse, el picker "Asignar knowledge"
     //- y la tabla de asignados se re-leen del server (altas/bajas hechas adentro).
-    //- Solo bots custom: los de sistema no usan knowledge de cuenta.
-    unless is_system_bot
-      #knowledge_center_popup.popup-overlay(
-        data-popup-overlay,
-        data-popup-overlay-close="true",
-        data-knowledge-center-popup,
-        data-autosave-ignore
-      )
-        .popup.popup--full.popup--default
-          .popup__header
-            .popup__header-text
-              h3.popup__title Knowledge Center
-              .popup__subtitle Crea y edita knowledge sin salir del editor.
-            a.button.secondary-button(href=`/inspector/accounts/${bot.account_id}/knowledge`, target="_blank", rel="noreferrer") Abrir en página
-            button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
-          .popup__body.popup__body--frame
-            iframe#knowledge_center_frame(data-src=`/inspector/accounts/${bot.account_id}/knowledge`, title="Knowledge Center")
+    //- Aplica a ambos tipos: en system bots scopea a la cuenta oficial (prueba).
+    #knowledge_center_popup.popup-overlay(
+      data-popup-overlay,
+      data-popup-overlay-close="true",
+      data-knowledge-center-popup,
+      data-autosave-ignore
+    )
+      .popup.popup--full.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title Knowledge Center
+            .popup__subtitle Crea y edita knowledge sin salir del editor.
+          a.button.secondary-button(href=`/inspector/accounts/${bot.account_id}/knowledge`, target="_blank", rel="noreferrer") Abrir en página
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
+        .popup__body.popup__body--frame
+          iframe#knowledge_center_frame(data-src=`/inspector/accounts/${bot.account_id}/knowledge`, title="Knowledge Center")
 
     form(method="post", action=`/inspector/bots/${bot.id}`, id="bot-editor")
       div.bot-editor-tab-shell.wamy-tabs
@@ -302,76 +320,83 @@ block content
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="knowledge", hidden)
         if is_system_bot
-          //- Bot de sistema: no asigna knowledge de un negocio. Declara el
-          //- knowledge que un negocio debería proveer al instalar este bot.
-          +section_head("book", "Knowledge esperado", "Este es un bot de sistema: no usa knowledge de un negocio. Describe el knowledge que un negocio debería proveer al instalarlo.")
+          //- Bot de sistema: declara el knowledge esperado (contrato para quien lo
+          //- instale) y, aparte, puede asignar knowledge de la cuenta oficial de
+          //- YoAyudo SOLO para probarlo. Al clonarse a una cuenta, el clon no
+          //- copia ninguna fuente (clone_bot deja knowledge_source_ids vacío).
+          +section_head("book", "Knowledge esperado", "Este es un bot de sistema: describe el knowledge que un negocio debería proveer al instalarlo.")
           div.field-with-counter
             label(for="expected_knowledge") Knowledge esperado
             textarea#expected_knowledge(
               name="expected_knowledge",
-              rows="8",
+              rows="6",
               maxlength="2000",
               data-char-counter="expected_knowledge_counter",
               placeholder="Ej. Catálogo de productos con precios, políticas de envío y devoluciones, FAQ de soporte, horarios y ubicaciones."
             )= expected_knowledge
             span#expected_knowledge_counter.char-counter(aria-hidden="true")
+          div.section-title.knowledge-test-head
+            div
+              h3.panel-subhead Knowledge para probar
+              p.meta Fuentes de la cuenta oficial de YoAyudo, solo para probar este bot. Al clonarlo a una cuenta no se copia ninguna.
+            a#open_knowledge_center.button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
         else
           div.section-title
             +section_head("book", "Knowledge", "Fuentes de conocimiento que el agente puede usar para responder.")
             a#open_knowledge_center.button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
-          //- Picker y botón siempre presentes (deshabilitados si no hay nada que
-          //- asignar): el popup del Knowledge Center los repobla al cerrarse.
-          div.inline-add-row
-            select#knowledge_source_picker(disabled=!addable_knowledge_sources.length)
-              if addable_knowledge_sources.length
-                option(value="") Selecciona knowledge existente
-                each source in addable_knowledge_sources
-                  option(value=source.id, data-name=source.name, data-type=source.source_type, data-status=source.status, data-summary=source.summary || "")= source.name
-              else
-                option Todo el knowledge disponible ya está asignado
-            button#add_knowledge_source(type="button", disabled=!addable_knowledge_sources.length) Asignar knowledge
-          div#knowledge_assigned_area
-            if assigned_knowledge_sources.length
-              div.table-wrap#assigned_knowledge_table
-                table
-                  thead
-                    tr
-                      th Fuente
-                      th Tipo
-                      th Estado
-                      th Knowledge
-                      th
-                  tbody
-                    each source in assigned_knowledge_sources
-                      tr
-                        td
-                          strong= source.name
-                          if source.description
-                            p.meta= source.description
-                          input(type="hidden", name="knowledge_source_ids", value=source.id)
-                        td= knowledge_type_label(source.source_type)
-                        td
-                          span.status= source.status
-                        td
-                          if source.summary_status
-                            span.status= source.summary_status
-                          if source.summary
-                            p.meta= knowledge_preview(source.summary)
-                        td
-                          button.secondary-button.knowledge-remove(
-                            type="button",
-                            data-id=source.id,
-                            data-name=source.name,
-                            data-type=source.source_type,
-                            data-status=source.status,
-                            data-summary=source.summary || "",
-                            title="Quitar knowledge de este agente"
-                          ) Quitar
+        //- Picker y botón siempre presentes (deshabilitados si no hay nada que
+        //- asignar): el popup del Knowledge Center los repobla al cerrarse.
+        div.inline-add-row
+          select#knowledge_source_picker(disabled=!addable_knowledge_sources.length)
+            if addable_knowledge_sources.length
+              option(value="") Selecciona knowledge existente
+              each source in addable_knowledge_sources
+                option(value=source.id, data-name=source.name, data-type=source.source_type, data-status=source.status, data-summary=source.summary || "")= source.name
             else
-              div.empty#knowledge_empty_state Este agente todavía no tiene knowledge asignado. Selecciona una fuente existente o créala en Knowledge Center.
-              div#assigned_knowledge_hidden
-                each knowledge_id in knowledge_ids
-                  input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
+              option Todo el knowledge disponible ya está asignado
+          button#add_knowledge_source(type="button", disabled=!addable_knowledge_sources.length) Asignar knowledge
+        div#knowledge_assigned_area
+          if assigned_knowledge_sources.length
+            div.table-wrap#assigned_knowledge_table
+              table
+                thead
+                  tr
+                    th Fuente
+                    th Tipo
+                    th Estado
+                    th Knowledge
+                    th
+                tbody
+                  each source in assigned_knowledge_sources
+                    tr
+                      td
+                        strong= source.name
+                        if source.description
+                          p.meta= source.description
+                        input(type="hidden", name="knowledge_source_ids", value=source.id)
+                      td= knowledge_type_label(source.source_type)
+                      td
+                        span.status= source.status
+                      td
+                        if source.summary_status
+                          span.status= source.summary_status
+                        if source.summary
+                          p.meta= knowledge_preview(source.summary)
+                      td
+                        button.secondary-button.knowledge-remove(
+                          type="button",
+                          data-id=source.id,
+                          data-name=source.name,
+                          data-type=source.source_type,
+                          data-status=source.status,
+                          data-summary=source.summary || "",
+                          title="Quitar knowledge de este agente"
+                        ) Quitar
+          else
+            div.empty#knowledge_empty_state Este agente todavía no tiene knowledge asignado. Selecciona una fuente existente o créala en Knowledge Center.
+            div#assigned_knowledge_hidden
+              each knowledge_id in knowledge_ids
+                input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="canales", hidden)
         +section_head("broadcast", "Canales soportados", "Conecta los canales por donde te escriben tus clientes.")
@@ -534,19 +559,19 @@ block content
                               span.interaction-option-desc= option.description
                   if interaction.type === "consult_human"
                     -
-                      const selected_human_group_id = Array.isArray(interaction.human_group_ids)
-                        ? interaction.human_group_ids.find((id) => human_group_options.some((group) => group.id === id)) || ""
-                        : "";
-                    label(for=`interaction_human_group_ids_${index}`) Grupos humanos
-                    select(
-                      id=`interaction_human_group_ids_${index}`,
-                      name="interaction_human_group_ids",
-                    )
-                      option(value="") Selecciona grupo humano
+                      const selected_group_ids = Array.isArray(interaction.human_group_ids)
+                        ? interaction.human_group_ids.filter((id) => human_group_options.some((group) => group.id === id))
+                        : [];
+                    label Grupos humanos
+                    //- Multi-select: cada grupo es un checkbox sin name; el hidden input
+                    //- (uno por interacción) lleva los ids comma-joined que el server parsea.
+                    div.human-group-multi
                       each group in human_group_options
-                        option(value=group.id, selected=selected_human_group_id === group.id)= group.label
-                    if !selected_human_group_id
-                      p.config-warning Sin grupo humano asignado: el agente no sabrá a quién escalar.
+                        label.human-group-option
+                          input(type="checkbox", data-human-group, value=group.id, checked=selected_group_ids.includes(group.id))
+                          span= group.label
+                      input(type="hidden", name="interaction_human_group_ids", value=selected_group_ids.join(","))
+                    p.config-warning(hidden=selected_group_ids.length > 0) Sin grupo humano asignado: el agente no sabrá a quién escalar.
                   else
                     input(type="hidden", name="interaction_human_group_ids", value="")
         div.empty#interaction_empty_state(hidden=interactions.length > 0) Ninguna interacción configurada.
@@ -664,6 +689,33 @@ block content
         .getElementById("open_settings_json")
         ?.addEventListener("click", () => settingsJsonPopup?.open());
 
+      // Edición inline del nombre desde el header: el título vive fuera del form,
+      // así que espeja al input canónico #name (en Identidad) y dispara su evento
+      // input para reusar el autosave. #name de vuelta espeja al título.
+      const botTitleInput = document.getElementById("bot_title_input");
+      const botNameInput = document.getElementById("name");
+      function sizeBotTitle() {
+        if (botTitleInput) botTitleInput.size = Math.max((botTitleInput.value || "").length + 1, 8);
+      }
+      botTitleInput?.addEventListener("input", () => {
+        sizeBotTitle();
+        if (!botNameInput) return;
+        botNameInput.value = botTitleInput.value;
+        // El título vive fuera del form; se pide el guardado por la API del autosave
+        // (que serializa el form en vivo, ya con #name actualizado).
+        window.bot_editor_autosave?.request_save({
+          control: { name: "name", tag: "input", value: botTitleInput.value },
+          event: { type: "rename" },
+        });
+      });
+      botNameInput?.addEventListener("input", () => {
+        if (botTitleInput && document.activeElement !== botTitleInput) {
+          botTitleInput.value = botNameInput.value;
+          sizeBotTitle();
+        }
+      });
+      sizeBotTitle();
+
       const knowledgeCenterPopup = window.Popup
         ? new window.Popup({ overlay_selector: "[data-knowledge-center-popup]" })
         : null;
@@ -682,11 +734,16 @@ block content
         knowledgeCenterPopup.open();
       });
 
-      function renderHumanGroupSelect() {
-        const options = humanGroupOptions
-          .map((group) => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`)
+      function renderHumanGroupSelect(selectedIds = []) {
+        const selected = new Set(selectedIds);
+        const boxes = humanGroupOptions
+          .map(
+            (group) =>
+              `<label class="human-group-option"><input type="checkbox" data-human-group value="${escapeHtml(group.id)}"${selected.has(group.id) ? " checked" : ""}><span>${escapeHtml(group.label)}</span></label>`,
+          )
           .join("");
-        return `<label>Grupos humanos</label><select name="interaction_human_group_ids"><option value="">Selecciona grupo humano</option>${options}</select>`;
+        const warningHidden = selected.size > 0 ? " hidden" : "";
+        return `<label>Grupos humanos</label><div class="human-group-multi">${boxes}<input type="hidden" name="interaction_human_group_ids" value="${escapeHtml([...selected].join(","))}"></div><p class="config-warning"${warningHidden}>Sin grupo humano asignado: el agente no sabrá a quién escalar.</p>`;
       }
 
       // Interactions already on the bot (read live from the grid) are excluded,
@@ -966,6 +1023,25 @@ block content
         if (card) card.classList.toggle("is-disabled", !checkbox.checked);
       });
 
+      // Multi-select de grupos humanos: al togglear un checkbox, recomputa el hidden
+      // input (comma-joined, uno por interacción) y autosava. El warning se muestra
+      // cuando no queda ningún grupo seleccionado.
+      interactionsSection?.addEventListener("change", (event) => {
+        const groupCheckbox = event.target.closest?.("[data-human-group]");
+        if (!groupCheckbox) return;
+        const wrap = groupCheckbox.closest(".human-group-multi");
+        const hidden = wrap?.querySelector('input[type="hidden"][name="interaction_human_group_ids"]');
+        if (!wrap || !hidden) return;
+        const ids = Array.from(wrap.querySelectorAll("[data-human-group]:checked")).map((box) => box.value);
+        hidden.value = ids.join(",");
+        const warning = wrap.parentElement?.querySelector(".config-warning");
+        if (warning) warning.hidden = ids.length > 0;
+        window.bot_editor_autosave?.request_save({
+          control: { name: "interaction_human_group_ids", tag: "input", value: hidden.value },
+          event: { type: "human_groups" },
+        });
+      });
+
       refreshToggleAll();
       refreshOpenInteractionButton();
 
@@ -1051,7 +1127,7 @@ block content
         });
       });
 
-      addKnowledgeButton?.addEventListener("click", () => {
+      addKnowledgeButton?.addEventListener("click", async () => {
         const option = knowledgePicker.selectedOptions[0];
         if (!option?.value) return;
         const hidden = document.createElement("input");
@@ -1065,10 +1141,13 @@ block content
         option.remove();
         knowledgePicker.value = "";
         syncKnowledgePicker();
-        window.bot_editor_autosave?.request_save({
+        // Tras guardar, re-leer del server para PINTAR la fila asignada en la tabla
+        // (el handler solo agrega el hidden input; la fila visible viene del render).
+        await window.bot_editor_autosave?.request_save({
           control: { name: "knowledge_source_ids", tag: "button", value: hidden.value },
           event: { type: "add_knowledge_source" },
         });
+        await refreshKnowledgeFromServer();
       });
 
       syncKnowledgePicker();

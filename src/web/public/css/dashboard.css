@@ -526,6 +526,46 @@ button:active {
   margin: 6px 0 0;
 }
 
+/* Multi-select de grupos humanos: checkboxes en chips que envuelven; el valor
+   real (comma-joined) vive en un hidden input que el JS mantiene en sync. */
+.human-group-multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.human-group-option {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 13px 7px 11px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.human-group-option:hover {
+  background: var(--surface-strong);
+}
+
+.human-group-option:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.human-group-option input {
+  accent-color: var(--accent);
+  height: 16px;
+  margin: 0;
+  width: 16px;
+}
+
 label {
   color: var(--muted);
   display: block;
@@ -582,6 +622,46 @@ button:disabled {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
+}
+
+/* Título del editor editable inline: un input que se ve como el h1 (28px) y
+   sólo revela su borde en hover/focus. Edita el nombre desde donde lo ves. */
+.builder-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.builder-title-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  line-height: 1.15;
+  margin: -4px -8px;
+  max-width: 100%;
+  padding: 4px 8px;
+}
+
+.builder-title-input:hover {
+  border-color: var(--line);
+}
+
+.builder-title-input:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.builder-scope-link {
+  display: inline-block;
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .json-view-button {
@@ -928,6 +1008,18 @@ td input {
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+/* "Knowledge para probar" en system bots: separado de la nota de arriba; el
+   subhead + meta a la izquierda, "Ir a Knowledge Center" a la derecha. */
+.knowledge-test-head {
+  border-top: 1px solid var(--line);
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+}
+
+.knowledge-test-head .panel-subhead {
+  margin-top: 0;
 }
 
 .placeholder-actions {
