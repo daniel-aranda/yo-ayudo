@@ -16,6 +16,18 @@
       "env": {
         "DATABASE_URL": "postgres://yoayudo:yoayudo@127.0.0.1:5433/yoayudo"
       }
+    },
+    {
+      "name": "yoayudo-preview-auth",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 4100,
+      "autoPort": true,
+      "env": {
+        "DATABASE_URL": "postgres://yoayudo:yoayudo@127.0.0.1:5433/yoayudo",
+        "PORT": "4100",
+        "AUTH_ENABLED": "true"
+      }
     }
   ]
 }

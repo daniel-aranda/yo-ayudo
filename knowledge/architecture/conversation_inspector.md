@@ -37,8 +37,9 @@ organization
 - `GET /inspector/bots/:bot_id/conversations`
 - `GET /inspector/conversations/:conversation_id`
 - `GET /inspector/messages/:message_id`
-- `GET` / `POST /inspector/knowledge` (POST con upload a S3)
-- `GET` / `POST /inspector/knowledge/:source_id`
+- `GET` / `POST /inspector/accounts/:account_id/knowledge` (Knowledge Center canonico con la cuenta en el path, igual que el resto de rutas; POST con upload a S3; la organization se deriva de la cuenta — no viaja en la URL)
+- `GET` / `POST /inspector/accounts/:account_id/knowledge/:source_id` (detalle; 404 si la fuente no pertenece a la cuenta)
+- `GET` / `POST /inspector/knowledge[/:source_id]` (legacy/global: `?account_id=` redirige a la ruta con cuenta en el path; el detalle plano redirige usando el `account_id` de la fuente; sin cuenta sirve la vista global sin scope)
 
 Todas son server-rendered con Pug. No hay SPA ni librerias pesadas.
 
@@ -67,6 +68,8 @@ Todas las paginas del flujo (account dashboard, editor de bot, conversaciones, c
 - Autosave: el form se postea a `POST /inspector/bots/:bot_id` en `input`/`change`/`blur` y muestra un timestamp proactivo tipo "Guardado 3:58pm" o "Guardado 5 jun, 4pm" (es-MX 12h). No hay boton "Guardar cambios".
 - `Probar` postea a `POST /inspector/bots/:bot_id/test-message`.
 - El tab `Conversaciones` lista cada conversación como una fila de inbox (`.conv-row`): título = nombre del contacto (o teléfono con `format_phone`, o "Conversación de WhatsApp" — nunca el id), preview del último mensaje (o etiqueta de intent vía `conversation_intent_label`), tiempo relativo y pill de estado. Lo arma `present_conversation_summary` (en `inspector_presenter.js`) y `get_bot_conversations` adjunta el resultado como `conversation.summary`, así el id crudo nunca se muestra.
+
+El tab Knowledge abre el Knowledge Center en un popup con iframe y refresca el dropdown de asignar al cerrarse (detalle del patron en `frontend.md`, seccion Editor De Bot).
 
 Las capacidades ejecutables se configuran como interacciones, cada una con su propio prompt. Los tipos ejecutables cargan un `action_id` (`buscar_negocios`, `guardar_nota`, `crear_tarea`, `generar_resumen` son los handlers reales; el resto son `stub_*`). Al guardar, `acciones_habilitadas_json` se deriva de las interacciones habilitadas que tienen `action_id`.
 

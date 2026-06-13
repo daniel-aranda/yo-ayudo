@@ -423,6 +423,9 @@ function builder_definition_from_body(current_definition, body) {
       model: selected_ai_model.model,
     },
     knowledge_source_ids: compact_strings(body.knowledge_source_ids),
+    // Bots de sistema no asignan fuentes de cuenta; declaran el knowledge que un
+    // negocio debería proveer al instalarlos. Nota libre, persistida siempre.
+    expected_knowledge: String(body.expected_knowledge ?? current_definition.expected_knowledge ?? "").trim(),
     interactions: parse_interactions(current_definition.interactions, body),
   };
 }

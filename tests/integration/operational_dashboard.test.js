@@ -183,10 +183,153 @@ describe("Operational dashboard", () => {
       .expect(200);
 
     const bot_link_matches = response.text.match(/href="\/inspector\/bots\//g) ?? [];
+    // El panel muestra todos los bots no archivados (incluye drafts).
     const distinct_bots = await pool.query(
-      "SELECT count(*)::int AS count FROM bots WHERE account_id = $1 AND status = 'active'",
+      "SELECT count(*)::int AS count FROM bots WHERE account_id = $1 AND status != 'archived'",
       [account_id],
     );
     expect(bot_link_matches.length).toBe(distinct_bots.rows[0].count);
+  });
+
+  it("creates account bots from the dashboard: custom draft or cloned from a system bot", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const app = create_dashboard_test_app(pool);
+    const base = `/dashboard/business/${organization_id}/accounts/${account_id}`;
+
+    // La página ofrece el alta con tabs (Bot Nuevo | Bot preconfigurado), los
+    // preconfigurados como tarjetas seleccionables (no dropdown) y con buscador.
+    const page = await request(app).get(base).expect(200);
+    expect(page.text).toContain("Agregar bot");
+    expect(page.text).toContain('data-section="custom"');
+    expect(page.text).toContain('data-section="system"');
+    expect(page.text).toContain("Bot Nuevo");
+    expect(page.text).toContain("Bot preconfigurado");
+    expect(page.text).toContain("system-bot-pick");
+    expect(page.text).toContain("system_bot_search");
+    expect(page.text).not.toContain("system_bot_picker");
+
+    // Custom desde cero → draft del tipo custom en esta cuenta, visible en el panel.
+    await request(app)
+      .post(`${base}/bots`)
+      .type("form")
+      .send({ name: "Bot Dashboard Custom" })
+      .expect(302)
+      .expect("Location", `${base}#panel-bots`);
+    const custom = (await pool.query("SELECT * FROM bots WHERE slug = 'bot-dashboard-custom' LIMIT 1")).rows[0];
+    expect(custom).toBeTruthy();
+    expect(custom.status).toBe("draft");
+    expect(custom.bot_type).toBe("custom");
+    expect(custom.account_id).toBe(account_id);
+    const refreshed = await request(app).get(base).expect(200);
+    expect(refreshed.text).toContain("Bot Dashboard Custom");
+
+    // Desde bot de sistema → clon custom en draft, sin knowledge ni grupos de la
+    // cuenta origen (el bot de sistema seedeado vive en esta misma cuenta, así
+    // que el slug del clon se desambigua con sufijo).
+    const system_bot = (
+      await pool.query("SELECT id, name, slug FROM bots WHERE bot_type = 'system' AND status = 'active' LIMIT 1")
+    ).rows[0];
+    expect(system_bot).toBeTruthy();
+    await request(app).post(`${base}/bots`).type("form").send({ source_bot_id: system_bot.id }).expect(302);
+    const clone = (
+      await pool.query("SELECT * FROM bots WHERE slug = $1 AND id != $2 LIMIT 1", [`${system_bot.slug}-2`, system_bot.id])
+    ).rows[0];
+    expect(clone).toBeTruthy();
+    expect(clone.bot_type).toBe("custom");
+    expect(clone.status).toBe("draft");
+    expect(clone.name).toBe(system_bot.name);
+    expect(clone.definition_json.knowledge_source_ids).toEqual([]);
+    expect(clone.knowledge_base_ids_json).toEqual([]);
+    for (const interaction of clone.definition_json.interactions ?? []) {
+      expect(interaction.human_group_ids ?? []).toEqual([]);
+    }
+
+    // Guardas: cuenta que no es del negocio → 404; bot de sistema inexistente → 400.
+    await request(app)
+      .post(`/dashboard/business/00000000-0000-0000-0000-000000000001/accounts/${account_id}/bots`)
+      .type("form")
+      .send({ name: "Fuera de negocio" })
+      .expect(404);
+    await request(app)
+      .post(`${base}/bots`)
+      .type("form")
+      .send({ source_bot_id: "00000000-0000-0000-0000-000000000002" })
+      .expect(400);
+    await request(app).post(`${base}/bots`).type("form").send({}).expect(400);
+  });
+
+  it("connects a WhatsApp channel from the dashboard (Instagram still coming soon)", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const app = create_dashboard_test_app(pool);
+    const base = `/dashboard/business/${organization_id}/accounts/${account_id}`;
+
+    // La página ofrece el alta con tabs WhatsApp | Instagram (coming soon).
+    const page = await request(app).get(base).expect(200);
+    expect(page.text).toContain("Agregar canal");
+    expect(page.text).toContain('data-section="whatsapp"');
+    expect(page.text).toContain('data-section="instagram"');
+    expect(page.text).toContain("Instagram llega pronto");
+
+    // Alta de WhatsApp con bot conectado de una vez.
+    const bot = (await pool.query("SELECT id FROM bots WHERE account_id = $1 AND status = 'active' LIMIT 1", [account_id]))
+      .rows[0];
+    await request(app)
+      .post(`${base}/channels`)
+      .type("form")
+      .send({
+        channel_type: "whatsapp",
+        display_phone_number: "+52 55 9999 0000",
+        phone_number_id: "dashboard-test-phone-id",
+        bot_id: bot.id,
+      })
+      .expect(302)
+      .expect("Location", `${base}#panel-canales`);
+
+    const channel = (
+      await pool.query("SELECT * FROM whatsapp_phone_numbers WHERE phone_number_id = 'dashboard-test-phone-id' LIMIT 1")
+    ).rows[0];
+    expect(channel).toBeTruthy();
+    expect(channel.account_id).toBe(account_id);
+    expect(channel.status).toBe("active");
+    const assignment = (
+      await pool.query(
+        "SELECT * FROM phone_number_bot_assignments WHERE whatsapp_phone_number_id = $1 AND active_key = 'active' LIMIT 1",
+        [channel.id],
+      )
+    ).rows[0];
+    expect(assignment).toBeTruthy();
+    expect(assignment.bot_id).toBe(bot.id);
+
+    const refreshed = await request(app).get(base).expect(200);
+    expect(refreshed.text).toContain("+52 55 9999 0000");
+
+    // Un phone_number_id ya dado de alta en OTRA cuenta no se puede robar.
+    const other_account = (
+      await pool.query(
+        "INSERT INTO accounts (organization_id, name, slug) VALUES ($1, 'Cuenta Canal Test', 'cuenta-canal-test') RETURNING id",
+        [organization_id],
+      )
+    ).rows[0];
+    const stolen = await request(app)
+      .post(`/dashboard/business/${organization_id}/accounts/${other_account.id}/channels`)
+      .type("form")
+      .send({ channel_type: "whatsapp", display_phone_number: "+52 55 1111 2222", phone_number_id: "dashboard-test-phone-id" })
+      .expect(400);
+    expect(stolen.text).toContain("otra cuenta");
+
+    // Canal no soportado y campos faltantes → 400.
+    await request(app).post(`${base}/channels`).type("form").send({ channel_type: "instagram" }).expect(400);
+    await request(app).post(`${base}/channels`).type("form").send({ channel_type: "whatsapp" }).expect(400);
+    // Bot de otra cuenta → 400.
+    await request(app)
+      .post(`/dashboard/business/${organization_id}/accounts/${other_account.id}/channels`)
+      .type("form")
+      .send({
+        channel_type: "whatsapp",
+        display_phone_number: "+52 55 3333 4444",
+        phone_number_id: "dashboard-test-phone-id-2",
+        bot_id: bot.id,
+      })
+      .expect(400);
   });
 });

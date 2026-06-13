@@ -72,23 +72,13 @@ function handle_bot_test_error(error, response) {
   return false;
 }
 
-function knowledge_query_from(input = {}) {
-  const query = new URLSearchParams();
-  if (route_value(input.organization_id)) {
-    query.set("organization_id", route_value(input.organization_id));
-  }
-  if (route_value(input.account_id)) {
-    query.set("account_id", route_value(input.account_id));
-  }
-
-  return query;
+function knowledge_center_url(account_id) {
+  return account_id ? `/inspector/accounts/${account_id}/knowledge` : "/inspector/knowledge";
 }
 
-async function normalize_knowledge_filters(route_pool, filters = {}) {
-  const account_id = route_value(filters.account_id);
-
+async function get_account_scope(route_pool, account_id) {
   if (!account_id) {
-    return filters;
+    return null;
   }
 
   const result = await route_pool.query(
@@ -102,26 +92,23 @@ async function normalize_knowledge_filters(route_pool, filters = {}) {
   );
 
   if (!result.rows[0]) {
-    return filters;
+    return null;
   }
 
   return {
-    ...filters,
     account_id: result.rows[0].id,
     organization_id: result.rows[0].organization_id,
   };
 }
 
 async function render_knowledge_center(response, route_pool, input = {}) {
-  const filters = await normalize_knowledge_filters(route_pool, input.filters ?? {});
-
   response.status(input.status ?? 200).render("inspector/knowledge", {
     knowledge_sources: await list_knowledge_sources(route_pool, {
-      organization_id: filters.organization_id,
-      account_id: filters.account_id,
+      organization_id: input.organization_id,
+      account_id: input.account_id,
       limit: 200,
     }),
-    filters,
+    knowledge_base_url: knowledge_center_url(input.account_id),
     error_message: input.error_message,
   });
 }
@@ -242,17 +229,8 @@ export function register_inspector_routes(router, dependencies = {}) {
     }
   });
 
-  router.get("/inspector/knowledge", inspector_auth, async (request, response, next) => {
+  async function create_knowledge_source_from_request(request, response, scope) {
     try {
-      await render_knowledge_center(response, route_pool, { filters: request.query });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/inspector/knowledge", inspector_auth, knowledge_upload.single("document_file"), async (request, response, next) => {
-    try {
-      const filters = await normalize_knowledge_filters(route_pool, request.body ?? {});
       const source_type = route_value(request.body.source_type) || "text";
       let metadata_json = {
         url: route_value(request.body.url) || null,
@@ -265,23 +243,23 @@ export function register_inspector_routes(router, dependencies = {}) {
         if (!request.file) {
           await render_knowledge_center(response, route_pool, {
             status: 400,
-            filters: request.body,
+            ...scope,
             error_message: "Selecciona un archivo para crear knowledge de tipo documento.",
           });
           return;
         }
 
         const upload_result = await knowledge_document_uploader({
-          organization_id: route_value(filters.organization_id) || null,
-          account_id: route_value(filters.account_id) || null,
+          organization_id: scope?.organization_id ?? null,
+          account_id: scope?.account_id ?? null,
           file: request.file,
         });
         await safe_record_integration_event(route_pool, {
           integration_key: "s3",
           operation: "upload",
           status: "success",
-          organization_id: route_value(filters.organization_id) || null,
-          account_id: route_value(filters.account_id) || null,
+          organization_id: scope?.organization_id ?? null,
+          account_id: scope?.account_id ?? null,
         });
 
         metadata_json = {
@@ -293,8 +271,8 @@ export function register_inspector_routes(router, dependencies = {}) {
       }
 
       await create_knowledge_source(route_pool, {
-        organization_id: route_value(filters.organization_id) || null,
-        account_id: route_value(filters.account_id) || null,
+        organization_id: scope?.organization_id ?? null,
+        account_id: scope?.account_id ?? null,
         scope: route_value(request.body.scope) || "account",
         source_type,
         name: route_value(request.body.name),
@@ -304,25 +282,145 @@ export function register_inspector_routes(router, dependencies = {}) {
         metadata_json,
       });
 
-      const query = knowledge_query_from(filters);
-
-      response.redirect(`/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`);
+      response.redirect(knowledge_center_url(scope?.account_id));
     } catch (error) {
-      if (error.code?.startsWith("knowledge_s3_")) {
-        await safe_record_integration_event(route_pool, {
-          integration_key: "s3",
-          operation: "upload",
-          status: error.code === "knowledge_s3_not_configured" ? "not_configured" : "failure",
-          detail: error.message,
-        });
-        await render_knowledge_center(response, route_pool, {
-          status: 400,
-          filters: request.body,
-          error_message: error.message,
-        });
+      if (!error.code?.startsWith("knowledge_s3_")) {
+        throw error;
+      }
+
+      await safe_record_integration_event(route_pool, {
+        integration_key: "s3",
+        operation: "upload",
+        status: error.code === "knowledge_s3_not_configured" ? "not_configured" : "failure",
+        detail: error.message,
+      });
+      await render_knowledge_center(response, route_pool, {
+        status: 400,
+        ...scope,
+        error_message: error.message,
+      });
+    }
+  }
+
+  function update_knowledge_source_from_request(request, source) {
+    const metadata_json = {
+      ...(source.metadata_json ?? {}),
+    };
+    const url = route_value(request.body.url);
+
+    if (source.source_type === "url" || url) {
+      metadata_json.url = url || null;
+    }
+
+    return update_knowledge_source(route_pool, source.id, {
+      name: route_value(request.body.name),
+      description: route_value(request.body.description),
+      summary: route_value(request.body.summary),
+      status: route_value(request.body.status),
+      summary_status: route_value(request.body.summary_status),
+      metadata_json,
+    });
+  }
+
+  router.get("/inspector/accounts/:account_id/knowledge", inspector_auth, async (request, response, next) => {
+    try {
+      const scope = await get_account_scope(route_pool, route_value(request.params.account_id));
+
+      if (!scope) {
+        response.status(404).send("Account not found");
         return;
       }
 
+      await render_knowledge_center(response, route_pool, scope);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post(
+    "/inspector/accounts/:account_id/knowledge",
+    inspector_auth,
+    knowledge_upload.single("document_file"),
+    async (request, response, next) => {
+      try {
+        const scope = await get_account_scope(route_pool, route_value(request.params.account_id));
+
+        if (!scope) {
+          response.status(404).send("Account not found");
+          return;
+        }
+
+        await create_knowledge_source_from_request(request, response, scope);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get("/inspector/accounts/:account_id/knowledge/:source_id", inspector_auth, async (request, response, next) => {
+    try {
+      const scope = await get_account_scope(route_pool, route_value(request.params.account_id));
+      const source = scope ? await get_knowledge_source(route_pool, route_value(request.params.source_id)) : null;
+
+      if (!source || source.account_id !== scope.account_id) {
+        response.status(404).send("Knowledge source not found");
+        return;
+      }
+
+      const base_url = knowledge_center_url(scope.account_id);
+
+      response.render("inspector/knowledge_detail", {
+        source,
+        back_url: base_url,
+        form_action: `${base_url}/${source.id}`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/accounts/:account_id/knowledge/:source_id", inspector_auth, async (request, response, next) => {
+    try {
+      const scope = await get_account_scope(route_pool, route_value(request.params.account_id));
+      const source = scope ? await get_knowledge_source(route_pool, route_value(request.params.source_id)) : null;
+
+      if (!source || source.account_id !== scope.account_id) {
+        response.status(404).send("Knowledge source not found");
+        return;
+      }
+
+      const updated = await update_knowledge_source_from_request(request, source);
+
+      response.redirect(`${knowledge_center_url(scope.account_id)}/${updated.id}`);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Rutas legacy: la URL canonica lleva la cuenta en el path. Redirigen cuando hay cuenta.
+  router.get("/inspector/knowledge", inspector_auth, async (request, response, next) => {
+    try {
+      const account_id = route_value(request.query.account_id);
+
+      if (account_id) {
+        response.redirect(knowledge_center_url(account_id));
+        return;
+      }
+
+      await render_knowledge_center(response, route_pool, {
+        organization_id: route_value(request.query.organization_id) || undefined,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/knowledge", inspector_auth, knowledge_upload.single("document_file"), async (request, response, next) => {
+    try {
+      const scope = await get_account_scope(route_pool, route_value(request.body.account_id));
+
+      await create_knowledge_source_from_request(request, response, scope);
+    } catch (error) {
       next(error);
     }
   });
@@ -336,13 +434,15 @@ export function register_inspector_routes(router, dependencies = {}) {
         return;
       }
 
-      const filters = await normalize_knowledge_filters(route_pool, request.query);
-      const query = knowledge_query_from(filters);
+      if (source.account_id) {
+        response.redirect(`${knowledge_center_url(source.account_id)}/${source.id}`);
+        return;
+      }
 
       response.render("inspector/knowledge_detail", {
         source,
-        back_url: `/inspector/knowledge${query.size ? `?${query.toString()}` : ""}`,
-        filters,
+        back_url: "/inspector/knowledge",
+        form_action: `/inspector/knowledge/${source.id}`,
       });
     } catch (error) {
       next(error);
@@ -358,27 +458,9 @@ export function register_inspector_routes(router, dependencies = {}) {
         return;
       }
 
-      const metadata_json = {
-        ...(source.metadata_json ?? {}),
-      };
-      const url = route_value(request.body.url);
+      const updated = await update_knowledge_source_from_request(request, source);
 
-      if (source.source_type === "url" || url) {
-        metadata_json.url = url || null;
-      }
-
-      const updated = await update_knowledge_source(route_pool, source.id, {
-        name: route_value(request.body.name),
-        description: route_value(request.body.description),
-        summary: route_value(request.body.summary),
-        status: route_value(request.body.status),
-        summary_status: route_value(request.body.summary_status),
-        metadata_json,
-      });
-      const filters = await normalize_knowledge_filters(route_pool, request.body ?? {});
-      const query = knowledge_query_from(filters);
-
-      response.redirect(`/inspector/knowledge/${updated.id}${query.size ? `?${query.toString()}` : ""}`);
+      response.redirect(`${knowledge_center_url(updated.account_id)}/${updated.id}`);
     } catch (error) {
       next(error);
     }

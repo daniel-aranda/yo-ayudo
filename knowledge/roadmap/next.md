@@ -32,3 +32,8 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
 6. Dejar OCR real y voz/Twilio para fases posteriores.
    - Mantener contratos y stubs.
    - No prometer ejecucion real hasta tener provider productivo.
+
+## Direccion de producto (decisiones del founder, 2026-06-12)
+
+- **Auth por negocio**: IMPLEMENTADO detras de `AUTH_ENABLED` (default off). Owner de plataforma ve todo; usuarios de negocio loguean en `/login` y solo ven `/dashboard/business/:su_negocio`. Falta para produccion: reset de password, invitaciones, rate-limit de login y roles mas finos (hoy owner/member). Detalle en `IMPLEMENTATION_STATUS.md` seccion Auth.
+- **Marketplace de bots usuario-a-usuario** (futuro, aun sin disenar): usuarios podran publicar/compartir bots. Refuerza la regla de oro: los bots son configuracion (filas/JSON portables), no codigo. Cualquier decision sobre `bot_type` system/custom debe mantener la definicion serializable y separada de capacidades ejecutables (actions con guardrails).

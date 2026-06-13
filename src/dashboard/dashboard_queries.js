@@ -26,7 +26,13 @@ export async function get_dashboard_home(pool) {
     });
   }
 
-  return { businesses: business_rows };
+  // El dashboard solo lista negocios activos; se avisa cuántos quedan ocultos
+  // (paused/archived) para que la diferencia contra admin no parezca un bug.
+  const hidden = await pool.query(
+    "SELECT count(*)::int AS count FROM organizations WHERE status != 'active'",
+  );
+
+  return { businesses: business_rows, hidden_business_count: hidden.rows[0]?.count ?? 0 };
 }
 
 export async function get_primary_account_for_business(pool, business_id) {
@@ -185,15 +191,28 @@ export async function get_account_dashboard_data(pool, input) {
     `,
     [input.business_id, input.account_id],
   );
+  // Incluye drafts (un bot recién creado desde este dashboard debe verse);
+  // solo lo archivado queda fuera.
   const bots = await pool.query(
     `
       SELECT bots.*
       FROM bots
       WHERE bots.account_id = $1
-        AND bots.status = 'active'
+        AND bots.status != 'archived'
       ORDER BY bots.bot_type, bots.name
     `,
     [input.account_id],
+  );
+  // Bots de sistema (mantenidos por la plataforma) disponibles como base para
+  // crear un bot de esta cuenta clonando su definición.
+  const system_bots = await pool.query(
+    `
+      SELECT id, name, description
+      FROM bots
+      WHERE bot_type = 'system'
+        AND status = 'active'
+      ORDER BY name
+    `,
   );
   const channels = await pool.query(
     `
@@ -228,7 +247,7 @@ export async function get_account_dashboard_data(pool, input) {
   const stats = await pool.query(
     `
       SELECT
-        (SELECT count(*)::int FROM bots WHERE account_id = $1 AND status = 'active') AS bots_count,
+        (SELECT count(*)::int FROM bots WHERE account_id = $1 AND status != 'archived') AS bots_count,
         (SELECT count(*)::int FROM whatsapp_phone_numbers WHERE account_id = $1 AND status = 'active') AS channels_count,
         (
           SELECT count(*)::int
@@ -304,10 +323,13 @@ export async function get_account_dashboard_data(pool, input) {
   }
 
   // Capability-driven dashboard: only surface operational sections the account's
-  // active bots actually declare (via their enabled operational actions). A
+  // ACTIVE bots actually declare (via their enabled operational actions) — a
+  // draft (p. ej. recién clonado de un bot de sistema) no prende paneles. A
   // commercial account shows no ventas/compras/caja; an operational bot does.
   const enabled_actions = new Set(
-    bots.rows.flatMap((bot) => (Array.isArray(bot.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : [])),
+    bots.rows
+      .filter((bot) => bot.status === "active")
+      .flatMap((bot) => (Array.isArray(bot.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : [])),
   );
   const capabilities = {
     sales: enabled_actions.has("registrar_venta"),
@@ -321,6 +343,7 @@ export async function get_account_dashboard_data(pool, input) {
   return {
     account: account.rows[0] ?? null,
     bots: bots.rows,
+    system_bots: system_bots.rows,
     channels: channels.rows,
     conversations: conversation_rows,
     activity,

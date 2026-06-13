@@ -23,10 +23,8 @@ block content
     h2 Agregar knowledge
     if error_message
       div.empty= error_message
-    form(method="post", action="/inspector/knowledge", enctype="multipart/form-data")
+    form(method="post", action=knowledge_base_url, enctype="multipart/form-data")
       input(type="hidden", name="scope", value="account")
-      input(type="hidden", name="organization_id", value=filters.organization_id || "")
-      input(type="hidden", name="account_id", value=filters.account_id || "")
 
       fieldset.radio-group
         legend Tipo
@@ -80,7 +78,7 @@ block content
               tr
                 td
                   strong
-                    a.knowledge-source-link(href=`/inspector/knowledge/${source.id}?organization_id=${filters.organization_id || ""}&account_id=${filters.account_id || ""}`)= source.name
+                    a.knowledge-source-link(href=`${knowledge_base_url}/${source.id}`)= source.name
                   if source.description
                     p.meta= source.description
                 td= knowledge_type_label(source.source_type)

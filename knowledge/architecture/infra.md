@@ -37,6 +37,8 @@ Variables actuales:
 - `AWS_REGION`
 - `BEDROCK_MODEL_ID`
 - `LOG_LEVEL`
+- `AUTH_ENABLED` (default `false`; activa login y la politica owner/usuario-de-negocio)
+- `SESSION_SECRET` (obligatorio en production si `AUTH_ENABLED=true`; en dev hay default)
 
 El default de `DATABASE_URL` usa `127.0.0.1:5433`, no `localhost`. Node 18+ resuelve `localhost` a IPv6 (`::1`) primero, pero el Postgres local de Docker escucha en IPv4 `127.0.0.1:5433`, asi que `localhost` daria `ECONNREFUSED`.
 
@@ -62,7 +64,7 @@ npm run db:down
 npm run db:reset
 ```
 
-Migraciones (aplica las 11 migraciones `0001`–`0011`):
+Migraciones (aplica las migraciones `0001`–`0016`):
 
 ```bash
 npm run db:migrate

@@ -56,6 +56,16 @@ const env_schema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   INSPECTOR_INTERNAL_TOKEN: z.string().default(""),
+  AUTH_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  SESSION_SECRET: z.string().default(""),
+  // Business/cuenta oficial de YoAyudo (donde viven los bots de sistema). Se fijan
+  // por env para que sean estables y distintos entre dev/prod; el seed los usa
+  // como id explícito al crear. Vacío = el seed genera uuid y resuelve por slug.
+  YO_AYUDO_BUSINESS_ID: z.string().uuid().or(z.literal("")).default(""),
+  YO_AYUDO_ACCOUNT_ID: z.string().uuid().or(z.literal("")).default(""),
   LOG_LEVEL: z.string().default("info"),
 });
 
@@ -98,5 +108,9 @@ export const config = {
   memory_ingestion_enabled: parsed_env.MEMORY_INGESTION_ENABLED,
   inspector_enabled: parsed_env.INSPECTOR_ENABLED,
   inspector_internal_token: parsed_env.INSPECTOR_INTERNAL_TOKEN,
+  auth_enabled: parsed_env.AUTH_ENABLED,
+  session_secret: parsed_env.SESSION_SECRET,
+  yoayudo_business_id: parsed_env.YO_AYUDO_BUSINESS_ID || null,
+  yoayudo_account_id: parsed_env.YO_AYUDO_ACCOUNT_ID || null,
   log_level: parsed_env.LOG_LEVEL,
 };

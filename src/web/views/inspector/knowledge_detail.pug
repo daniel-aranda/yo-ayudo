@@ -17,9 +17,7 @@ block content
     div.builder-actions
       a.button.secondary-button(href=back_url) Volver
 
-  form(method="post", action=`/inspector/knowledge/${source.id}`)
-    input(type="hidden", name="organization_id", value=filters.organization_id || "")
-    input(type="hidden", name="account_id", value=filters.account_id || "")
+  form(method="post", action=form_action)
 
     section.panel
       h2 Editar knowledge

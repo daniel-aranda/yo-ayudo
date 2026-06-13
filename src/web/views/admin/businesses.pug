@@ -2,23 +2,34 @@ extends ../layout
 
 block content
   -
-    const status_pill = (status) =>
-      status === "active" ? "status-executed" : status === "paused" ? "status-pending_provider" : "status-blocked";
+    const status_options = [
+      { value: "active", label: "Activo" },
+      { value: "paused", label: "Pausado" },
+      { value: "archived", label: "Archivado" },
+    ];
+    const list_query = (page_number) => {
+      const params = new URLSearchParams();
+      if (filters.q) params.set("q", filters.q);
+      if (pagination.per_page !== 100) params.set("per_page", String(pagination.per_page));
+      if (page_number > 1) params.set("page", String(page_number));
+      const query_string = params.toString();
+      return `/admin/businesses${query_string ? `?${query_string}` : ""}`;
+    };
+    const per_page_options = [25, 50, 100, 200];
+    if (!per_page_options.includes(pagination.per_page)) per_page_options.push(pagination.per_page);
+    per_page_options.sort((a, b) => a - b);
 
-  mixin status_actions(action_base, id, status)
-    .entity-actions
-      if status !== "active"
-        form(method="post", action=`${action_base}/${id}/status`)
-          input(type="hidden", name="status", value="active")
-          button.secondary-button(type="submit") Activar
-      if status === "active"
-        form(method="post", action=`${action_base}/${id}/status`)
-          input(type="hidden", name="status", value="paused")
-          button.secondary-button(type="submit") Pausar
-      if status !== "archived"
-        form(method="post", action=`${action_base}/${id}/status`)
-          input(type="hidden", name="status", value="archived")
-          button.secondary-button(type="submit") Archivar
+  //- Estado como control segmentado: el estado actual se ve resaltado y los
+  //- otros dos son clicks directos para cambiarlo (sin pares pill+boton).
+  mixin status_toggle(action_base, id, status, entity_label)
+    .status-toggle(role="group", aria-label=`Estado de ${entity_label}`)
+      each option in status_options
+        if option.value === status
+          span.status-toggle-option.is-current(class=`is-${option.value}`, aria-current="true")= option.label
+        else
+          form.status-toggle-form(method="post", action=`${action_base}/${id}/status`)
+            input(type="hidden", name="status", value=option.value)
+            button.status-toggle-option(type="submit", title=`Cambiar a ${option.label.toLowerCase()}`)= option.label
 
   .admin-subnav
     a(href="/admin/integrations") Integraciones
@@ -26,59 +37,284 @@ block content
     a(href="/admin/bots") Bots
     a.is-active(href="/admin/businesses") Negocios
 
-  section.page-header
-    h1 Negocios y cuentas
-    p= `${totals.businesses} negocios · ${totals.accounts} cuentas`
+  section.page-header.builder-header
+    div
+      h1 Negocios y cuentas
+      p= `${totals.businesses} negocios · ${totals.accounts} cuentas`
+    button#open_create_business(type="button") Crear negocio
 
-  section.panel
-    h2 Crear negocio
-    form.inline-form(method="post", action="/admin/businesses")
-      input(type="text", name="name", placeholder="Nombre del negocio", aria-label="Nombre del negocio", required)
-      button(type="submit") Crear negocio
+  //- Toolbar de listado: búsqueda + tamaño de página (server-side) y
+  //- colapsar/expandir todos (client-side, no persiste).
+  section.panel.business-toolbar
+    form.inline-form(method="get", action="/admin/businesses")
+      input(type="search", name="q", value=filters.q, placeholder="Buscar negocio por nombre o slug", aria-label="Buscar negocio")
+      select(name="per_page", aria-label="Negocios por página")
+        each option_value in per_page_options
+          option(value=option_value, selected=pagination.per_page === option_value)= `${option_value} por página`
+      button(type="submit") Buscar
+      if filters.q
+        a.button.secondary-button(href="/admin/businesses") Limpiar
+    if businesses && businesses.length
+      .business-toolbar-meta
+        span.meta= filters.q ? `${pagination.total} resultado${pagination.total === 1 ? "" : "s"} para “${filters.q}”` : `${pagination.total} negocios`
+        button.secondary-button#toggle_all_businesses(type="button") Colapsar todos
 
   if businesses && businesses.length
     each business in businesses
-      section.panel
+      section.panel.business-panel(data-business-panel)
         .entity-head
           div
             p.page-eyebrow Negocio
-            h2= business.name
+            h2
+              a.entity-link(href=`/dashboard/business/${business.id}`)= business.name
             p.meta= business.slug
           .entity-head-aside
-            span(class=`status-pill ${status_pill(business.status)}`)= business.status
-            +status_actions("/admin/businesses", business.id, business.status)
+            +status_toggle("/admin/businesses", business.id, business.status, business.name)
+            button.secondary-button(type="button", data-business-toggle, aria-expanded="true") Colapsar
 
-        h3.panel-subhead Cuentas
-        if business.accounts && business.accounts.length
-          .table-wrap
-            table.activity-table
-              thead
-                tr
-                  th Cuenta
-                  th Estado
-                  th Bots
-                  th Canales
-                  th Conversaciones
-                  th Acciones
-              tbody
-                each account in business.accounts
+        div(data-business-body)
+          h3.panel-subhead Cuentas
+          if business.accounts && business.accounts.length
+            .table-wrap
+              table.activity-table
+                thead
                   tr
-                    td
-                      strong= account.name
-                      div.meta= account.slug
-                    td
-                      span(class=`status-pill ${status_pill(account.status)}`)= account.status
-                    td= account.bot_count
-                    td= account.channel_count
-                    td= account.conversation_count
-                    td
-                      +status_actions("/admin/accounts", account.id, account.status)
-        else
-          p.meta Sin cuentas todavía.
+                    th Cuenta
+                    th Estado
+                    th Bots
+                    th Canales
+                    th Conversaciones
+                tbody
+                  each account in business.accounts
+                    tr
+                      td
+                        strong
+                          a.entity-link(href=`/dashboard/business/${business.id}/accounts/${account.id}`)= account.name
+                        div.meta= account.slug
+                      td
+                        +status_toggle("/admin/accounts", account.id, account.status, account.name)
+                      td= account.bot_count
+                      td= account.channel_count
+                      td= account.conversation_count
+          else
+            p.meta Sin cuentas todavía.
 
-        form.inline-form(method="post", action="/admin/accounts")
-          input(type="hidden", name="organization_id", value=business.id)
-          input(type="text", name="name", placeholder="Nombre de la cuenta", aria-label="Nombre de la cuenta", required)
-          button(type="submit") Crear cuenta
+          h3.panel-subhead Usuarios
+          if business.users && business.users.length
+            ul.business-users
+              each user in business.users
+                li
+                  strong= user.name
+                  span.meta= ` · ${user.email} · ${user.role}`
+          else
+            p.meta Sin usuarios todavía. Con AUTH_ENABLED, los usuarios entran en /login y solo ven este negocio.
+
+          //- Altas vía popups compartidos: el contexto (negocio/cuentas) viaja
+          //- en data-attrs y el JS lo inyecta al popup correspondiente.
+          .entity-create-row
+            button.secondary-button(
+              type="button",
+              data-create-account,
+              data-organization-id=business.id,
+              data-business-name=business.name
+            ) Crear cuenta
+            if business.accounts && business.accounts.length
+              button.secondary-button(
+                type="button",
+                data-create-bot,
+                data-business-name=business.name,
+                data-accounts=JSON.stringify(business.accounts.map((account) => ({ id: account.id, name: account.name })))
+              ) Crear bot
+            button.secondary-button(
+              type="button",
+              data-create-user,
+              data-organization-id=business.id,
+              data-business-name=business.name
+            ) Crear usuario
+
+    if pagination.total_pages > 1
+      nav.pagination(aria-label="Paginación de negocios")
+        if pagination.has_prev
+          a.button.secondary-button(href=list_query(pagination.page - 1)) ‹ Anterior
+        span.meta= `Página ${pagination.page} de ${pagination.total_pages}`
+        if pagination.has_next
+          a.button.secondary-button(href=list_query(pagination.page + 1)) Siguiente ›
+  else if filters.q
+    .empty= `Sin negocios que coincidan con “${filters.q}”.`
   else
-    .empty Sin negocios.
+    .empty Sin negocios. Crea el primero con "Crear negocio".
+
+  //- Popups de creación (uno por tipo, compartidos entre negocios).
+  #create_business_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-business-popup)
+    .popup.popup--sm.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Crear negocio
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body
+        form.popup-form(method="post", action="/admin/businesses")
+          label(for="create_business_name") Nombre del negocio
+          input#create_business_name(type="text", name="name", required)
+          div.form-actions
+            button(type="submit") Crear negocio
+
+  #create_account_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-account-popup)
+    .popup.popup--sm.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Crear cuenta
+          .popup__subtitle(data-popup-business-name)
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body
+        form.popup-form(method="post", action="/admin/accounts")
+          input(type="hidden", name="organization_id", data-popup-organization-id)
+          label(for="create_account_name") Nombre de la cuenta
+          input#create_account_name(type="text", name="name", required)
+          div.form-actions
+            button(type="submit") Crear cuenta
+
+  #create_bot_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-bot-popup)
+    .popup.popup--sm.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Crear bot
+          .popup__subtitle(data-popup-business-name)
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body
+        form.popup-form(method="post", action="/admin/bots")
+          label(for="create_bot_account") Cuenta
+          select#create_bot_account(name="account_id", required)
+          label(for="create_bot_name") Nombre del bot
+          input#create_bot_name(type="text", name="name", required)
+          p.meta El bot se crea en borrador y se abre su editor para configurarlo.
+          div.form-actions
+            button(type="submit") Crear bot
+
+  #create_user_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-user-popup)
+    .popup.popup--sm.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Crear usuario
+          .popup__subtitle(data-popup-business-name)
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body
+        form.popup-form(method="post", action="/admin/users")
+          input(type="hidden", name="organization_id", data-popup-organization-id)
+          label(for="create_user_name") Nombre
+          input#create_user_name(type="text", name="name", required)
+          label(for="create_user_email") Email
+          input#create_user_email(type="email", name="email", required)
+          label(for="create_user_password") Contraseña
+          input#create_user_password(type="password", name="password", required, minlength="8", placeholder="Mínimo 8 caracteres")
+          p.meta Con AUTH_ENABLED, este usuario entra en /login y solo ve este negocio.
+          div.form-actions
+            button(type="submit") Crear usuario
+
+  script
+    include ../../public/js/core/Popup.js
+
+  script.
+    (() => {
+      const toggleAll = document.getElementById("toggle_all_businesses");
+      const panels = Array.from(document.querySelectorAll("[data-business-panel]"));
+
+      function setCollapsed(panel, collapsed) {
+        const body = panel.querySelector("[data-business-body]");
+        if (body) body.hidden = collapsed;
+        const toggle = panel.querySelector("[data-business-toggle]");
+        if (toggle) {
+          toggle.textContent = collapsed ? "Expandir" : "Colapsar";
+          toggle.setAttribute("aria-expanded", String(!collapsed));
+        }
+      }
+
+      function refreshToggleAll() {
+        if (!toggleAll) return;
+        const allCollapsed =
+          panels.length > 0 && panels.every((panel) => panel.querySelector("[data-business-body]")?.hidden);
+        toggleAll.dataset.mode = allCollapsed ? "expand" : "collapse";
+        toggleAll.textContent = allCollapsed ? "Expandir todos" : "Colapsar todos";
+      }
+
+      panels.forEach((panel) => {
+        panel.querySelector("[data-business-toggle]")?.addEventListener("click", () => {
+          const body = panel.querySelector("[data-business-body]");
+          setCollapsed(panel, !(body && body.hidden));
+          refreshToggleAll();
+        });
+      });
+
+      toggleAll?.addEventListener("click", () => {
+        const collapse = toggleAll.dataset.mode !== "expand";
+        panels.forEach((panel) => setCollapsed(panel, collapse));
+        refreshToggleAll();
+      });
+
+      refreshToggleAll();
+
+      // Popups de creación: el trigger trae el contexto del negocio en data-attrs.
+      function popupFor(selector) {
+        const popup = window.Popup ? new window.Popup({ overlay_selector: selector }) : null;
+        popup?.iniciar();
+        return popup;
+      }
+
+      const businessPopup = popupFor("[data-create-business-popup]");
+      const accountPopup = popupFor("[data-create-account-popup]");
+      const botPopup = popupFor("[data-create-bot-popup]");
+      const userPopup = popupFor("[data-create-user-popup]");
+
+      document.getElementById("open_create_business")?.addEventListener("click", () => businessPopup?.open());
+
+      function openScopedPopup(popup, overlaySelector, trigger) {
+        const overlay = document.querySelector(overlaySelector);
+        if (!popup || !overlay) return;
+        const orgInput = overlay.querySelector("[data-popup-organization-id]");
+        if (orgInput) orgInput.value = trigger.dataset.organizationId || "";
+        const subtitle = overlay.querySelector("[data-popup-business-name]");
+        if (subtitle) subtitle.textContent = trigger.dataset.businessName ? `Negocio: ${trigger.dataset.businessName}` : "";
+        popup.open();
+        overlay.querySelector("input:not([type=hidden]), select")?.focus();
+      }
+
+      document.addEventListener("click", (event) => {
+        const accountTrigger = event.target.closest("[data-create-account]");
+        if (accountTrigger) {
+          openScopedPopup(accountPopup, "[data-create-account-popup]", accountTrigger);
+          return;
+        }
+
+        const userTrigger = event.target.closest("[data-create-user]");
+        if (userTrigger) {
+          openScopedPopup(userPopup, "[data-create-user-popup]", userTrigger);
+          return;
+        }
+
+        const botTrigger = event.target.closest("[data-create-bot]");
+        if (botTrigger) {
+          const overlay = document.querySelector("[data-create-bot-popup]");
+          const select = overlay?.querySelector('select[name="account_id"]');
+          if (select) {
+            let accounts = [];
+            try {
+              accounts = JSON.parse(botTrigger.dataset.accounts || "[]");
+            } catch (error) {
+              accounts = [];
+            }
+            select.innerHTML = accounts
+              .map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`)
+              .join("");
+          }
+          openScopedPopup(botPopup, "[data-create-bot-popup]", botTrigger);
+        }
+      });
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+    })();

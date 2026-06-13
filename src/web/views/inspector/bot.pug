@@ -20,6 +20,8 @@ block content
     const primary_instagram_channel = instagram_channel_rows[0] || {};
     const human_group_options = Array.isArray(human_groups) ? human_groups : [];
     const human_group_options_json = JSON.stringify(human_group_options).replace(/</g, "\\u003c");
+    const is_system_bot = (bot?.bot_type || identity.type) === "system";
+    const expected_knowledge = definition.expected_knowledge || "";
     const assigned_knowledge_sources = Array.isArray(knowledge_sources) ? knowledge_sources : [];
     const all_knowledge_sources = Array.isArray(available_knowledge_sources) ? available_knowledge_sources : [];
     const knowledge_ids = Array.isArray(definition.knowledge_source_ids) ? definition.knowledge_source_ids : [];
@@ -185,6 +187,27 @@ block content
         .popup__footer
           button.secondary-button(type="button", data-popup-close) Cerrar
 
+    //- Knowledge Center embebido (iframe de la página real) para crear/editar
+    //- knowledge sin salir del editor. Al cerrarse, el picker "Asignar knowledge"
+    //- y la tabla de asignados se re-leen del server (altas/bajas hechas adentro).
+    //- Solo bots custom: los de sistema no usan knowledge de cuenta.
+    unless is_system_bot
+      #knowledge_center_popup.popup-overlay(
+        data-popup-overlay,
+        data-popup-overlay-close="true",
+        data-knowledge-center-popup,
+        data-autosave-ignore
+      )
+        .popup.popup--full.popup--default
+          .popup__header
+            .popup__header-text
+              h3.popup__title Knowledge Center
+              .popup__subtitle Crea y edita knowledge sin salir del editor.
+            a.button.secondary-button(href=`/inspector/accounts/${bot.account_id}/knowledge`, target="_blank", rel="noreferrer") Abrir en página
+            button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
+          .popup__body.popup__body--frame
+            iframe#knowledge_center_frame(data-src=`/inspector/accounts/${bot.account_id}/knowledge`, title="Knowledge Center")
+
     form(method="post", action=`/inspector/bots/${bot.id}`, id="bot-editor")
       div.bot-editor-tab-shell.wamy-tabs
         div#bot-editor-tabs.tabs(data-initial-tab="identidad", role="tablist", aria-label="Editor de bot")
@@ -278,50 +301,77 @@ block content
           span#instrucciones_counter.char-counter(aria-hidden="true")
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="knowledge", hidden)
-        div.section-title
-          +section_head("book", "Knowledge", "Fuentes de conocimiento que el agente puede usar para responder.")
-          a.button(href=`/inspector/knowledge?organization_id=${bot.organization_id}&account_id=${bot.account_id}`) Ir a Knowledge Center
-        div.inline-add-row
-          if addable_knowledge_sources.length
-            select#knowledge_source_picker
-              option(value="") Selecciona knowledge existente
-              each source in addable_knowledge_sources
-                option(value=source.id, data-name=source.name, data-type=source.source_type, data-status=source.status, data-summary=source.summary || "")= source.name
-            button#add_knowledge_source(type="button") Asignar knowledge
-          else
-            select(disabled)
-              option Todo el knowledge disponible ya está asignado
-            button(type="button", disabled) Asignar knowledge
-        if assigned_knowledge_sources.length
-          div.table-wrap#assigned_knowledge_table
-            table
-              thead
-                tr
-                  th Fuente
-                  th Tipo
-                  th Estado
-                  th Knowledge
-              tbody
-                each source in assigned_knowledge_sources
-                  tr
-                    td
-                      strong= source.name
-                      if source.description
-                        p.meta= source.description
-                      input(type="hidden", name="knowledge_source_ids", value=source.id)
-                    td= knowledge_type_label(source.source_type)
-                    td
-                      span.status= source.status
-                    td
-                      if source.summary_status
-                        span.status= source.summary_status
-                      if source.summary
-                        p.meta= knowledge_preview(source.summary)
+        if is_system_bot
+          //- Bot de sistema: no asigna knowledge de un negocio. Declara el
+          //- knowledge que un negocio debería proveer al instalar este bot.
+          +section_head("book", "Knowledge esperado", "Este es un bot de sistema: no usa knowledge de un negocio. Describe el knowledge que un negocio debería proveer al instalarlo.")
+          div.field-with-counter
+            label(for="expected_knowledge") Knowledge esperado
+            textarea#expected_knowledge(
+              name="expected_knowledge",
+              rows="8",
+              maxlength="2000",
+              data-char-counter="expected_knowledge_counter",
+              placeholder="Ej. Catálogo de productos con precios, políticas de envío y devoluciones, FAQ de soporte, horarios y ubicaciones."
+            )= expected_knowledge
+            span#expected_knowledge_counter.char-counter(aria-hidden="true")
         else
-          div.empty#knowledge_empty_state Este agente todavía no tiene knowledge asignado. Selecciona una fuente existente o créala en Knowledge Center.
-          div#assigned_knowledge_hidden
-            each knowledge_id in knowledge_ids
-              input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
+          div.section-title
+            +section_head("book", "Knowledge", "Fuentes de conocimiento que el agente puede usar para responder.")
+            a#open_knowledge_center.button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
+          //- Picker y botón siempre presentes (deshabilitados si no hay nada que
+          //- asignar): el popup del Knowledge Center los repobla al cerrarse.
+          div.inline-add-row
+            select#knowledge_source_picker(disabled=!addable_knowledge_sources.length)
+              if addable_knowledge_sources.length
+                option(value="") Selecciona knowledge existente
+                each source in addable_knowledge_sources
+                  option(value=source.id, data-name=source.name, data-type=source.source_type, data-status=source.status, data-summary=source.summary || "")= source.name
+              else
+                option Todo el knowledge disponible ya está asignado
+            button#add_knowledge_source(type="button", disabled=!addable_knowledge_sources.length) Asignar knowledge
+          div#knowledge_assigned_area
+            if assigned_knowledge_sources.length
+              div.table-wrap#assigned_knowledge_table
+                table
+                  thead
+                    tr
+                      th Fuente
+                      th Tipo
+                      th Estado
+                      th Knowledge
+                      th
+                  tbody
+                    each source in assigned_knowledge_sources
+                      tr
+                        td
+                          strong= source.name
+                          if source.description
+                            p.meta= source.description
+                          input(type="hidden", name="knowledge_source_ids", value=source.id)
+                        td= knowledge_type_label(source.source_type)
+                        td
+                          span.status= source.status
+                        td
+                          if source.summary_status
+                            span.status= source.summary_status
+                          if source.summary
+                            p.meta= knowledge_preview(source.summary)
+                        td
+                          button.secondary-button.knowledge-remove(
+                            type="button",
+                            data-id=source.id,
+                            data-name=source.name,
+                            data-type=source.source_type,
+                            data-status=source.status,
+                            data-summary=source.summary || "",
+                            title="Quitar knowledge de este agente"
+                          ) Quitar
+            else
+              div.empty#knowledge_empty_state Este agente todavía no tiene knowledge asignado. Selecciona una fuente existente o créala en Knowledge Center.
+              div#assigned_knowledge_hidden
+                each knowledge_id in knowledge_ids
+                  input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="canales", hidden)
         +section_head("broadcast", "Canales soportados", "Conecta los canales por donde te escriben tus clientes.")
@@ -520,8 +570,10 @@ block content
                 .popup__subtitle Elige una o más interacciones para este agente.
               button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
             .popup__body
+              input#interaction_picker_search.interaction-picker-search(type="search", placeholder="Buscar interacción...", aria-label="Buscar interacción", autocomplete="off")
               div#interaction_picker_list.interaction-picker-list
               div.empty#interaction_picker_empty(hidden) Tienes todas las interacciones conectadas.
+              div.empty#interaction_picker_no_match(hidden) Sin interacciones que coincidan con la búsqueda.
             .popup__footer
               button.secondary-button#interaction_picker_cancel(type="button", data-popup-close) Cancelar
               button#interaction_picker_confirm(type="button", disabled) Agregar seleccionadas
@@ -596,6 +648,8 @@ block content
       const availableInteractions = !{available_interactions_json};
       const interactionPickerList = document.getElementById("interaction_picker_list");
       const interactionPickerEmpty = document.getElementById("interaction_picker_empty");
+      const interactionPickerNoMatch = document.getElementById("interaction_picker_no_match");
+      const interactionPickerSearch = document.getElementById("interaction_picker_search");
       const interactionPickerConfirm = document.getElementById("interaction_picker_confirm");
       const interactionPopup = window.Popup
         ? new window.Popup({ overlay_selector: "[data-interaction-picker-popup]" })
@@ -609,6 +663,24 @@ block content
       document
         .getElementById("open_settings_json")
         ?.addEventListener("click", () => settingsJsonPopup?.open());
+
+      const knowledgeCenterPopup = window.Popup
+        ? new window.Popup({ overlay_selector: "[data-knowledge-center-popup]" })
+        : null;
+      knowledgeCenterPopup?.iniciar();
+      const knowledgeCenterFrame = document.getElementById("knowledge_center_frame");
+
+      // Click simple = popup; con modificador (cmd/ctrl/shift) o sin Popup
+      // disponible se respeta el href y abre la página completa.
+      document.getElementById("open_knowledge_center")?.addEventListener("click", (event) => {
+        if (!knowledgeCenterPopup || !knowledgeCenterFrame) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        if (!knowledgeCenterFrame.getAttribute("src")) {
+          knowledgeCenterFrame.src = knowledgeCenterFrame.dataset.src;
+        }
+        knowledgeCenterPopup.open();
+      });
 
       function renderHumanGroupSelect() {
         const options = humanGroupOptions
@@ -647,8 +719,9 @@ block content
           .map((item) => {
             const iconSvg = interactionIconSvgs[item.type] || "";
             const color = interactionColors[item.type] || { accent: "#116a5b", tint: "#e4f4ef" };
+            const search = `${item.label} ${item.description || ""}`.toLowerCase();
             return `
-              <label class="interaction-pick" style="--ix-accent: ${color.accent}; --ix-tint: ${color.tint};">
+              <label class="interaction-pick" data-search="${escapeHtml(search)}" style="--ix-accent: ${color.accent}; --ix-tint: ${color.tint};">
                 <input type="checkbox" class="interaction-pick-input"
                   data-type="${escapeHtml(item.type)}"
                   data-label="${escapeHtml(item.label)}"
@@ -662,7 +735,25 @@ block content
               </label>`;
           })
           .join("");
+        filterInteractionPickerList();
         updateInteractionPickerConfirm();
+      }
+
+      // Filtra las tarjetas por texto (label + descripción). No toca el estado de
+      // los checkboxes: una marca puede quedar oculta y se agrega igual al confirmar.
+      function filterInteractionPickerList() {
+        if (!interactionPickerList) return;
+        const query = (interactionPickerSearch?.value || "").trim().toLowerCase();
+        const cards = Array.from(interactionPickerList.querySelectorAll(".interaction-pick"));
+        let visible = 0;
+        for (const card of cards) {
+          const match = !query || (card.dataset.search || "").includes(query);
+          card.hidden = !match;
+          if (match) visible += 1;
+        }
+        // "Sin coincidencias" solo cuando hay tarjetas pero el filtro las ocultó todas;
+        // si no hay ninguna addable, manda el estado vacío original.
+        if (interactionPickerNoMatch) interactionPickerNoMatch.hidden = !(cards.length > 0 && visible === 0);
       }
 
       function getOrCreateInteractionGrid() {
@@ -765,9 +856,13 @@ block content
       }
 
       openInteractionButton?.addEventListener("click", () => {
+        if (interactionPickerSearch) interactionPickerSearch.value = "";
         renderInteractionPickerList();
         interactionPopup?.open();
+        interactionPickerSearch?.focus();
       });
+
+      interactionPickerSearch?.addEventListener("input", filterInteractionPickerList);
 
       interactionPickerList?.addEventListener("change", (event) => {
         if (event.target.classList?.contains("interaction-pick-input")) updateInteractionPickerConfirm();
@@ -876,8 +971,6 @@ block content
 
       const knowledgePicker = document.getElementById("knowledge_source_picker");
       const addKnowledgeButton = document.getElementById("add_knowledge_source");
-      const knowledgeHiddenMount = document.getElementById("assigned_knowledge_hidden");
-      const knowledgeEmptyState = document.getElementById("knowledge_empty_state");
 
       function syncKnowledgePicker() {
         if (!knowledgePicker || !addKnowledgeButton) return;
@@ -889,6 +982,75 @@ block content
         }
       }
 
+      // El popup edita knowledge fuera de este form: al cerrarse, picker y tabla
+      // de asignados se re-leen del server para reflejar altas/bajas/renombres.
+      async function refreshKnowledgeFromServer() {
+        try {
+          const response = await fetch(window.location.pathname, { headers: { accept: "text/html" } });
+          if (!response.ok) return;
+          const fresh = new DOMParser().parseFromString(await response.text(), "text/html");
+          const freshPicker = fresh.getElementById("knowledge_source_picker");
+          if (freshPicker && knowledgePicker) {
+            knowledgePicker.innerHTML = freshPicker.innerHTML;
+            knowledgePicker.value = "";
+          }
+          const freshAssigned = fresh.getElementById("knowledge_assigned_area");
+          const assignedArea = document.getElementById("knowledge_assigned_area");
+          if (freshAssigned && assignedArea) {
+            assignedArea.innerHTML = freshAssigned.innerHTML;
+            // Los hidden agregados al form por "Asignar knowledge" ya vienen como
+            // fila del server tras el autosave: quitar el duplicado suelto.
+            document.querySelectorAll('#bot-editor > input[name="knowledge_source_ids"]').forEach((input) => {
+              if (assignedArea.querySelector(`input[name="knowledge_source_ids"][value="${input.value}"]`)) input.remove();
+            });
+          }
+          syncKnowledgePicker();
+        } catch {
+          // Sin red no hay refresh; el picker conserva las opciones actuales.
+        }
+      }
+
+      if (knowledgeCenterPopup) {
+        const closeKnowledgeCenterPopup = knowledgeCenterPopup.close.bind(knowledgeCenterPopup);
+        knowledgeCenterPopup.close = () => {
+          const wasOpen = knowledgeCenterPopup.is_open();
+          closeKnowledgeCenterPopup();
+          if (wasOpen) refreshKnowledgeFromServer();
+        };
+      }
+
+      // Quitar knowledge asignado: delegado en el área (el popup puede reemplazar
+      // su innerHTML, el contenedor persiste). El form completo es la verdad:
+      // sin hidden inputs el autosave persiste la lista vacía.
+      document.getElementById("knowledge_assigned_area")?.addEventListener("click", (event) => {
+        const removeButton = event.target.closest(".knowledge-remove");
+        if (!removeButton) return;
+        const sourceId = removeButton.dataset.id;
+        if (knowledgePicker) {
+          const hasValueOptions = Array.from(knowledgePicker.options).some((option) => option.value);
+          if (!hasValueOptions) {
+            knowledgePicker.innerHTML = '<option value="">Selecciona knowledge existente</option>';
+          }
+          const option = document.createElement("option");
+          option.value = sourceId;
+          option.textContent = removeButton.dataset.name || "Knowledge";
+          option.dataset.name = removeButton.dataset.name || "";
+          option.dataset.type = removeButton.dataset.type || "";
+          option.dataset.status = removeButton.dataset.status || "";
+          option.dataset.summary = removeButton.dataset.summary || "";
+          knowledgePicker.appendChild(option);
+        }
+        document
+          .querySelectorAll(`#bot-editor input[name="knowledge_source_ids"][value="${sourceId}"]`)
+          .forEach((input) => input.remove());
+        removeButton.closest("tr")?.remove();
+        syncKnowledgePicker();
+        window.bot_editor_autosave?.request_save({
+          control: { name: "knowledge_source_ids", tag: "button", value: sourceId },
+          event: { type: "remove_knowledge_source" },
+        });
+      });
+
       addKnowledgeButton?.addEventListener("click", () => {
         const option = knowledgePicker.selectedOptions[0];
         if (!option?.value) return;
@@ -896,8 +1058,10 @@ block content
         hidden.type = "hidden";
         hidden.name = "knowledge_source_ids";
         hidden.value = option.value;
-        (knowledgeHiddenMount || document.getElementById("bot-editor")).appendChild(hidden);
-        knowledgeEmptyState?.remove();
+        // Los mounts viven dentro de #knowledge_assigned_area (que el popup puede
+        // reemplazar): se buscan al momento, no se capturan al cargar.
+        (document.getElementById("assigned_knowledge_hidden") || document.getElementById("bot-editor")).appendChild(hidden);
+        document.getElementById("knowledge_empty_state")?.remove();
         option.remove();
         knowledgePicker.value = "";
         syncKnowledgePicker();

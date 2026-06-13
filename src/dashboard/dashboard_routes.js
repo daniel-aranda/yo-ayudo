@@ -5,6 +5,10 @@ import {
   get_business_dashboard_data,
   get_dashboard_home,
 } from "./dashboard_queries.js";
+import { custom_bot_service, minimal_draft_definition } from "../bots/custom_bot_service.js";
+import { get_bot_by_id } from "../bots/bot_repository.js";
+import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
+import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 
 function require_param(value, name) {
   if (Array.isArray(value)) {
@@ -23,6 +27,14 @@ function require_param(value, name) {
 
 export function register_dashboard_routes(router, dependencies = {}) {
   const pool = dependencies.pool ?? default_pool;
+
+  async function account_in_business(account_id, business_id) {
+    const result = await pool.query("SELECT id FROM accounts WHERE id = $1 AND organization_id = $2 LIMIT 1", [
+      account_id,
+      business_id,
+    ]);
+    return result.rows[0] ?? null;
+  }
 
   router.get("/dashboard", dashboard_auth, async (_request, response, next) => {
     try {
@@ -61,4 +73,130 @@ export function register_dashboard_routes(router, dependencies = {}) {
     },
   );
 
+  // Alta de bot desde el dashboard de la cuenta: custom desde cero (name) o
+  // clonando un bot de sistema como base (source_bot_id). Queda en draft y
+  // aparece en el panel de bots; se configura en el editor del inspector.
+  router.post(
+    "/dashboard/business/:business_id/accounts/:account_id/bots",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const business_id = require_param(request.params.business_id, "business_id");
+        const account_id = require_param(request.params.account_id, "account_id");
+
+        if (!(await account_in_business(account_id, business_id))) {
+          response.status(404).send("La cuenta no existe en este negocio.");
+          return;
+        }
+
+        const bot_creator = new custom_bot_service({ pool });
+        const source_bot_id = String(request.body?.source_bot_id ?? "").trim();
+        const name = String(request.body?.name ?? "").trim();
+
+        if (source_bot_id) {
+          const source_bot = await get_bot_by_id(pool, source_bot_id);
+
+          if (!source_bot || source_bot.bot_type !== "system") {
+            response.status(400).send("El bot de sistema seleccionado no existe.");
+            return;
+          }
+
+          await bot_creator.clone_bot({ account_id, source_bot, name });
+        } else {
+          if (!name) {
+            response.status(400).send("Falta el nombre del bot.");
+            return;
+          }
+
+          await bot_creator.create_custom_bot({
+            account_id,
+            name,
+            slug: await bot_creator.unique_slug_for(account_id, name),
+            status: "draft",
+            definition_json: minimal_draft_definition(name),
+          });
+        }
+
+        response.redirect(`/dashboard/business/${business_id}/accounts/${account_id}#panel-bots`);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  // Alta de canal desde el dashboard de la cuenta. Hoy solo WhatsApp (número +
+  // phone_number_id de Meta, con bot opcional para conectarlo de una vez);
+  // Instagram llegará vía OAuth y el endpoint lo rechaza explícitamente.
+  router.post(
+    "/dashboard/business/:business_id/accounts/:account_id/channels",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const business_id = require_param(request.params.business_id, "business_id");
+        const account_id = require_param(request.params.account_id, "account_id");
+
+        if (!(await account_in_business(account_id, business_id))) {
+          response.status(404).send("La cuenta no existe en este negocio.");
+          return;
+        }
+
+        const channel_type = String(request.body?.channel_type ?? "").trim();
+
+        if (channel_type !== "whatsapp") {
+          response.status(400).send("Canal no soportado todavía.");
+          return;
+        }
+
+        const display_phone_number = String(request.body?.display_phone_number ?? "").trim();
+        const phone_number_id = String(request.body?.phone_number_id ?? "").trim();
+
+        if (!display_phone_number || !phone_number_id) {
+          response.status(400).send("Faltan el número de WhatsApp o el ID del número en Meta.");
+          return;
+        }
+
+        // El upsert es por phone_number_id: si ya existe en OTRA cuenta, dar de
+        // alta aquí lo re-parentaría (robaría el canal). Se bloquea explícito.
+        const existing = await pool.query("SELECT account_id FROM whatsapp_phone_numbers WHERE phone_number_id = $1 LIMIT 1", [
+          phone_number_id,
+        ]);
+
+        if (existing.rows[0] && existing.rows[0].account_id !== account_id) {
+          response.status(400).send("Ese ID de número ya está dado de alta en otra cuenta.");
+          return;
+        }
+
+        const channel = await upsert_whatsapp_phone_number(pool, {
+          organization_id: business_id,
+          account_id,
+          phone_number_id,
+          display_phone_number,
+          status: "active",
+        });
+
+        const bot_id = String(request.body?.bot_id ?? "").trim();
+
+        if (bot_id) {
+          const bot = await get_bot_by_id(pool, bot_id);
+
+          if (!bot || bot.account_id !== account_id) {
+            response.status(400).send("El bot seleccionado no pertenece a esta cuenta.");
+            return;
+          }
+
+          await assign_bot_to_whatsapp_phone_number(pool, {
+            organization_id: business_id,
+            account_id,
+            whatsapp_phone_number_id: channel.id,
+            bot_id: bot.id,
+            metadata_json: { source: "account_dashboard" },
+          });
+        }
+
+        response.redirect(`/dashboard/business/${business_id}/accounts/${account_id}#panel-canales`);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 }

@@ -27,3 +27,8 @@ block content
               td= business.bot_count
               td
                 a.button(href=`/dashboard/business/${business.id}`) Abrir
+
+  if hidden_business_count
+    p.meta
+      = `${hidden_business_count} negocio${hidden_business_count === 1 ? "" : "s"} pausado${hidden_business_count === 1 ? "" : "s"} o archivado${hidden_business_count === 1 ? "" : "s"} no se muestra${hidden_business_count === 1 ? "" : "n"} aquí. `
+      a(href="/admin/businesses") Gestionarlos en Admin

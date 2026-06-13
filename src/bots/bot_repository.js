@@ -30,7 +30,7 @@ export async function upsert_bot(pool, input) {
       )
       VALUES (
         $1, $2, $3, $4, $5, COALESCE($6, 'whatsapp'),
-        COALESCE($7, 'system'), COALESCE($8, 'active'), $9,
+        COALESCE($7, 'custom'), COALESCE($8, 'active'), $9,
         $10::jsonb, $11::jsonb, COALESCE($12, 1), $13,
         $14, $15::jsonb, $16::jsonb, $17::jsonb,
         $18, $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb, COALESCE($25, true)
@@ -69,7 +69,10 @@ export async function upsert_bot(pool, input) {
       input.name,
       input.slug,
       input.channel ?? "whatsapp",
-      input.bot_type ?? "system",
+      // bot_type es PROCEDENCIA (quién crea/mantiene el bot), nunca capacidad:
+      // "system" = lo mantiene la plataforma, "custom" = lo creó un usuario.
+      // El runtime no debe branchear por bot_type. Default: custom (lo normal).
+      input.bot_type ?? "custom",
       input.status ?? "active",
       input.description ?? null,
       JSON.stringify(input.settings_json ?? {}),

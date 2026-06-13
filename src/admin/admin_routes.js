@@ -2,7 +2,7 @@ import { config } from "../app/config.js";
 import { pool } from "../db/client.js";
 import { get_integrations_admin_view } from "./admin_integrations_service.js";
 import { get_interactions_admin_view } from "./admin_interactions_service.js";
-import { get_bots_admin_view } from "./admin_bots_service.js";
+import { get_bots_admin_view, move_bot_to_account } from "./admin_bots_service.js";
 import { get_businesses_admin_view } from "./admin_businesses_service.js";
 import { available_agent_interactions } from "../inspector/inspector_repository.js";
 import { upsert_interaction_setting } from "../interactions/interaction_settings_repository.js";
@@ -14,6 +14,10 @@ import {
   slugify,
 } from "../organizations/organization_repository.js";
 import { upsert_account } from "../accounts/account_repository.js";
+import { custom_bot_service, minimal_draft_definition } from "../bots/custom_bot_service.js";
+import { get_bot_by_id, update_bot_status } from "../bots/bot_repository.js";
+import { create_user } from "../auth/user_repository.js";
+import { hash_password, MIN_PASSWORD_LENGTH } from "../auth/password_service.js";
 
 // Same internal gating as the inspector: 404 when disabled, token-protected in
 // production. Open in local development.
@@ -72,6 +76,9 @@ export function register_admin_routes(router, dependencies = {}) {
       const since_hours = Number.parseInt(request.query.since_hours, 10);
       const view = await get_bots_admin_view(route_pool, {
         since_hours: Number.isFinite(since_hours) && since_hours > 0 ? since_hours : undefined,
+        q: request.query.q,
+        type: request.query.type,
+        include_archived: request.query.archived === "1",
       });
       response.render("admin/bots", view);
     } catch (error) {
@@ -79,9 +86,63 @@ export function register_admin_routes(router, dependencies = {}) {
     }
   });
 
-  router.get("/admin/businesses", admin_auth, async (_request, response, next) => {
+  // Cambiar estado de un bot (activar / pausar a borrador / archivar).
+  router.post("/admin/bots/:bot_id/status", admin_auth, async (request, response, next) => {
     try {
-      response.render("admin/businesses", await get_businesses_admin_view(route_pool));
+      const status = String(request.body?.status ?? "");
+
+      if (!["draft", "active", "archived"].includes(status)) {
+        response.status(400).send("Estado inválido");
+        return;
+      }
+
+      const updated = await update_bot_status(route_pool, { bot_id: request.params.bot_id, status });
+
+      if (!updated) {
+        response.status(404).send("El bot no existe.");
+        return;
+      }
+
+      response.redirect("/admin/bots");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Clonar un bot (system o custom) como copia custom en draft dentro de SU
+  // cuenta, y abrir el editor de la copia.
+  router.post("/admin/bots/:bot_id/clone", admin_auth, async (request, response, next) => {
+    try {
+      const source = await get_bot_by_id(route_pool, request.params.bot_id);
+
+      if (!source) {
+        response.status(404).send("El bot no existe.");
+        return;
+      }
+
+      const bot_creator = new custom_bot_service({ pool: route_pool });
+      const clone = await bot_creator.clone_bot({
+        account_id: source.account_id,
+        source_bot: source,
+        name: `${source.name} (copia)`,
+      });
+
+      response.redirect(`/inspector/bots/${clone.id}`);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/businesses", admin_auth, async (request, response, next) => {
+    try {
+      response.render(
+        "admin/businesses",
+        await get_businesses_admin_view(route_pool, {
+          q: request.query.q,
+          page: request.query.page,
+          per_page: request.query.per_page,
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -126,6 +187,93 @@ export function register_admin_routes(router, dependencies = {}) {
       await upsert_account(route_pool, { organization_id, name, slug: slugify(name) });
       response.redirect("/admin/businesses");
     } catch (error) {
+      next(error);
+    }
+  });
+
+  // Mover bot entre cuentas: solo bots sin historial ni canales (la guarda vive
+  // en move_bot_to_account). Cubre el caso "lo creé en la cuenta equivocada".
+  router.post("/admin/bots/:bot_id/move", admin_auth, async (request, response, next) => {
+    try {
+      const result = await move_bot_to_account(route_pool, {
+        bot_id: request.params.bot_id,
+        account_id: String(request.body?.account_id ?? "").trim(),
+      });
+
+      if (result.error) {
+        response.status(result.error === "bot_not_found" ? 404 : 400).send(result.message);
+        return;
+      }
+
+      response.redirect("/admin/bots");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Alta mínima de bot desde admin: crea un bot custom en draft con defaults y
+  // manda directo al editor del inspector para configurarlo (ahí se renombra,
+  // se le da objetivo, knowledge e interacciones; el editor autosavea).
+  router.post("/admin/bots", admin_auth, async (request, response, next) => {
+    try {
+      const account_id = String(request.body?.account_id ?? "").trim();
+      const name = String(request.body?.name ?? "").trim();
+      if (!account_id || !name) {
+        response.status(400).send("Falta la cuenta o el nombre del bot");
+        return;
+      }
+
+      const bot_creator = new custom_bot_service({ pool: route_pool });
+      const bot = await bot_creator.create_custom_bot({
+        account_id,
+        name,
+        slug: await bot_creator.unique_slug_for(account_id, name),
+        status: "draft",
+        definition_json: minimal_draft_definition(name),
+      });
+
+      response.redirect(`/inspector/bots/${bot.id}`);
+    } catch (error) {
+      if (error.message?.startsWith("Account not found")) {
+        response.status(400).send("La cuenta no existe");
+        return;
+      }
+      next(error);
+    }
+  });
+
+  // Usuarios de negocio: loguean (AUTH_ENABLED) y solo ven su dashboard.
+  router.post("/admin/users", admin_auth, async (request, response, next) => {
+    try {
+      const organization_id = String(request.body?.organization_id ?? "").trim();
+      const name = String(request.body?.name ?? "").trim();
+      const email = String(request.body?.email ?? "").trim();
+      const password = String(request.body?.password ?? "");
+
+      if (!organization_id || !name || !email || !password) {
+        response.status(400).send("Faltan datos del usuario (negocio, nombre, email y contraseña).");
+        return;
+      }
+
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        response.status(400).send(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+        return;
+      }
+
+      await create_user(route_pool, {
+        organization_id,
+        name,
+        email,
+        role: "member",
+        password_hash: hash_password(password),
+      });
+
+      response.redirect("/admin/businesses");
+    } catch (error) {
+      if (error.code === "user_email_taken" || error.code === "user_missing_fields") {
+        response.status(400).send(error.message);
+        return;
+      }
       next(error);
     }
   });

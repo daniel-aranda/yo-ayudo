@@ -19,6 +19,10 @@ html(lang="es")
     title YoAyudo
     link(rel="stylesheet", href="/public/css/dashboard.css")
   body
+    //- Una página cargada dentro de un iframe (p. ej. el Knowledge Center en el
+    //- popup del editor de bot) esconde el topbar: el host ya pone el chrome.
+    script.
+      if (window.self !== window.top) document.documentElement.classList.add("is-framed");
     -
       const nav_active = typeof active_nav !== "undefined" ? active_nav : "";
       const nav_ctx = (typeof nav_context !== "undefined" && nav_context) ? nav_context : null;
@@ -26,12 +30,22 @@ html(lang="es")
       // Admin stays global on purpose.
       const ctx_qs = nav_ctx ? `?business=${nav_ctx.business_id}&account=${nav_ctx.account_id}` : "";
       const dashboard_href = nav_ctx ? `/dashboard/business/${nav_ctx.business_id}/accounts/${nav_ctx.account_id}` : "/dashboard";
+      // Con auth activo: un usuario de negocio solo ve su dashboard; las
+      // herramientas internas (Inspector/Review/Admin) son del owner.
+      const session_user = (typeof current_user !== "undefined" && current_user) ? current_user : null;
+      const is_business_user = Boolean(session_user && !session_user.is_platform_owner);
+      const member_home = is_business_user && session_user.organization_id ? `/dashboard/business/${session_user.organization_id}` : null;
     header.topbar
-      a.brand(href="/dashboard") YoAyudo
+      a.brand(href=member_home || "/dashboard") YoAyudo
       nav.nav
-        a(href=dashboard_href, class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
-        a(href=`/inspector${ctx_qs}`, class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
-        a(href=`/review${ctx_qs}`, class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
-        a(href="/admin/integrations", class=(nav_active === "admin" ? "is-active" : ""), aria-current=(nav_active === "admin" ? "page" : false)) Admin
+        a(href=member_home || dashboard_href, class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
+        unless is_business_user
+          a(href=`/inspector${ctx_qs}`, class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
+          a(href=`/review${ctx_qs}`, class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
+          a(href="/admin/integrations", class=(nav_active === "admin" ? "is-active" : ""), aria-current=(nav_active === "admin" ? "page" : false)) Admin
+        if session_user
+          form.nav-logout(method="post", action="/logout")
+            span.nav-user= session_user.name
+            button.secondary-button(type="submit") Salir
     main.container
       block content

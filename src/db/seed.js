@@ -1,6 +1,5 @@
 import pg from "pg";
 import { config } from "../app/config.js";
-import { upsert_account as upsert_account_record } from "../accounts/account_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { upsert_bot as upsert_bot_record } from "../bots/bot_repository.js";
 import { create_action_audit_log } from "../actions/action_audit_repository.js";
@@ -12,6 +11,7 @@ import {
 } from "../channels/instagram/instagram_account_repository.js";
 import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
+import { hash_password } from "../auth/password_service.js";
 import { memory_document_service } from "../memory/memory_document_service.js";
 
 const yoayudo_sales_knowledge = `
@@ -333,7 +333,7 @@ async function upsert_bot_profile(pool, account_id, organization_id, solution_te
   return bot_profile_id;
 }
 
-async function upsert_organization(pool) {
+export async function upsert_organization(pool, { id } = {}) {
   await pool.query(
     `
       UPDATE organizations
@@ -342,17 +342,28 @@ async function upsert_organization(pool) {
     `,
   );
 
-  const result = await pool.query(
+  // Negocio oficial estable: si ya existe por slug se conserva su id (no churn);
+  // si no, se crea con el id de env (cuando viene) para que sea fijo por entorno.
+  const existing = await pool.query("SELECT id FROM organizations WHERE slug = 'yoayudo-demo' LIMIT 1");
+
+  if (existing.rows[0]) {
+    await pool.query(
+      "UPDATE organizations SET name = 'YoAyudo Demo', status = 'active', updated_at = now() WHERE id = $1",
+      [existing.rows[0].id],
+    );
+    return existing.rows[0].id;
+  }
+
+  const inserted = await pool.query(
     `
-      INSERT INTO organizations (name, slug, status)
-      VALUES ('YoAyudo Demo', 'yoayudo-demo', 'active')
-      ON CONFLICT (slug)
-      DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, updated_at = now()
+      INSERT INTO organizations (id, name, slug, status)
+      VALUES (COALESCE($1, gen_random_uuid()), 'YoAyudo Demo', 'yoayudo-demo', 'active')
       RETURNING id
     `,
+    [id ?? null],
   );
 
-  return result.rows[0].id;
+  return inserted.rows[0].id;
 }
 
 async function archive_legacy_demo_entities(pool, organization_id) {
@@ -375,7 +386,7 @@ async function archive_legacy_demo_entities(pool, organization_id) {
   );
 }
 
-async function upsert_account(pool, organization_id) {
+export async function upsert_account(pool, organization_id, { id } = {}) {
   const existing = await pool.query(
     `
       SELECT *
@@ -406,14 +417,17 @@ async function upsert_account(pool, organization_id) {
     return updated.rows[0].id;
   }
 
-  const account = await upsert_account_record(pool, {
-    organization_id,
-    name: "YoAyudo Ventas",
-    slug: "yoayudo-ventas",
-    status: "active",
-  });
+  // Cuenta oficial estable: id de env cuando viene (fijo por entorno), uuid si no.
+  const inserted = await pool.query(
+    `
+      INSERT INTO accounts (id, organization_id, name, slug, status)
+      VALUES (COALESCE($1, gen_random_uuid()), $2, 'YoAyudo Ventas', 'yoayudo-ventas', 'active')
+      RETURNING id
+    `,
+    [id ?? null, organization_id],
+  );
 
-  return account.id;
+  return inserted.rows[0].id;
 }
 
 async function upsert_bot(pool, input) {
@@ -1642,12 +1656,51 @@ export async function seed_routed_demo_conversation(pool, { account_id, organiza
   }
 }
 
+// Usuarios de desarrollo para AUTH_ENABLED: el owner de la plataforma (ve todo)
+// y un usuario del negocio demo (solo ve su dashboard). Idempotente por email.
+async function seed_auth_users(pool, { organization_id }) {
+  const seed_users = [
+    {
+      email: "owner@yoayudo.local",
+      name: "Owner YoAyudo",
+      role: "owner",
+      is_platform_owner: true,
+      organization_id: null,
+      password: "yoayudo-owner",
+    },
+    {
+      email: "demo@yoayudo.local",
+      name: "Usuario Demo",
+      role: "member",
+      is_platform_owner: false,
+      organization_id,
+      password: "yoayudo-demo",
+    },
+  ];
+
+  for (const user of seed_users) {
+    const existing = await pool.query("SELECT id FROM users WHERE email = $1 LIMIT 1", [user.email]);
+
+    if (existing.rows[0]) {
+      continue;
+    }
+
+    await pool.query(
+      `
+        INSERT INTO users (organization_id, name, email, role, status, password_hash, is_platform_owner)
+        VALUES ($1, $2, $3, $4, 'active', $5, $6)
+      `,
+      [user.organization_id, user.name, user.email, user.role, hash_password(user.password), user.is_platform_owner],
+    );
+  }
+}
+
 export async function seed_development_data(pool) {
   await ensure_seed_schema(pool);
   const solution_template_id = await upsert_solution_template(pool);
-  const organization_id = await upsert_organization(pool);
+  const organization_id = await upsert_organization(pool, { id: config.yoayudo_business_id });
   await archive_legacy_demo_entities(pool, organization_id);
-  const account_id = await upsert_account(pool, organization_id);
+  const account_id = await upsert_account(pool, organization_id, { id: config.yoayudo_account_id });
   const bot_profile_id = await upsert_bot_profile(pool, account_id, organization_id, solution_template_id);
   await update_legacy_yoayudo_seed_knowledge(pool, { organization_id, account_id });
   const yoayudo_knowledge_source_id = await upsert_yoayudo_sales_knowledge_source(pool, {
@@ -1773,6 +1826,8 @@ export async function seed_development_data(pool) {
         AND bots.organization_id <> accounts.organization_id
     `,
   );
+
+  await seed_auth_users(pool, { organization_id });
 
   logger.info({ organization_id, account_id, bot_id, yoayudo_commercial_bot_id }, "development seed complete");
   return { solution_template_id, bot_profile_id, organization_id, account_id, bot_id, yoayudo_commercial_bot_id };

@@ -1,0 +1,17 @@
+extends layout
+
+block content
+  section.login-card.panel
+    p.page-eyebrow YoAyudo
+    h1 Iniciar sesión
+    p.meta Entra con tu email para ver el dashboard de tu negocio.
+    if error_message
+      div.empty= error_message
+    form(method="post", action="/login")
+      input(type="hidden", name="next", value=next_url || "")
+      label(for="login_email") Email
+      input#login_email(type="email", name="email", autocomplete="email", required, autofocus)
+      label(for="login_password") Contraseña
+      input#login_password(type="password", name="password", autocomplete="current-password", required)
+      div.form-actions
+        button(type="submit") Entrar

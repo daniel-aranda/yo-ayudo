@@ -53,6 +53,7 @@ Antes de cerrar o hacer commit de una tarea, deja el folder al 100%:
 - Si una capacidad modifica el mundo, debe ser Action.
 - En la UI no hay lista separada de "Acciones del bot": todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`.
 - No usar `tenant` ni `branch`: el modelo es organization (negocio) -> account (cuenta) -> bot.
+- `bot_type` (`system`/`custom`) es PROCEDENCIA, no capacidad: `system` = lo crea/mantiene la plataforma; `custom` = lo creo un usuario (default). Prohibido branchear runtime por `bot_type`; el motor ejecuta ambos igual.
 - Si una accion no existe, no esta habilitada, no tiene proveedor o no puede ejecutarse, registrar guardrail event.
 - No fingir ejecuciones de AI.
 - No duplicar reglas de negocio dentro de subagentes.

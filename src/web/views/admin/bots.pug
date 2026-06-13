@@ -12,6 +12,31 @@ block content
       { hours: 168, label: "7 días" },
       { hours: 720, label: "30 días" },
     ];
+    const bots_query = (hours) => {
+      const params = new URLSearchParams();
+      params.set("since_hours", String(hours));
+      if (filters.q) params.set("q", filters.q);
+      if (filters.type !== "system") params.set("type", filters.type);
+      if (filters.include_archived) params.set("archived", "1");
+      return `/admin/bots?${params.toString()}`;
+    };
+    const type_label = (value) => (value === "system" ? "Sistema" : value === "custom" ? "Personalizado" : value);
+    const filters_active = Boolean(filters.q) || filters.type !== "system" || filters.include_archived;
+    const toggle_archived_href = (() => {
+      const params = new URLSearchParams();
+      params.set("since_hours", String(current_hours));
+      if (filters.q) params.set("q", filters.q);
+      if (filters.type !== "system") params.set("type", filters.type);
+      if (!filters.include_archived) params.set("archived", "1");
+      return `/admin/bots?${params.toString()}`;
+    })();
+    const svg_open = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+    const action_icons = {
+      play: `${svg_open}<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5L10 15.5z" fill="currentColor" stroke="none"/></svg>`,
+      pause: `${svg_open}<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></svg>`,
+      archive: `${svg_open}<rect x="3.5" y="4.5" width="17" height="4.5" rx="1"/><path d="M5.5 9v9a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V9"/><path d="M10 12.5h4"/></svg>`,
+      copy: `${svg_open}<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 3h9A1.5 1.5 0 0 1 15.5 4.5V5"/></svg>`,
+    };
 
   .admin-subnav
     a(href="/admin/integrations") Integraciones
@@ -21,12 +46,25 @@ block content
 
   section.page-header
     h1 Bots
-    p= `Todos los bots de la plataforma y su uso · últimos ${days} días`
+    p= `Bots de la plataforma y su uso · últimos ${days} días`
 
   .period-filter
     span.period-filter-label Periodo
     each period in periods
-      a(href=`/admin/bots?since_hours=${period.hours}`, class=(current_hours === period.hours ? "is-active" : ""))= period.label
+      a(href=bots_query(period.hours), class=(current_hours === period.hours ? "is-active" : ""))= period.label
+
+  //- Default: catálogo de bots de sistema vivos. Una sola fila, sin botón:
+  //- filtra solo con escribir o cambiar el tipo. Archivados = link de abajo.
+  section.panel.bots-toolbar
+    form#bots_filter_form.inline-form(method="get", action="/admin/bots")
+      input(type="hidden", name="since_hours", value=current_hours)
+      if filters.include_archived
+        input(type="hidden", name="archived", value="1")
+      input(type="search", name="q", value=filters.q, placeholder="Buscar por nombre, negocio o cuenta", aria-label="Buscar bot")
+      select(name="type", aria-label="Tipo de bot")
+        option(value="system", selected=filters.type === "system") Sistema
+        option(value="custom", selected=filters.type === "custom") Personalizados
+        option(value="all", selected=filters.type === "all") Todos
 
   .metrics
     article.metric
@@ -57,6 +95,7 @@ block content
               th Conversaciones
               th Errores
               th Última actividad
+              th Acciones
           tbody
             each bot in bots
               tr
@@ -65,9 +104,10 @@ block content
                   if bot.description
                     div.meta= bot.description
                 td.meta= `${bot.organization_name} · ${bot.account_name}`
-                td.meta= bot.bot_type
                 td
-                  span(class=`status-pill ${bot.status === "active" ? "status-executed" : "status-pending_provider"}`)= bot.status
+                  span(class=`bot-type-chip is-${bot.bot_type}`)= type_label(bot.bot_type)
+                td
+                  span(class=`status-pill ${bot.status === "active" ? "status-executed" : bot.status === "draft" ? "status-pending_provider" : "status-blocked"}`)= bot.status
                 td= bot.messages
                 td= bot.conversations
                 td
@@ -76,5 +116,43 @@ block content
                   else
                     = 0
                 td.meta= when(bot.last_at)
+                td
+                  .bot-actions
+                    if bot.status !== "active"
+                      form(method="post", action=`/admin/bots/${bot.id}/status`)
+                        input(type="hidden", name="status", value="active")
+                        button.icon-button(type="submit", title="Activar", aria-label=`Activar ${bot.name}`)!= action_icons.play
+                    if bot.status === "active"
+                      form(method="post", action=`/admin/bots/${bot.id}/status`)
+                        input(type="hidden", name="status", value="draft")
+                        button.icon-button(type="submit", title="Pausar (pasa a borrador)", aria-label=`Pausar ${bot.name}`)!= action_icons.pause
+                    if bot.status !== "archived"
+                      form(method="post", action=`/admin/bots/${bot.id}/status`)
+                        input(type="hidden", name="status", value="archived")
+                        button.icon-button(type="submit", title="Archivar", aria-label=`Archivar ${bot.name}`)!= action_icons.archive
+                    form(method="post", action=`/admin/bots/${bot.id}/clone`)
+                      button.icon-button(type="submit", title="Clonar (copia custom en borrador)", aria-label=`Clonar ${bot.name}`)!= action_icons.copy
+    else if filters_active
+      .empty Sin bots que coincidan con los filtros.
     else
       .empty Sin bots registrados.
+
+  //- Archivados fuera de la vista por default; un link discreto los trae.
+  p.archived-link
+    if filters.include_archived
+      a(href=toggle_archived_href) Ocultar archivados
+    else
+      a(href=toggle_archived_href)= archived_count ? `Ver archivados (${archived_count})` : "Ver archivados"
+
+  script.
+    (() => {
+      const form = document.getElementById("bots_filter_form");
+      if (!form) return;
+      form.querySelector('select[name="type"]')?.addEventListener("change", () => form.submit());
+      const search = form.querySelector('input[name="q"]');
+      let timer;
+      search?.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => form.submit(), 450);
+      });
+    })();

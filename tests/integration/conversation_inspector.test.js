@@ -205,6 +205,7 @@ describe("Conversation Inspector", () => {
     const ids = await pool.query(`
       SELECT
         bots.id AS bot_id,
+        bots.account_id AS account_id,
         conversations.id AS conversation_id,
         messages.id AS message_id
       FROM bots
@@ -243,6 +244,7 @@ describe("Conversation Inspector", () => {
     expect(activity_page.text).toContain("Ejecuciones recientes");
     expect(bot_page.text).toContain("Knowledge");
     expect(bot_page.text).toContain("Ir a Knowledge Center");
+    expect(bot_page.text).toContain(`href="/inspector/accounts/${ids.rows[0].account_id}/knowledge"`);
     expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
     expect(bot_page.text).toContain("Interacciones");
     expect(bot_page.text).toContain("Grupos humanos");
@@ -602,11 +604,9 @@ describe("Conversation Inspector", () => {
     const bot = bot_result.rows[0];
 
     await request(app)
-      .post("/inspector/knowledge")
+      .post(`/inspector/accounts/${bot.account_id}/knowledge`)
       .type("form")
       .send({
-        organization_id: bot.organization_id,
-        account_id: bot.account_id,
         source_type: "text",
         scope: "account",
         name: "Knowledge Founder Test",
@@ -614,10 +614,10 @@ describe("Conversation Inspector", () => {
         content: "YoAyudo ayuda a negocios a operar ventas por WhatsApp.",
       })
       .expect(302)
-      .expect("Location", `/inspector/knowledge?organization_id=${bot.organization_id}&account_id=${bot.account_id}`);
+      .expect("Location", `/inspector/accounts/${bot.account_id}/knowledge`);
 
     await request(app)
-      .get("/inspector/knowledge")
+      .get(`/inspector/accounts/${bot.account_id}/knowledge`)
       .expect(200)
       .expect(/Knowledge Center/)
       .expect(/Agregar knowledge/)
@@ -625,7 +625,11 @@ describe("Conversation Inspector", () => {
       .expect(/Knowledge Founder Test/);
 
     const source = await pool.query("SELECT * FROM knowledge_sources WHERE name = 'Knowledge Founder Test' LIMIT 1");
-    const knowledge_page = await request(app).get("/inspector/knowledge").expect(200);
+
+    expect(source.rows[0].organization_id).toBe(bot.organization_id);
+    expect(source.rows[0].account_id).toBe(bot.account_id);
+
+    const knowledge_page = await request(app).get(`/inspector/accounts/${bot.account_id}/knowledge`).expect(200);
     expect(knowledge_page.text).toContain('id="knowledge_form_panel" hidden');
     expect(knowledge_page.text).toContain('value="text" checked');
     expect(knowledge_page.text).toContain('value="document"');
@@ -635,17 +639,24 @@ describe("Conversation Inspector", () => {
     expect(knowledge_page.text).toContain("Cancelar");
     expect(knowledge_page.text).toContain("Knowledge");
     expect(knowledge_page.text).toContain("Texto");
-    expect(knowledge_page.text).toContain(`/inspector/knowledge/${source.rows[0].id}?organization_id=`);
+    expect(knowledge_page.text).toContain(`action="/inspector/accounts/${bot.account_id}/knowledge"`);
+    expect(knowledge_page.text).toContain(`/inspector/accounts/${bot.account_id}/knowledge/${source.rows[0].id}`);
 
-    const stale_organization_page = await request(app)
+    await request(app)
       .get(`/inspector/knowledge?organization_id=00000000-0000-0000-0000-000000000001&account_id=${bot.account_id}`)
-      .expect(200);
+      .expect(302)
+      .expect("Location", `/inspector/accounts/${bot.account_id}/knowledge`);
 
-    expect(stale_organization_page.text).toContain("Knowledge Founder Test");
-    expect(stale_organization_page.text).toContain(`name="organization_id" value="${bot.organization_id}"`);
+    await request(app)
+      .get(`/inspector/knowledge/${source.rows[0].id}`)
+      .expect(302)
+      .expect("Location", `/inspector/accounts/${bot.account_id}/knowledge/${source.rows[0].id}`);
+
+    const global_knowledge_page = await request(app).get("/inspector/knowledge").expect(200);
+    expect(global_knowledge_page.text).toContain("Knowledge Founder Test");
 
     const knowledge_detail_page = await request(app)
-      .get(`/inspector/knowledge/${source.rows[0].id}?organization_id=${bot.organization_id}&account_id=${bot.account_id}`)
+      .get(`/inspector/accounts/${bot.account_id}/knowledge/${source.rows[0].id}`)
       .expect(200)
       .expect(/Knowledge Founder Test/)
       .expect(/Notas para ventas founder/)
@@ -662,11 +673,9 @@ describe("Conversation Inspector", () => {
     expect(knowledge_detail_page.text).not.toContain("trimmed.match(/^(1)\\s+(.+)$/)");
 
     await request(app)
-      .post(`/inspector/knowledge/${source.rows[0].id}`)
+      .post(`/inspector/accounts/${bot.account_id}/knowledge/${source.rows[0].id}`)
       .type("form")
       .send({
-        organization_id: bot.organization_id,
-        account_id: bot.account_id,
         name: "Knowledge Founder Editado",
         description: "Descripción editada.",
         summary: "Resumen editado.",
@@ -674,7 +683,7 @@ describe("Conversation Inspector", () => {
         summary_status: "ready",
       })
       .expect(302)
-      .expect("Location", `/inspector/knowledge/${source.rows[0].id}?organization_id=${bot.organization_id}&account_id=${bot.account_id}`);
+      .expect("Location", `/inspector/accounts/${bot.account_id}/knowledge/${source.rows[0].id}`);
 
     const edited = await pool.query("SELECT * FROM knowledge_sources WHERE id = $1", [source.rows[0].id]);
     expect(edited.rows[0]).toMatchObject({
@@ -715,6 +724,49 @@ describe("Conversation Inspector", () => {
     expect(updated.rows[0].definition_json.knowledge_source_ids).toContain(source.rows[0].id);
   });
 
+  it("system bots declare expected knowledge (a note) instead of assigning account sources", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot = (await pool.query("SELECT * FROM bots WHERE slug = 'bot-whatsapp-yoayudo' LIMIT 1")).rows[0];
+    expect(bot.bot_type).toBe("system");
+
+    // El tab Knowledge de un bot de sistema muestra la nota de knowledge esperado,
+    // no el picker de fuentes de cuenta ni el link al Knowledge Center.
+    const page = await request(app).get(`/inspector/bots/${bot.id}`).expect(200);
+    expect(page.text).toContain("Knowledge esperado");
+    expect(page.text).toContain('name="expected_knowledge"');
+    // El elemento del picker no se renderiza (la cadena suelta vive en el JS inline,
+    // por eso se valida el markup del elemento, no el texto crudo).
+    expect(page.text).not.toContain('id="knowledge_source_picker"');
+    expect(page.text).not.toContain("Ir a Knowledge Center");
+
+    // La nota se persiste en definition_json.expected_knowledge.
+    await request(app)
+      .post(`/inspector/bots/${bot.id}`)
+      .type("form")
+      .send({
+        name: bot.name,
+        description: bot.description,
+        goal: bot.definition_json.identity.goal,
+        status: bot.status,
+        bot_type: "system",
+        behavior_language: "es-MX",
+        behavior_tone: "friendly",
+        instrucciones_operativas: bot.instrucciones_operativas,
+        constraints_text: Array.isArray(bot.definition_json.behavior.constraints)
+          ? bot.definition_json.behavior.constraints.join("\n")
+          : bot.definition_json.behavior.constraints,
+        expected_knowledge: "Catálogo de productos con precios y políticas de envío.",
+      })
+      .expect(302);
+
+    const updated = await pool.query("SELECT definition_json FROM bots WHERE id = $1", [bot.id]);
+    expect(updated.rows[0].definition_json.expected_knowledge).toBe(
+      "Catálogo de productos con precios y políticas de envío.",
+    );
+    // Sin picker, no se asignan fuentes de cuenta.
+    expect(updated.rows[0].definition_json.knowledge_source_ids).toEqual([]);
+  });
+
   it("uploads document knowledge through the S3 uploader contract", async () => {
     const uploaded_files = [];
     const app = create_inspector_test_app(pool, {
@@ -735,16 +787,14 @@ describe("Conversation Inspector", () => {
     const bot = bot_result.rows[0];
 
     await request(app)
-      .post("/inspector/knowledge")
-      .field("organization_id", bot.organization_id)
-      .field("account_id", bot.account_id)
+      .post(`/inspector/accounts/${bot.account_id}/knowledge`)
       .field("source_type", "document")
       .field("scope", "account")
       .field("name", "Manual de ventas")
       .field("description", "Documento base para ventas.")
       .attach("document_file", Buffer.from("contenido del manual"), "manual-ventas.pdf")
       .expect(302)
-      .expect("Location", `/inspector/knowledge?organization_id=${bot.organization_id}&account_id=${bot.account_id}`);
+      .expect("Location", `/inspector/accounts/${bot.account_id}/knowledge`);
 
     expect(uploaded_files[0].originalname).toBe("manual-ventas.pdf");
 
