@@ -415,7 +415,19 @@ async function process_inbound_message(dependencies, input) {
     resolution.bot_profile?.timezone ?? resolution.account?.timezone ?? "America/Mexico_City",
   );
   const parser = new message_intent_parser(observed_provider);
-  const { intents } = await observed_provider.classify_intents({ text: normalized.normalized_text });
+  // Opt-in por bot: clasificación de intenciones por AI (el provider decide si
+  // puede; mock ignora el flag). En error de AI degradamos a determinístico —
+  // el inbound nunca debe romperse y el fallo queda registrado en ai_calls.
+  const use_ai_classification = Boolean(resolution.bot?.definition_json?.ai?.use_ai_intents);
+  let intents;
+  try {
+    ({ intents } = await observed_provider.classify_intents({ text: normalized.normalized_text, use_ai_classification }));
+  } catch {
+    ({ intents } = await observed_provider.classify_intents({
+      text: normalized.normalized_text,
+      use_ai_classification: false,
+    }));
+  }
   const detected_intents =
     Array.isArray(intents) && intents.length ? intents : [{ intent: "unknown", confidence: 0, reason: "no classification" }];
   // One message can carry several operations. Each detected intent carries its

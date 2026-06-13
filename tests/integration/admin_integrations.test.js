@@ -118,6 +118,55 @@ describe("admin integrations dashboard", () => {
     expect(page.text).toContain("Inactiva");
   });
 
+  it("renders guardrail events with filters, capability-gap rollup, and converts an event into an internal task", async () => {
+    const bot = (await pool.query("SELECT id, account_id, organization_id FROM bots LIMIT 1")).rows[0];
+    await pool.query(
+      `INSERT INTO bot_guardrail_events (organization_id, account_id, bot_id, tipo, action_id, descripcion, severidad, status)
+       VALUES ($1, $2, $3, 'accion_no_disponible', 'enviar_email', 'El bot intentó enviar un email pero no hay handler.', 'alta', 'nuevo')`,
+      [bot.organization_id, bot.account_id, bot.id],
+    );
+    await pool.query(
+      `INSERT INTO bot_guardrail_events (organization_id, account_id, bot_id, tipo, action_id, descripcion, severidad, status)
+       VALUES ($1, $2, $3, 'proveedor_no_configurado', 'enviar_email', 'Proveedor de email no configurado.', 'media', 'nuevo')`,
+      [bot.organization_id, bot.account_id, bot.id],
+    );
+
+    const app = create_admin_test_app(pool);
+    const page = await request(app).get("/admin/guardrails").expect(200);
+    expect(page.text).toContain("Guardrails y capability gaps");
+    expect(page.text).toContain("Capability gaps por acción");
+    expect(page.text).toContain("enviar_email");
+    expect(page.text).toContain("accion_no_disponible");
+
+    // Filtro por acción: solo eventos de esa acción.
+    const filtered = await request(app).get("/admin/guardrails?action_id=enviar_email").expect(200);
+    expect(filtered.text).toContain("enviar_email");
+    // Filtro por tipo inexistente: estado vacío.
+    const empty = await request(app).get("/admin/guardrails?tipo=permiso_insuficiente").expect(200);
+    expect(empty.text).toContain("Sin guardrail events que coincidan");
+
+    // Convertir un evento en tarea interna de backlog.
+    const event = (
+      await pool.query("SELECT event_id FROM bot_guardrail_events WHERE action_id = 'enviar_email' LIMIT 1")
+    ).rows[0];
+    await request(app)
+      .post(`/admin/guardrails/${event.event_id}/task`)
+      .expect(302)
+      .expect("Location", "/admin/guardrails");
+
+    const task = await pool.query(
+      "SELECT * FROM internal_tasks WHERE (metadata_json->>'guardrail_event_id') = $1 LIMIT 1",
+      [event.event_id],
+    );
+    expect(task.rows[0]).toBeTruthy();
+    expect(task.rows[0].titulo).toContain("enviar_email");
+    const updated = await pool.query("SELECT status FROM bot_guardrail_events WHERE event_id = $1", [event.event_id]);
+    expect(updated.rows[0].status).toBe("en_tarea");
+
+    // Evento inexistente → 404.
+    await request(app).post("/admin/guardrails/00000000-0000-0000-0000-000000000099/task").expect(404);
+  });
+
   it("renders the bots admin defaulting to live system bots, with search and type/archived filters", async () => {
     const system_bot = (
       await pool.query("SELECT id, name FROM bots WHERE bot_type = 'system' AND status = 'active' LIMIT 1")

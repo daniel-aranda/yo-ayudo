@@ -526,6 +526,32 @@ button:active {
   margin: 6px 0 0;
 }
 
+/* Opt-in (beta) de clasificación por AI en el editor de bot. */
+.ai-intents-toggle {
+  align-items: flex-start;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+}
+
+.ai-intents-toggle input {
+  accent-color: var(--accent);
+  height: 18px;
+  margin-top: 1px;
+  width: 18px;
+}
+
+.ai-intents-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* Multi-select de grupos humanos: checkboxes en chips que envuelven; el valor
    real (comma-joined) vive en un hidden input que el JS mantiene en sync. */
 .human-group-multi {
@@ -3164,6 +3190,63 @@ button.help-tip:focus-visible::after {
   font-weight: 600;
   padding: 4px 10px;
   white-space: nowrap;
+}
+
+/* Checkbox de auto-aprendizaje en la cola de review. */
+.learn-toggle {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  margin: 0.5rem 0;
+}
+
+.learn-toggle input {
+  accent-color: var(--accent);
+  height: 16px;
+  margin: 0;
+  width: 16px;
+}
+
+/* Capability gaps por acción: chips con conteo (clickeables = filtran). */
+.gap-rollup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0.6rem;
+}
+
+.gap-chip {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px 12px;
+  text-decoration: none;
+}
+
+.gap-chip:hover {
+  border-color: var(--accent);
+}
+
+.gap-chip-name {
+  font-weight: 600;
+}
+
+.gap-chip-count {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 20px;
+  padding: 1px 7px;
+  text-align: center;
 }
 
 .bot-type-chip.is-system {

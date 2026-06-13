@@ -1,0 +1,116 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const sev_class = (s) => (s === "alta" ? "status-blocked" : s === "baja" ? "status-executed" : "status-pending_provider");
+    const filters_active = Boolean(filters.account_id || filters.bot_id || filters.tipo || filters.action_id || filters.status);
+
+  .admin-subnav
+    a(href="/admin/integrations") Integraciones
+    a(href="/admin/interactions") Interacciones
+    a(href="/admin/bots") Bots
+    a(href="/admin/businesses") Negocios
+    a.is-active(href="/admin/guardrails") Guardrails
+
+  section.page-header
+    h1 Guardrails y capability gaps
+    p Lo que los bots intentaron y el engine no pudo ejecutar: capacidades faltantes, no habilitadas o riesgosas. Es backlog de producto.
+
+  section.panel.bots-toolbar
+    form#guardrails_filter_form.inline-form(method="get", action="/admin/guardrails")
+      select(name="account_id", aria-label="Cuenta")
+        option(value="") Todas las cuentas
+        each account in options.accounts
+          option(value=account.id, selected=filters.account_id === account.id)= account.name
+      select(name="bot_id", aria-label="Bot")
+        option(value="") Todos los bots
+        each bot in options.bots
+          option(value=bot.id, selected=filters.bot_id === bot.id)= bot.name
+      select(name="tipo", aria-label="Tipo")
+        option(value="") Todos los tipos
+        each tipo in options.tipos
+          option(value=tipo, selected=filters.tipo === tipo)= tipo
+      select(name="action_id", aria-label="Acción")
+        option(value="") Todas las acciones
+        each action in options.actions
+          option(value=action, selected=filters.action_id === action)= action
+      select(name="status", aria-label="Estado")
+        option(value="") Todos los estados
+        each st in ["nuevo", "en_tarea", "resuelto", "ignorado"]
+          option(value=st, selected=filters.status === st)= st
+      if filters_active
+        a.button.secondary-button(href="/admin/guardrails") Limpiar
+
+  .metrics
+    article.metric
+      span.label Eventos
+      strong= rollup.total
+    article.metric
+      span.label Nuevos
+      strong= rollup.total_new
+    article.metric
+      span.label Tipos distintos
+      strong= rollup.by_tipo.length
+    article.metric
+      span.label Acciones con gaps
+      strong= rollup.by_action.length
+
+  if rollup.by_action.length
+    section.panel
+      h2 Capability gaps por acción
+      p.meta Acciones que los bots pidieron y el engine no pudo ejecutar — prioridad de backlog (handler/proveedor faltante).
+      .gap-rollup
+        each gap in rollup.by_action
+          a.gap-chip(href=`/admin/guardrails?action_id=${gap.value}`)
+            span.gap-chip-name= gap.value
+            span.gap-chip-count= gap.count
+
+  section.panel
+    h2 Eventos
+    if events && events.length
+      .table-wrap
+        table.activity-table
+          thead
+            tr
+              th Cuándo
+              th Negocio / cuenta
+              th Bot
+              th Tipo
+              th Acción
+              th Descripción
+              th Severidad
+              th Estado
+              th
+          tbody
+            each event in events
+              tr
+                td.meta= when(event.created_at)
+                td.meta= event.account_name ? `${event.organization_name || ""} · ${event.account_name}` : "—"
+                td.meta= event.bot_name || "—"
+                td
+                  span.status= event.tipo
+                td.meta= event.action_id || "—"
+                td= event.descripcion
+                td
+                  span(class=`status-pill ${sev_class(event.severidad)}`)= event.severidad
+                td
+                  span.status= event.status
+                td
+                  if event.status === "en_tarea"
+                    span.meta En tarea
+                  else
+                    form(method="post", action=`/admin/guardrails/${event.event_id}/task`)
+                      button.secondary-button(type="submit", title="Crear tarea interna de backlog") Crear tarea
+    else if filters_active
+      .empty Sin guardrail events que coincidan con los filtros.
+    else
+      .empty Sin guardrail events. Cuando un bot intente una acción que no pueda ejecutar, aparecerá aquí.
+
+  script.
+    (() => {
+      const form = document.getElementById("guardrails_filter_form");
+      form?.querySelectorAll("select").forEach((select) => select.addEventListener("change", () => form.submit()));
+    })();

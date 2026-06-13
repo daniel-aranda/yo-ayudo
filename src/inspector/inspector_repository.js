@@ -403,6 +403,11 @@ function builder_definition_from_body(current_definition, body) {
   ).trim();
 
   const selected_ai_model = resolve_ai_model_selection(body, ai);
+  // Opt-in de clasificación por AI en el inbound. `ai_settings_present` marca que
+  // el form describe el estado del checkbox (presente = activado); sin el sentinel
+  // (posts parciales/API) se preserva lo que ya estaba, para no apagarlo por accidente.
+  const use_ai_intents =
+    body.ai_settings_present !== undefined ? body.use_ai_intents !== undefined : Boolean(ai.use_ai_intents);
 
   return {
     identity: {
@@ -421,6 +426,7 @@ function builder_definition_from_body(current_definition, body) {
     ai: {
       provider: selected_ai_model.provider,
       model: selected_ai_model.model,
+      ...(use_ai_intents ? { use_ai_intents: true } : {}),
     },
     knowledge_source_ids: compact_strings(body.knowledge_source_ids),
     // Bots de sistema no asignan fuentes de cuenta; declaran el knowledge que un

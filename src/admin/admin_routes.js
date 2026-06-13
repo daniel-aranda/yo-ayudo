@@ -4,6 +4,7 @@ import { get_integrations_admin_view } from "./admin_integrations_service.js";
 import { get_interactions_admin_view } from "./admin_interactions_service.js";
 import { get_bots_admin_view, move_bot_to_account } from "./admin_bots_service.js";
 import { get_businesses_admin_view } from "./admin_businesses_service.js";
+import { get_guardrails_admin_view } from "./admin_guardrails_service.js";
 import { available_agent_interactions } from "../inspector/inspector_repository.js";
 import { upsert_interaction_setting } from "../interactions/interaction_settings_repository.js";
 import {
@@ -128,6 +129,65 @@ export function register_admin_routes(router, dependencies = {}) {
       });
 
       response.redirect(`/inspector/bots/${clone.id}`);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/guardrails", admin_auth, async (request, response, next) => {
+    try {
+      response.render(
+        "admin/guardrails",
+        await get_guardrails_admin_view(route_pool, {
+          account_id: request.query.account_id,
+          bot_id: request.query.bot_id,
+          tipo: request.query.tipo,
+          action_id: request.query.action_id,
+          status: request.query.status,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Convertir un guardrail event (capability gap) en tarea interna de backlog.
+  router.post("/admin/guardrails/:event_id/task", admin_auth, async (request, response, next) => {
+    try {
+      const event = (
+        await route_pool.query("SELECT * FROM bot_guardrail_events WHERE event_id = $1 LIMIT 1", [request.params.event_id])
+      ).rows[0];
+
+      if (!event) {
+        response.status(404).send("Guardrail event no encontrado");
+        return;
+      }
+
+      const titulo = `Capability gap: ${event.action_id || event.tipo}`;
+      await route_pool.query(
+        `
+          INSERT INTO internal_tasks (
+            organization_id, account_id, bot_id, conversation_id, titulo, descripcion, status, metadata_json
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, 'pendiente', $7::jsonb)
+        `,
+        [
+          event.organization_id ?? null,
+          event.account_id ?? null,
+          event.bot_id ?? null,
+          event.conversation_id ?? null,
+          titulo,
+          event.descripcion,
+          JSON.stringify({ source: "guardrail_event", guardrail_event_id: event.event_id, tipo: event.tipo, action_id: event.action_id }),
+        ],
+      );
+      // El evento queda marcado para no convertirlo dos veces.
+      await route_pool.query(
+        "UPDATE bot_guardrail_events SET status = 'en_tarea', updated_at = now() WHERE event_id = $1",
+        [event.event_id],
+      );
+
+      response.redirect("/admin/guardrails");
     } catch (error) {
       next(error);
     }

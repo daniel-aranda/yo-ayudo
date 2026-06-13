@@ -273,4 +273,70 @@ describe("WhatsApp inbound pipeline", () => {
     expect(events.rows[0].account_id).toBe(row.account_id);
     expect(events.rows[0].details_json.phone_number_bot_assignment_id).toBeTruthy();
   });
+
+  async function enable_ai_intents_on_main_bot() {
+    const bot = (
+      await pool.query("SELECT id, definition_json FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
+    ).rows[0];
+    const definition = {
+      ...bot.definition_json,
+      ai: { ...(bot.definition_json.ai ?? {}), use_ai_intents: true },
+    };
+    await pool.query("UPDATE bots SET definition_json = $2::jsonb WHERE id = $1", [bot.id, JSON.stringify(definition)]);
+  }
+
+  it("passes the per-bot AI opt-in flag to the provider's classify_intents", async () => {
+    await enable_ai_intents_on_main_bot();
+    const flags = [];
+    class spy_provider extends mock_provider {
+      async classify_intents(input) {
+        flags.push(input.use_ai_classification);
+        return super.classify_intents(input);
+      }
+    }
+
+    await handle_whatsapp_webhook_payload(create_simulated_whatsapp_payload({ from: "5215550000000", text: "vendimos 3200" }), {
+      pool,
+      provider: new spy_provider(),
+      whatsapp_client: client,
+      memory_store: new local_memory_store({ base_dir: ".storage/test-memory" }),
+    });
+
+    expect(flags).toContain(true);
+  });
+
+  it("degrades to deterministic classification when AI classification throws (inbound never breaks)", async () => {
+    await enable_ai_intents_on_main_bot();
+    const flags = [];
+    class failing_ai_provider extends mock_provider {
+      async classify_intents(input) {
+        flags.push(input.use_ai_classification);
+        if (input.use_ai_classification) {
+          const error = new Error("AI classifier down");
+          error.code = "openai_request_failed";
+          throw error;
+        }
+        return super.classify_intents(input);
+      }
+    }
+
+    await handle_whatsapp_webhook_payload(
+      create_simulated_whatsapp_payload({ from: "5215550000000", text: "vendimos 3200 hasta ahorita" }),
+      {
+        pool,
+        provider: new failing_ai_provider(),
+        whatsapp_client: client,
+        memory_store: new local_memory_store({ base_dir: ".storage/test-memory" }),
+      },
+    );
+
+    // Intentó AI (true) y, al fallar, degradó a determinístico (false).
+    expect(flags).toEqual([true, false]);
+    // El mensaje igual se procesó: la venta quedó registrada por el camino determinístico.
+    const sales = await pool.query("SELECT * FROM op_sales_updates");
+    expect(sales.rowCount).toBeGreaterThanOrEqual(1);
+    // El fallo de AI quedó registrado en ai_calls (no se ocultó).
+    const failed = await pool.query("SELECT * FROM ai_calls WHERE function_name = 'classify_intents' AND status = 'failed'");
+    expect(failed.rowCount).toBeGreaterThanOrEqual(1);
+  });
 });

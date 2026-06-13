@@ -7,10 +7,8 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
 ## Prioridades
 
 1. Conectar el Prompt Compiler / seleccion de acciones por AI al inbound real.
-   - Hecho: el inbound ya ejecuta operaciones via `execute_action` (auditado) y soporta multi-ejecucion (varias interacciones por mensaje) con NLU deterministico (`classify_intents` + segmentacion). Ver `architecture/bot_engine.md`.
-   - Falta: que el inbound use el prompt compilado + seleccion de acciones por AI (hoy decide por keywords, no por modelo).
-   - Implementar `classify_intents` en el provider OpenAI para multi-intent con lenguaje libre (hoy hace fallback a un solo intent).
-   - Mantener fallback deterministico; empezar con bots opt-in.
+   - Hecho: el inbound ejecuta operaciones via `execute_action` (auditado), multi-ejecucion, y ya **selecciona intenciones/acciones por AI** — `openai_provider.classify_intents` (multi-intent lenguaje libre), **opt-in por bot** (`definition_json.ai.use_ai_intents`, checkbox en el editor), con **fallback deterministico** en error (registrado en `ai_calls`). Ver `architecture/bot_engine.md`.
+   - Falta: usar el **Prompt Compiler completo** en el inbound (hoy solo `test_message` compila prompt) y **extraccion de campos por AI** (hoy los `extract_*` son deterministicos; AI decide la intencion, no los montos).
 
 2. Implementar mas handlers reales para las actions `stub_*`.
    - Hoy solo `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecucion interna real.
@@ -20,9 +18,9 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
    - El editor interno ya permite editar bot configurable, habilitar/deshabilitar actions y editar prompt, reglas y campos.
    - Siguiente paso: generar y ajustar esa configuracion desde una descripcion en lenguaje natural.
 
-4. Crear vista interna de guardrail events/capability gaps.
-   - Filtrar por bot/account/action/tipo.
-   - Convertir eventos en tareas internas.
+4. ~~Crear vista interna de guardrail events/capability gaps.~~ HECHO.
+   - `GET /admin/guardrails`: filtra por account/bot/action/tipo/status + rollup de gaps por accion; `POST /admin/guardrails/:id/task` convierte un evento en tarea interna. Ver `architecture/guardrails.md`.
+   - Auto-aprendizaje: resolver un `review_item` con "Guardar como conocimiento" crea business_knowledge reusable (ver `architecture/memory.md`).
 
 5. Conectar diagnostico -> template -> bot configurable.
    - Usar `bots_recomendados`.

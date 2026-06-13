@@ -58,7 +58,8 @@ La direccion actual es Bot Engine configurable:
 - Action Executor con validacion de schema, permiso por bot, riesgo, confirmacion, audit log y guardrails.
 - Actions con handler real: `buscar_negocios` (prospeccion via Google Places), `guardar_nota`, `crear_tarea`, `generar_resumen`. El resto del registry son stubs `stub_*` de roadmap.
 - Capacidades unificadas como interacciones: el editor ya no tiene una lista separada de "Acciones del bot". Todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`. El prompt compiler inyecta el prompt de cada interaccion en "# Acciones disponibles".
-- Multi-ejecucion en el inbound real: un mensaje de WhatsApp puede disparar varias interacciones. `mock_provider.classify_intents` detecta multiples categorias de operacion y segmenta el texto por keyword; `route_and_dispatch_operations` (en `message_processor.js`) ejecuta cada una via `execute_action` (auditada) y `build_multi_reply` combina la respuesta. Mensajes de una sola operacion se comportan igual que antes. Ver `architecture/bot_engine.md`.
+- Multi-ejecucion en el inbound real: un mensaje de WhatsApp puede disparar varias interacciones. `classify_intents` detecta multiples categorias de operacion y segmenta el texto; `route_and_dispatch_operations` (en `message_processor.js`) ejecuta cada una via `execute_action` (auditada) y `build_multi_reply` combina la respuesta. Mensajes de una sola operacion se comportan igual que antes. Ver `architecture/bot_engine.md`.
+- Clasificacion de intenciones por AI en el inbound (opt-in por bot): `openai_provider.classify_intents` (override) llama al modelo para multi-intent de lenguaje libre; gate `definition_json.ai.use_ai_intents` (checkbox "Interpretar mensajes con AI (beta)" en el editor, sentinel `ai_settings_present` en el builder). `message_processor` pasa `use_ai_classification`; en error de AI degrada a deterministico (keywords del `mock_provider`) y registra el fallo en `ai_calls`. Mock ignora el flag. Extraccion de campos sigue determinista.
 - Visibilidad de interacciones disparadas en el inspector: chips por mensaje en la conversacion (`⚡ N interacciones`), seccion en el trace de mensaje, y panel "Interacciones" en Probar bot. Datos de `action_audit_logs` (via `compact_trace_summary` / `trace_builder.js`) y del `interaction_trace` de `bot_engine_test_service`.
 - Picker de interacciones por popup: agregar interacciones al bot usa un popup de seleccion multiple con descripciones, sobre el componente agnostico `Popup` (`src/web/public/js/core/Popup.js`).
 - Editor de bot server-rendered con tab navigator (Identidad, Conversaciones, Probar, Knowledge, Canales, Interacciones, Restricciones), iconos SVG inline via mixins de Pug y autosave proactivo (`POST /inspector/bots/:bot_id`, indicador "Guardado 3:58pm").
@@ -74,7 +75,7 @@ La direccion actual es Bot Engine configurable:
 - Processing events.
 - Observabilidad de APIs externas: toda llamada a AI (`ai_calls`, con latencia) y a proveedores (`integration_events`, ahora con latencia en google_places/elevenlabs/whatsapp) se registra y se mide; cada ejecucion de accion queda en `action_audit_logs`.
 - Admin de interacciones (`/admin/interactions`, `admin_interactions_service.js`): catalogo + uso real (usos/OK/error/ultimo desde `action_audit_logs`), APIs externas (AI + proveedores, OK/error/latencia), logs recientes unificados, **filtro de periodo** (24h/7d/30d) y tab **Configuración**.
-- Admin de bots global (`/admin/bots`, `admin_bots_service.js`): todos los bots de la plataforma (JOIN a accounts/organizations) con conteos operativos por bot —mensajes, conversaciones, errores (`action_audit_logs` failed/blocked/... + `bot_guardrail_events`) y ultima actividad— y totales arriba; filtro de periodo (24h/7d/30d). El nombre enlaza a `/inspector/bots/:id`. Sub-nav comun entre `/admin/integrations`, `/admin/interactions`, `/admin/bots` y `/admin/businesses`.
+- Admin de bots global (`/admin/bots`, `admin_bots_service.js`): todos los bots de la plataforma (JOIN a accounts/organizations) con conteos operativos por bot —mensajes, conversaciones, errores (`action_audit_logs` failed/blocked/... + `bot_guardrail_events`) y ultima actividad— y totales arriba; filtro de periodo (24h/7d/30d). El nombre enlaza a `/inspector/bots/:id`. Sub-nav comun entre `/admin/integrations`, `/admin/interactions`, `/admin/bots`, `/admin/businesses` y `/admin/guardrails`.
 - Admin de Negocios/Cuentas (`/admin/businesses`, `admin_businesses_service.js`): lista todos los negocios (organizations) y sus cuentas (accounts) en cualquier estado, con conteos por cuenta (bots/canales/conversaciones; el conteo de bots incluye TODOS los status para que un draft recien creado sea visible). Soporta **busqueda** (`?q=` por nombre/slug, case-insensitive) y **paginacion** (`?page=`, `?per_page=` default 100, clamp 10–500; filtro+slice en JS sobre organizations, pg-mem-safe), con colapso/expansion por negocio y global (client-side). Nombre de negocio enlaza a `/dashboard/business/:id` y cada cuenta a su dashboard. Permite **crear negocio**, **crear cuenta**, **crear bot** (draft custom por cuenta via `POST /admin/bots`, redirige al editor del inspector; slug desambiguado para no pisar por el upsert `(account_id, slug)`), **crear usuario** de negocio (login) y **pausar/archivar/activar** negocio/cuenta (status `active`/`paused`/`archived`). Repo `src/organizations/organization_repository.js` (`create_organization`, `set_organization_status`, `set_account_status`, `slugify`) + `upsert_account` + `custom_bot_service.create_custom_bot`.
 - **Auth opcional por negocio** (`src/auth/`, flag `AUTH_ENABLED`, default OFF = cero cambio de comportamiento): login con email+password en `/login` (scrypt nativo de `node:crypto`, cookie HMAC firmada `yoayudo_session`, sin tabla de sesiones — revocar = cambiar `SESSION_SECRET` o desactivar el usuario). Politica (`auth_middleware.js`): el **platform owner** (`is_platform_owner`) ve todo; un **usuario de negocio** solo `/dashboard/business/:su_organization_id` y subrutas — cualquier otra ruta lo regresa a su negocio, y el topbar le esconde Inspector/Review/Admin (solo ve Dashboard + Salir). Publicos: `/login`, `/logout`, `/health`, `/public/`, `/webhooks/` (Meta) e `/internal/` (token propio). En production con auth activo, `SESSION_SECRET` es obligatorio (throw al firmar). Seed crea `owner@yoayudo.local`/`yoayudo-owner` (owner global) y `demo@yoayudo.local`/`yoayudo-demo` (usuario del negocio demo). Esto es control de acceso founder-stage, no auth productivo completo (sin reset de password, sin invitaciones, sin rate-limit de login).
 - Navegacion dashboard explicita Negocio → Cuenta: `/dashboard/business/:id` YA NO redirige a la cuenta primaria; muestra la pagina del negocio con sus cuentas. El home y el visor de conversacion enlazan al negocio; la pagina de cuenta lleva breadcrumb `Dashboard › Negocio › Cuenta` y eyebrow "Cuenta · Negocio: X". Ver `architecture/frontend.md`.
@@ -82,7 +83,7 @@ La direccion actual es Bot Engine configurable:
 - Interaction settings (capa system-level, migracion `0013`, tabla `interaction_settings`, `src/interactions/interaction_settings_repository.js`): habilitar/deshabilitar una interaccion a nivel plataforma y configurar su proveedor (ej. `responder_voz` -> modelo/voz de ElevenLabs). El `action_execution_service` **bloquea** (con guardrail `interaccion_deshabilitada`) cualquier accion cuya interaccion este deshabilitada, sin importar la config por bot; la config fluye al handler (`context.interaction_config`). Es la tercera capa: catalogo estatico (codigo) -> settings system-level -> config por bot (`definition_json.interactions`).
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
-- Tests unitarios e integracion del pipeline, router, memory, inspector, auth y Bot Engine comercial. **122 tests / 28 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope por cuenta de la review queue) y el scope del top nav en `operational_dashboard.test.js`.
+- Tests unitarios e integracion del pipeline, router, memory, inspector, auth, clasificacion por AI, guardrails admin, auto-aprendizaje y Bot Engine comercial. **132 tests / 29 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope + auto-learn) y el scope del top nav en `operational_dashboard.test.js`.
 
 ## Migraciones
 
@@ -116,7 +117,7 @@ Dashboard/review/inspector:
 - `GET /dashboard/business/:business_id`
 - `GET /dashboard/business/:business_id/accounts/:account_id`
 - `GET /review` (`?account=` filtra los pendientes a una cuenta; muestra `.scope-banner` + link de escape)
-- `POST /review/:review_item_id/resolve` (reenvía `business`/`account` para preservar el scope en el redirect)
+- `POST /review/:review_item_id/resolve` (reenvía `business`/`account` para preservar el scope; con `learn` marcado guarda la resolución como business_knowledge reusable — auto-aprendizaje, ver `architecture/memory.md`)
 - `GET /inspector` (`?account=` filtra los bots a una cuenta)
 - `GET /inspector/organizations`
 - `GET /inspector/organizations/:organization_id`
@@ -138,6 +139,7 @@ Admin:
 - `GET /admin/interactions` (catalogo de interacciones + uso + APIs externas + logs; `?since_hours=` y `?tab=config`)
 - `GET /admin/bots` (bots globales con conteos; `?since_hours=`, `?q=` busqueda, `?type=system|custom|all` default system, `?archived=1` para ver archivados)
 - `POST /admin/bots/:bot_id/status` (activar/pausar-a-draft/archivar) · `POST /admin/bots/:bot_id/clone` (copia custom en draft en su cuenta, redirige al editor)
+- `GET /admin/guardrails` (guardrail events / capability gaps filtrable por `?account_id=`/`?bot_id=`/`?tipo=`/`?action_id=`/`?status=`; rollup de gaps por accion) · `POST /admin/guardrails/:event_id/task` (convertir evento en tarea interna)
 - `GET /admin/businesses` (negocios + cuentas + usuarios con conteos y estado; `?q=` busqueda, `?page=`/`?per_page=` paginacion default 100)
 - `POST /admin/businesses` (crear negocio) · `POST /admin/businesses/:id/status` (pausar/archivar/activar)
 - `POST /admin/bots` (crear bot custom en draft para una cuenta; redirige a `/inspector/bots/:id`)
@@ -201,7 +203,7 @@ No hay clases ni branches de codigo para estos templates.
 - UI comercial avanzada para vendedores.
 - UI de alta completa organization/account/numero/bot.
 - Builder LLM de bots desde lenguaje natural.
-- Router LLM real.
+- Router LLM real (el inbound ya clasifica intenciones por AI opt-in, pero el routing entre agentes/subagentes sigue determinista).
 - OCR real.
 - Voz/Twilio real.
 - Bedrock Knowledge Bases real.
@@ -221,7 +223,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 28 archivos, 122 tests (Vitest).
+- `npm test`: OK, 29 archivos, 132 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0016` en orden.
 
 Comandos locales disponibles:

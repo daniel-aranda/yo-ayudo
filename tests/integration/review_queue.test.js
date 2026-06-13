@@ -132,4 +132,78 @@ describe("Review queue", () => {
     expect(scoped_second.text).toContain("Confianza baja Norte");
     expect(scoped_second.text).not.toContain("Confianza baja Centro");
   });
+
+  it("auto-learns a human resolution as reusable business knowledge (opt-out)", async () => {
+    const organization_id = (await pool.query("SELECT id FROM organizations LIMIT 1")).rows[0].id;
+    const { account } = await seed_account_with_review(pool, {
+      organization_id,
+      name: "Sucursal Aprende",
+      slug: "sucursal-aprende",
+      reason: "¿Tienen estacionamiento?",
+    });
+    const item = (await pool.query("SELECT id FROM review_items WHERE account_id = $1 LIMIT 1", [account.id])).rows[0];
+    const app = create_review_test_app(pool);
+
+    // El form de review ofrece el checkbox de aprender (marcado por default).
+    const page = await request(app).get(`/review?account=${account.id}`).expect(200);
+    expect(page.text).toContain('name="learn"');
+    expect(page.text).toContain("Guardar como conocimiento del negocio");
+
+    await request(app)
+      .post(`/review/${item.id}/resolve`)
+      .type("form")
+      .send({ note: "Sí, hay estacionamiento gratis para clientes.", learn: "on" })
+      .expect(302);
+
+    // Quedó como knowledge_source (visible/removible en Knowledge Center) y como
+    // memory_document business_faq (recuperable por el bot).
+    const source = (
+      await pool.query(
+        "SELECT * FROM knowledge_sources WHERE account_id = $1 AND origin = 'learned_from_review' LIMIT 1",
+        [account.id],
+      )
+    ).rows[0];
+    expect(source).toBeTruthy();
+    expect(source.source_family).toBe("business_knowledge");
+
+    const doc = (
+      await pool.query(
+        "SELECT * FROM memory_documents WHERE account_id = $1 AND document_family = 'business_knowledge' AND document_type = 'business_faq' LIMIT 1",
+        [account.id],
+      )
+    ).rows[0];
+    expect(doc).toBeTruthy();
+    expect(doc.content).toContain("estacionamiento gratis");
+
+    // La resolución quedó marcada como aprendida.
+    const resolved = (await pool.query("SELECT resolution_json FROM review_items WHERE id = $1", [item.id])).rows[0];
+    expect(resolved.resolution_json.learned).toBe(true);
+  });
+
+  it("does not learn when the opt-out checkbox is off", async () => {
+    const organization_id = (await pool.query("SELECT id FROM organizations LIMIT 1")).rows[0].id;
+    const { account } = await seed_account_with_review(pool, {
+      organization_id,
+      name: "Sucursal Sin Aprender",
+      slug: "sucursal-sin-aprender",
+      reason: "Pregunta puntual",
+    });
+    const item = (await pool.query("SELECT id FROM review_items WHERE account_id = $1 LIMIT 1", [account.id])).rows[0];
+    const app = create_review_test_app(pool);
+
+    // Sin el campo learn (checkbox desmarcado): se resuelve sin aprender.
+    await request(app)
+      .post(`/review/${item.id}/resolve`)
+      .type("form")
+      .send({ note: "Respuesta única, no generalizable." })
+      .expect(302);
+
+    const source = await pool.query(
+      "SELECT * FROM knowledge_sources WHERE account_id = $1 AND origin = 'learned_from_review'",
+      [account.id],
+    );
+    expect(source.rowCount).toBe(0);
+    const resolved = (await pool.query("SELECT resolution_json FROM review_items WHERE id = $1", [item.id])).rows[0];
+    expect(resolved.resolution_json.learned).toBe(false);
+  });
 });

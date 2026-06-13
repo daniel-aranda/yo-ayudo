@@ -101,6 +101,10 @@ El adapter S3 está preparado, pero no es requerido para desarrollo local.
 
 La regla crítica: no exponer knowledge o memoria de otro account/conversation.
 
+## Auto-aprendizaje desde Review
+
+Cuando un humano resuelve un `review_item` (algo que el bot no pudo) en `/review` con una nota de resolución y el checkbox "Guardar como conocimiento del negocio" (marcado por default, opt-out), el `POST /review/:id/resolve` crea **business_knowledge reusable**: `business_knowledge_service.create_document` con `scope: account`, `document_type: business_faq`, `origin: learned_from_review`, `title` = la pregunta, `content` = `Pregunta: … / Respuesta: …`. Eso crea un `knowledge_source` (visible/removible en el Knowledge Center, `name` = pregunta) **y** un `memory_document` recuperable por `business_knowledge_service.retrieve_relevant_knowledge`. `bot_id` queda null (conocimiento de la cuenta, reusable por cualquier bot); el bot origen va en `metadata_json`. El aprendizaje es no-fatal: si falla, el resolve igual completa (`resolution_json.learned = false`) y se registra en el log.
+
 ## Futuro
 
 Bedrock Knowledge Base, pgvector, OpenSearch o reranking avanzado deben entrar detrás de interfaces, sin reemplazar Postgres como verdad operacional.

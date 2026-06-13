@@ -30,4 +30,7 @@ block content
               input(type="hidden", name="account", value=account_scope.id)
             label(for=`note-${item.id}`) Resolución
             textarea(id=`note-${item.id}`, name="note", rows="3")
+            label.learn-toggle
+              input(type="checkbox", name="learn", checked)
+              span Guardar como conocimiento del negocio (el bot lo reusará)
             button.button(type="submit") Resolver

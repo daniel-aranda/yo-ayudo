@@ -152,5 +152,5 @@ Seed crea:
 - Auth real y control de acceso por organization/account/bot.
 - Paginacion fuerte y filtros completos.
 - Links internos para descargar/ver documentos S3 cuando haya credenciales.
-- Vista dedicada para `bot_guardrail_events` y capability gaps.
+- (Hecho) Vista de `bot_guardrail_events` y capability gaps: `GET /admin/guardrails`.
 - Mejor correlacion de respuestas para outbounds legacy sin `reply_to_message_id`.

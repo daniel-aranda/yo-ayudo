@@ -52,6 +52,10 @@ Estos eventos son backlog de producto. Muestran que capacidades piden los client
 - El bot intenta enviar documento sensible sin permiso: `permiso_insuficiente`.
 - El bot manda input incompleto para OCR: `input_invalido`.
 
+## Vista Interna (Admin)
+
+`GET /admin/guardrails` (`admin_guardrails_service.js` + `admin/guardrails.pug`) es la contraparte de observabilidad de lo que audita el Action Executor: lista `bot_guardrail_events` filtrable por cuenta/bot/tipo/action/status (selects con auto-submit) y un **rollup de capability gaps por acción** (qué acciones pidieron los bots y no se pudieron ejecutar = prioridad de backlog). `POST /admin/guardrails/:event_id/task` convierte un evento en **tarea interna** (`internal_tasks`, `metadata_json.source = guardrail_event`) y marca el evento `status = en_tarea`. Está en el sub-nav de admin.
+
 ## Regla De Producto
 
 Un guardrail no es un fallo silencioso. Es una señal operacional y de producto.

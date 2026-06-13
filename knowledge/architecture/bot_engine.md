@@ -61,17 +61,17 @@ El ciclo de arriba es el contrato. Hoy `execute_action` (la cadena unificada y a
 
 ### Inbound real: multi-ejecucion
 
-El inbound NO usa todavia el Prompt Compiler ni la seleccion de acciones por AI: decide operaciones con NLU deterministico. Pero **si** corre por `execute_action` y soporta **multi-ejecucion** (un mensaje puede disparar mas de una interaccion). Flujo:
+El inbound corre por `execute_action` (auditado) y soporta **multi-ejecucion** (un mensaje puede disparar mas de una interaccion). La **clasificacion de intenciones puede ser por AI** (opt-in por bot) o deterministica por keywords. Flujo:
 
 1. `observed_provider.normalize_message`.
-2. `observed_provider.classify_intents` (multi-intent): detecta cada categoria de operacion presente, deduplica y **segmenta** el texto en los limites de cada keyword para que cada extractor solo vea su propia clausula (evita que el monto de una operacion contamine a otra). El `mock_provider` lo implementa; `observed_provider` hace fallback a un solo intent si el provider no lo implementa (ej. OpenAI hoy).
+2. `observed_provider.classify_intents` (multi-intent): detecta cada categoria de operacion presente, deduplica y **segmenta** el texto para que cada extractor solo vea su propia clausula. **Opt-in por bot** (`definition_json.ai.use_ai_intents`, checkbox "Interpretar mensajes con AI (beta)" en el editor): el `message_processor` pasa `use_ai_classification` al provider. El `openai_provider.classify_intents` (override) llama al modelo cuando el flag esta activo y hay API key; si no, usa el clasificador deterministico por keywords (heredado de `mock_provider`). En **error de AI lanza** y el `message_processor` reintenta deterministico (fallback) — el inbound nunca se rompe y el fallo queda en `ai_calls` (status failed). La **extraccion** de campos por intent sigue siendo deterministica (mock `extract_*`); lo que decide AI es la(s) intencion(es)/accion(es), no los montos.
 3. Por cada intent: `message_intent_parser.parse(segmento, intent)` corre el `extract_*` correspondiente.
 4. `route_and_dispatch_operations` ejecuta cada operacion via `INTENT_TO_OPERATION_ACTION[intent]` + `execute_action`. Cada ejecucion escribe su propio `action_audit_logs` (lo que alimenta los chips de "interacciones disparadas" del inspector).
 5. `build_multi_reply` combina la respuesta de cada operacion en un solo mensaje de WhatsApp.
 
 Ejemplo: "abrimos con 1500, vendimos 3200 y compre 5 kg pastor por 600" -> `registrar_inicio_dia` + `registrar_venta` + `registrar_compra` (3 interacciones, una respuesta combinada). Un mensaje de una sola operacion produce un segmento = texto completo, identico al comportamiento anterior.
 
-Pendiente: conectar el inbound al Prompt Compiler / seleccion de acciones por AI del engine (hoy el inbound es deterministico por keywords).
+Hecho: el inbound ya selecciona intenciones/acciones por AI (opt-in por bot, fallback deterministico). Pendiente: usar el **Prompt Compiler completo** en el inbound (hoy solo `test_message` compila prompt) y extraccion de campos por AI (hoy determinista).
 
 ### Como se deciden las acciones (en `test_message`)
 
