@@ -19,7 +19,17 @@ block content
     +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.business_name, href: `/dashboard/business/${account.organization_id}` }, { label: account.name }])
     section.page-header
       p.page-eyebrow= `Cuenta · Negocio: ${account.business_name}`
-      h1= account.name
+      .page-header-row
+        h1= account.name
+        if sibling_accounts && sibling_accounts.length > 1
+          label.account-switcher
+            span.account-switcher-label Cuenta
+            select#account_switcher(
+              aria-label="Cambiar de cuenta",
+              data-base=`/dashboard/business/${account.organization_id}/accounts/`
+            )
+              each acc in sibling_accounts
+                option(value=acc.id, selected=acc.id === account.id)= acc.name
       if capabilities && capabilities.operational
         p Operación del negocio registrada por WhatsApp
       else
@@ -274,6 +284,13 @@ block content
 
   script.
     (() => {
+      // Switcher de cuenta: navega al dashboard de la cuenta elegida.
+      const accountSwitcher = document.getElementById("account_switcher");
+      accountSwitcher?.addEventListener("change", () => {
+        const base = accountSwitcher.dataset.base || "";
+        if (accountSwitcher.value) window.location.assign(base + accountSwitcher.value);
+      });
+
       const addBotPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-add-bot-popup]" }) : null;
       addBotPopup?.iniciar();
       window.TabNavigator?.render("#add-bot-tabs");

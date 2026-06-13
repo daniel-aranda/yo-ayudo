@@ -307,15 +307,6 @@ block content
               select#ai_model_selection(name="ai_model_selection")
                 each model_option in ai_model_options
                   option(value=model_option.id, selected=selected_ai_model_option_id === model_option.id)= model_option.label
-        //- Opt-in (beta): el inbound real clasifica las intenciones del mensaje con
-        //- el modelo en vez de keywords. `ai_settings_present` marca que el form
-        //- describe el estado del checkbox (patrón de interactions_present).
-        input(type="hidden", name="ai_settings_present", value="1")
-        label.ai-intents-toggle
-          input(type="checkbox", name="use_ai_intents", checked=Boolean(ai.use_ai_intents))
-          span.ai-intents-toggle-text
-            strong Interpretar mensajes con AI (beta)
-            span.meta Clasifica las intenciones del mensaje entrante con el modelo en vez de palabras clave. Requiere proveedor de AI configurado; si falla, usa el método determinístico.
         div.field-with-counter
           label(for="instrucciones_operativas") Instrucciones
           textarea#instrucciones_operativas(

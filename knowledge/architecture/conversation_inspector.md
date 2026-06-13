@@ -27,16 +27,16 @@ organization
 
 ## Rutas
 
-- `GET /inspector` (`?account=<id>` → scopea la home a esa cuenta: `get_inspector_home(pool, { account_id })` filtra los bots a la cuenta y devuelve `account` para el header + `.scope-banner`; sin `account` lista todos los bots activos)
-- `GET /inspector/organizations`
+- `GET /inspector` — home "Inspector por bots" (ver sección). Sin cuenta lista todos los bots de la plataforma. El `?account=<id>` legacy **redirige** a `/inspector/accounts/:id` (el scope vive en el path, no en query) conservando los filtros.
+- `GET /inspector/organizations` (alias de la home global)
 - `GET /inspector/organizations/:organization_id`
-- `GET /inspector/accounts/:account_id`
+- `GET /inspector/accounts/:account_id` — **misma vista "Inspector por bots", scopeada a la cuenta** (path param). Header con `.scope-banner` + link de escape; 404 si la cuenta no existe.
 - `GET /inspector/bots/:bot_id` (editor; vista admin/plataforma)
 - `GET /inspector/bots/:bot_id/business/account` (mismo editor, framing con contexto de cuenta; ver `frontend.md`)
 - `POST /inspector/bots/:bot_id` (guardado/autosave del editor de bot)
 - `POST /inspector/bots/:bot_id/test-message`
 - `GET /inspector/bots/:bot_id/conversations`
-- `GET /inspector/conversations/:conversation_id`
+- `GET /inspector/conversations/:conversation_id` (visor de una conversación; tambien es el destino de cada fila de `/admin/conversations`, la vista admin global cross-account)
 - `GET /inspector/messages/:message_id`
 - `GET` / `POST /inspector/accounts/:account_id/knowledge` (Knowledge Center canonico con la cuenta en el path, igual que el resto de rutas; POST con upload a S3; la organization se deriva de la cuenta — no viaja en la URL)
 - `GET` / `POST /inspector/accounts/:account_id/knowledge/:source_id` (detalle; 404 si la fuente no pertenece a la cuenta)
@@ -47,6 +47,14 @@ Todas son server-rendered con Pug. No hay SPA ni librerias pesadas.
 ## Breadcrumb (navegacion)
 
 Todas las paginas del flujo (account dashboard, editor de bot, conversaciones, conversacion, message trace, actividad) usan el mixin compartido `+breadcrumb(items)` definido en `layout.pug` (`items` = `[{ label, href? }]`; el ultimo o cualquiera sin `href` es la pagina actual). Jerarquia consistente: `Dashboard › {cuenta} › {bot} › Conversaciones › {contacto} › Trace`, de modo que desde cualquier pagina se puede volver al bot y al dashboard. Para que el breadcrumb tenga el nombre de cuenta/bot, `get_bot_conversations` devuelve tambien `bot` y `get_bot_activity_view` usa `get_bot_with_definition` (incluye `account_name`/`organization_name`).
+
+## Home "Inspector Por Bots"
+
+`/inspector` (global) y `/inspector/accounts/:account_id` (scopeada a cuenta) renderizan la MISMA vista (`inspector/index.pug`, título h1 "Inspector por bots"): el mismo lenguaje visual que `/admin/bots` (filtro de periodo 24h/7d/30d, toolbar de una fila con búsqueda + tipo que auto-submitea, tarjetas de métricas Bots/Activos/Mensajes/Errores, tabla `.activity-table` con chips de tipo, status pills, conteos y acciones por fila). Diferencia de framing: `/admin/bots` es la vista de plataforma (cross-account, default `type=system`); el inspector está **enfocado a la cuenta** (default `type=all` para ver todos sus bots) y, cuando hay cuenta, oculta la columna "Negocio / cuenta" y muestra `.scope-banner`. La columna "Negocio / cuenta" también se oculta en la vista `type=system` (bots de plataforma) y en vistas mixtas las filas de sistema muestran "Plataforma" (`show_org_column = !scoped && type !== "system"`).
+
+- Datos: `get_inspector_bots_view(pool, { account_id, q, type, include_archived, since_hours })` (`inspector_repository.js`) **reusa `get_bots_admin_view`** (`admin_bots_service.js`, ahora acepta `account_id` para scopear) como única fuente de verdad de los conteos operativos, y le agrega `account`/`business` para el header + `scoped`.
+- Acciones por fila = **links** (no forms): Editar (`/inspector/bots/:id`), Conversaciones (`.../conversations`), Actividad (`.../activity`), con `a.icon-button` (CSS generalizado de `button.icon-button`; override `td a.icon-button` para no heredar el subrayado de `td a:not(.button)`). El inspector NO cambia estado de bots (eso es admin); por eso son links de inspección, no botones de acción.
+- El scope de cuenta vive en el **path** (`/inspector/accounts/:id`), no en query string. El top nav (`navigation_middleware` + `layout.pug`) usa `inspector_href = /inspector/accounts/:account_id` cuando hay cuenta en contexto (Review sigue con `?business=&account=`).
 
 ## Vista De Conversacion
 

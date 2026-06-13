@@ -2,12 +2,11 @@ import { config } from "../app/config.js";
 import multer from "multer";
 import { pool } from "../db/client.js";
 import {
-  get_account_view,
   get_bot_activity_view,
   get_bot_conversations,
   get_bot_view,
   get_conversation_view,
-  get_inspector_home,
+  get_inspector_bots_view,
   get_message_trace_view,
   get_organization_view,
   update_bot_builder_view,
@@ -47,6 +46,30 @@ function route_value(value) {
   }
 
   return value;
+}
+
+// Filtros del inspector "por bots" (mismos que /admin/bots): búsqueda, tipo,
+// archivados y ventana de tiempo. El scope de cuenta va en el path, no aquí.
+function parse_bots_filters(request) {
+  const since_hours = Number.parseInt(route_value(request.query.since_hours), 10);
+  return {
+    since_hours: Number.isFinite(since_hours) && since_hours > 0 ? since_hours : undefined,
+    q: route_value(request.query.q),
+    type: route_value(request.query.type),
+    include_archived: route_value(request.query.archived) === "1",
+  };
+}
+
+// Conserva los filtros al redirigir el ?account= legacy hacia el path canónico.
+function bots_filters_query(request) {
+  const params = new URLSearchParams();
+  for (const key of ["since_hours", "q", "type"]) {
+    const value = route_value(request.query[key]);
+    if (value) params.set(key, value);
+  }
+  if (route_value(request.query.archived) === "1") params.set("archived", "1");
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 function wants_json_response(request) {
@@ -124,8 +147,15 @@ export function register_inspector_routes(router, dependencies = {}) {
 
   router.get("/inspector", inspector_auth, async (request, response, next) => {
     try {
-      const account_id = route_value(request.query.account) || null;
-      response.render("inspector/index", await get_inspector_home(route_pool, { account_id }));
+      // El scope de cuenta ahora vive en el path (/inspector/accounts/:id). El
+      // ?account= legacy redirige al path canónico conservando los filtros.
+      const account_id = route_value(request.query.account);
+      if (account_id) {
+        response.redirect(`/inspector/accounts/${account_id}${bots_filters_query(request)}`);
+        return;
+      }
+
+      response.render("inspector/index", await get_inspector_bots_view(route_pool, parse_bots_filters(request)));
     } catch (error) {
       next(error);
     }
@@ -133,8 +163,7 @@ export function register_inspector_routes(router, dependencies = {}) {
 
   router.get("/inspector/organizations", inspector_auth, async (request, response, next) => {
     try {
-      const account_id = route_value(request.query.account) || null;
-      response.render("inspector/index", await get_inspector_home(route_pool, { account_id }));
+      response.render("inspector/index", await get_inspector_bots_view(route_pool, parse_bots_filters(request)));
     } catch (error) {
       next(error);
     }
@@ -153,7 +182,17 @@ export function register_inspector_routes(router, dependencies = {}) {
 
   router.get("/inspector/accounts/:account_id", inspector_auth, async (request, response, next) => {
     try {
-      response.render("inspector/account", await get_account_view(route_pool, route_value(request.params.account_id)));
+      const view = await get_inspector_bots_view(route_pool, {
+        ...parse_bots_filters(request),
+        account_id: route_value(request.params.account_id),
+      });
+
+      if (!view.account) {
+        response.status(404).send("Account not found");
+        return;
+      }
+
+      response.render("inspector/index", view);
     } catch (error) {
       next(error);
     }

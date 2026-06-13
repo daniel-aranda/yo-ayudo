@@ -43,6 +43,7 @@ block content
     a(href="/admin/interactions") Interacciones
     a.is-active(href="/admin/bots") Bots
     a(href="/admin/businesses") Negocios
+    a(href="/admin/conversations") Conversaciones
     a(href="/admin/guardrails") Guardrails
 
   section.page-header
@@ -89,7 +90,10 @@ block content
           thead
             tr
               th Bot
-              th Negocio / cuenta
+              //- Los bots de sistema son de plataforma (clonables a cualquier
+              //- cuenta); en su vista la columna Negocio/cuenta no aplica.
+              if filters.type !== "system"
+                th Negocio / cuenta
               th Tipo
               th Estado
               th Mensajes
@@ -104,7 +108,8 @@ block content
                   a(href=`/inspector/bots/${bot.id}`)= bot.name
                   if bot.description
                     div.meta= bot.description
-                td.meta= `${bot.organization_name} · ${bot.account_name}`
+                if filters.type !== "system"
+                  td.meta= bot.bot_type === "system" ? "Plataforma" : `${bot.organization_name} · ${bot.account_name}`
                 td
                   span(class=`bot-type-chip is-${bot.bot_type}`)= type_label(bot.bot_type)
                 td

@@ -203,6 +203,12 @@ export async function get_account_dashboard_data(pool, input) {
     `,
     [input.account_id],
   );
+  // Cuentas hermanas (mismo negocio) para el switcher del header: cambiar de
+  // cuenta sin volver al dashboard del negocio.
+  const sibling_accounts = await pool.query(
+    "SELECT id, name FROM accounts WHERE organization_id = $1 AND status = 'active' ORDER BY name",
+    [input.business_id],
+  );
   // Bots de sistema (mantenidos por la plataforma) disponibles como base para
   // crear un bot de esta cuenta clonando su definición.
   const system_bots = await pool.query(
@@ -342,6 +348,7 @@ export async function get_account_dashboard_data(pool, input) {
 
   return {
     account: account.rows[0] ?? null,
+    sibling_accounts: sibling_accounts.rows,
     bots: bots.rows,
     system_bots: system_bots.rows,
     channels: channels.rows,

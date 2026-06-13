@@ -1,4 +1,5 @@
 import { compact_trace_for_message, build_message_trace } from "./trace_builder.js";
+import { get_bots_admin_view } from "../admin/admin_bots_service.js";
 import { get_action } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, get_bot_with_definition, update_bot_configuration } from "../bots/bot_repository.js";
@@ -403,11 +404,6 @@ function builder_definition_from_body(current_definition, body) {
   ).trim();
 
   const selected_ai_model = resolve_ai_model_selection(body, ai);
-  // Opt-in de clasificación por AI en el inbound. `ai_settings_present` marca que
-  // el form describe el estado del checkbox (presente = activado); sin el sentinel
-  // (posts parciales/API) se preserva lo que ya estaba, para no apagarlo por accidente.
-  const use_ai_intents =
-    body.ai_settings_present !== undefined ? body.use_ai_intents !== undefined : Boolean(ai.use_ai_intents);
 
   return {
     identity: {
@@ -426,7 +422,6 @@ function builder_definition_from_body(current_definition, body) {
     ai: {
       provider: selected_ai_model.provider,
       model: selected_ai_model.model,
-      ...(use_ai_intents ? { use_ai_intents: true } : {}),
     },
     knowledge_source_ids: compact_strings(body.knowledge_source_ids),
     // Bots de sistema no asignan fuentes de cuenta; declaran el knowledge que un
@@ -542,63 +537,50 @@ async function sync_instagram_channel_from_body(pool, bot, body) {
   return instagram_account;
 }
 
-export async function get_inspector_home(pool, options = {}) {
+// Inspector "por bots": misma vista rica que /admin/bots (conteos operativos,
+// chips, filtros) pero enfocada a UNA cuenta. Reusa get_bots_admin_view como
+// única fuente de verdad de los conteos; aquí solo agregamos el header (cuenta /
+// negocio) y el flag de scope. Sin account_id => vista global de la plataforma.
+export async function get_inspector_bots_view(pool, options = {}) {
   const account_id = options.account_id ?? null;
+  const view = await get_bots_admin_view(pool, {
+    since_hours: options.since_hours,
+    q: options.q,
+    // El inspector arranca mostrando TODOS los bots de la cuenta (no solo system).
+    type: options.type ?? "all",
+    include_archived: options.include_archived,
+    account_id,
+  });
 
-  // Account-scoped: only that account's bots, plus the account/business for the header.
   if (account_id) {
-    const [account_row, bots] = await Promise.all([
-      pool.query(
-        `
-          SELECT accounts.id, accounts.name, accounts.organization_id, organizations.name AS organization_name
-          FROM accounts
-          JOIN organizations ON organizations.id = accounts.organization_id
-          WHERE accounts.id = $1
-          LIMIT 1
-        `,
-        [account_id],
-      ),
-      pool.query(
-        `
-          SELECT bots.*, accounts.name AS account_name, organizations.name AS organization_name
-          FROM bots
-          JOIN accounts ON accounts.id = bots.account_id
-          JOIN organizations ON organizations.id = accounts.organization_id
-          WHERE bots.account_id = $1 AND bots.status = 'active'
-          ORDER BY bots.updated_at DESC
-        `,
-        [account_id],
-      ),
-    ]);
+    const account_row = await pool.query(
+      `
+        SELECT accounts.id, accounts.name, accounts.organization_id, organizations.name AS organization_name
+        FROM accounts
+        JOIN organizations ON organizations.id = accounts.organization_id
+        WHERE accounts.id = $1
+        LIMIT 1
+      `,
+      [account_id],
+    );
     const account = account_row.rows[0] ?? null;
     return {
-      business: account ? { id: account.organization_id, name: account.organization_name } : null,
+      ...view,
       account,
-      bots: bots.rows,
+      business: account ? { id: account.organization_id, name: account.organization_name } : null,
+      scoped: true,
     };
   }
 
-  const [business, bots] = await Promise.all([
-    pool.query("SELECT * FROM organizations WHERE status = 'active' ORDER BY created_at DESC LIMIT 1"),
-    pool.query(`
-      SELECT
-        bots.*,
-        accounts.name AS account_name,
-        organizations.name AS organization_name
-      FROM bots
-      JOIN accounts ON accounts.id = bots.account_id
-      JOIN organizations ON organizations.id = accounts.organization_id
-      WHERE organizations.status = 'active'
-        AND accounts.status = 'active'
-        AND bots.status = 'active'
-      ORDER BY bots.updated_at DESC
-    `),
-  ]);
+  const business = await pool.query(
+    "SELECT * FROM organizations WHERE status = 'active' ORDER BY created_at DESC LIMIT 1",
+  );
 
   return {
-    business: business.rows[0] ?? null,
+    ...view,
     account: null,
-    bots: bots.rows,
+    business: business.rows[0] ?? null,
+    scoped: false,
   };
 }
 
@@ -614,27 +596,6 @@ export async function get_organization_view(pool, organization_id) {
   return {
     organization: organization.rows[0],
     accounts: accounts.rows,
-    bots: bots.rows,
-  };
-}
-
-export async function get_account_view(pool, account_id) {
-  const account = await pool.query(
-    `
-      SELECT accounts.*, organizations.name AS organization_name
-      FROM accounts
-      JOIN organizations ON organizations.id = accounts.organization_id
-      WHERE accounts.id = $1
-      LIMIT 1
-    `,
-    [account_id],
-  );
-  const bots = await pool.query("SELECT * FROM bots WHERE account_id = $1 AND status = 'active' ORDER BY name", [
-    account_id,
-  ]);
-
-  return {
-    account: account.rows[0],
     bots: bots.rows,
   };
 }

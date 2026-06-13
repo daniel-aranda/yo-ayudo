@@ -1,0 +1,108 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const tone_class = (tone) => (tone === "ok" ? "status-executed" : tone === "warn" ? "status-pending_provider" : tone === "error" ? "status-blocked" : "");
+    const filters_active = Boolean(filters.account_id || filters.bot_id || filters.status || filters.channel || filters.q);
+
+  .admin-subnav
+    a(href="/admin/integrations") Integraciones
+    a(href="/admin/interactions") Interacciones
+    a(href="/admin/bots") Bots
+    a(href="/admin/businesses") Negocios
+    a.is-active(href="/admin/conversations") Conversaciones
+    a(href="/admin/guardrails") Guardrails
+
+  section.page-header
+    h1 Conversaciones
+    p Todas las conversaciones de la plataforma, a través de cualquier cuenta.
+
+  section.panel.bots-toolbar
+    form#conversations_filter_form.filter-rows(method="get", action="/admin/conversations")
+      .filter-row
+        input(type="search", name="q", value=filters.q, placeholder="Buscar por contacto o teléfono", aria-label="Buscar contacto")
+      .filter-row
+        select(name="account_id", aria-label="Cuenta")
+          option(value="") Todas las cuentas
+          each account in options.accounts
+            option(value=account.id, selected=filters.account_id === account.id)= account.name
+        select(name="bot_id", aria-label="Bot")
+          option(value="") Todos los bots
+          each bot in options.bots
+            option(value=bot.id, selected=filters.bot_id === bot.id)= bot.name
+        select(name="status", aria-label="Estado")
+          option(value="") Todos los estados
+          each st in options.statuses
+            option(value=st, selected=filters.status === st)= st
+        select(name="channel", aria-label="Canal")
+          option(value="") Todos los canales
+          each ch in options.channels
+            option(value=ch, selected=filters.channel === ch)= ch
+        if filters_active
+          a.button.secondary-button(href="/admin/conversations") Limpiar
+
+  .metrics
+    article.metric
+      span.label Conversaciones
+      strong= rollup.total
+    article.metric
+      span.label Esperando humano
+      strong= rollup.needs_human
+    article.metric
+      span.label Pendientes de review
+      strong= rollup.pending_review
+
+  section.panel
+    h2 Conversaciones
+    if conversations && conversations.length
+      .table-wrap
+        table.activity-table
+          thead
+            tr
+              th Contacto
+              th Negocio / cuenta
+              th Bot
+              th Canal
+              th Estado
+              th Mensajes
+              th Última actividad
+              th
+          tbody
+            each conversation in conversations
+              tr
+                td
+                  strong= conversation.summary.title
+                  if conversation.summary.subtitle
+                    div.meta= conversation.summary.subtitle
+                  div.meta= conversation.summary.preview
+                td.meta= conversation.account_name ? `${conversation.organization_name || ""} · ${conversation.account_name}` : "—"
+                td.meta= conversation.bot_name || "—"
+                td.meta= conversation.channel || "—"
+                td
+                  span(class=`status-pill ${tone_class(conversation.summary.status_tone)}`)= conversation.summary.status_label
+                  if conversation.summary.needs_human
+                    span.status Esperando humano
+                td= conversation.messages_count
+                td.meta= when(conversation.last_activity)
+                td
+                  a.button.secondary-button(href=`/inspector/conversations/${conversation.id}`) Ver
+    else if filters_active
+      .empty Sin conversaciones que coincidan con los filtros.
+    else
+      .empty Sin conversaciones todavía.
+
+  script.
+    (() => {
+      const form = document.getElementById("conversations_filter_form");
+      if (!form) return;
+      form.querySelectorAll("select").forEach((select) => select.addEventListener("change", () => form.submit()));
+      const search = form.querySelector('input[name="q"]');
+      let timer;
+      search?.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => form.submit(), 450);
+      });
+    })();

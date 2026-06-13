@@ -334,13 +334,15 @@ async function upsert_bot_profile(pool, account_id, organization_id, solution_te
 }
 
 export async function upsert_organization(pool, { id } = {}) {
-  await pool.query(
-    `
-      UPDATE organizations
-      SET status = 'archived', updated_at = now()
-      WHERE slug = 'yoayudo'
-    `,
-  );
+  // Legacy: el negocio demo vivía bajo el slug 'yoayudo'. Hoy el único negocio
+  // del seed es 'yoayudo-demo'; eliminamos el 'yoayudo' viejo y su cuenta vacía
+  // para no dejar negocios fantasma en el panel (pre-launch, sin datos reales).
+  const legacy_orgs = await pool.query("SELECT id FROM organizations WHERE slug = 'yoayudo'");
+  for (const row of legacy_orgs.rows) {
+    await pool.query("DELETE FROM bots WHERE organization_id = $1", [row.id]);
+    await pool.query("DELETE FROM accounts WHERE organization_id = $1", [row.id]);
+    await pool.query("DELETE FROM organizations WHERE id = $1", [row.id]);
+  }
 
   // Negocio oficial estable: si ya existe por slug se conserva su id (no churn);
   // si no, se crea con el id de env (cuando viene) para que sea fijo por entorno.
@@ -366,23 +368,32 @@ export async function upsert_organization(pool, { id } = {}) {
   return inserted.rows[0].id;
 }
 
-async function archive_legacy_demo_entities(pool, organization_id) {
+// Pre-launch: el seed deja SOLO el negocio demo con su cuenta 'yoayudo-ventas'.
+// Borra (no archiva) cuentas y bots demo viejos para que no quede cruft.
+async function remove_legacy_demo_entities(pool, organization_id) {
   await pool.query(
     `
-      UPDATE accounts
-      SET status = 'archived', updated_at = now()
-      WHERE organization_id = $1
-        AND slug IN ('demo-account', 'cuenta-principal')
+      DELETE FROM bots
+      WHERE slug IN ('margen-sabroso-bot', 'bot-ventas-clinica-dental', 'bot-whatsapp-legacy-yoayudo')
+         OR name IN ('Margen Sabroso Bot', 'Bot Ventas Clínica Dental')
+    `,
+  );
+  await pool.query(
+    `
+      DELETE FROM bots
+      WHERE account_id IN (
+        SELECT id FROM accounts WHERE organization_id = $1 AND slug IN ('demo-account', 'cuenta-principal')
+      )
     `,
     [organization_id],
   );
   await pool.query(
     `
-      UPDATE bots
-      SET status = 'archived', updated_at = now()
-      WHERE slug IN ('margen-sabroso-bot', 'bot-ventas-clinica-dental')
-         OR name IN ('Margen Sabroso Bot', 'Bot Ventas Clínica Dental')
+      DELETE FROM accounts
+      WHERE organization_id = $1
+        AND slug IN ('demo-account', 'cuenta-principal')
     `,
+    [organization_id],
   );
 }
 
@@ -431,11 +442,6 @@ export async function upsert_account(pool, organization_id, { id } = {}) {
 }
 
 async function upsert_bot(pool, input) {
-  // Retire any older "legacy" system bot so it doesn't linger in the demo.
-  await pool.query(
-    "UPDATE bots SET status = 'archived', updated_at = now() WHERE slug = 'bot-whatsapp-legacy-yoayudo'",
-  );
-
   const bot = await upsert_bot_record(pool, {
     organization_id: input.organization_id,
     account_id: input.account_id,
@@ -1699,7 +1705,7 @@ export async function seed_development_data(pool) {
   await ensure_seed_schema(pool);
   const solution_template_id = await upsert_solution_template(pool);
   const organization_id = await upsert_organization(pool, { id: config.yoayudo_business_id });
-  await archive_legacy_demo_entities(pool, organization_id);
+  await remove_legacy_demo_entities(pool, organization_id);
   const account_id = await upsert_account(pool, organization_id, { id: config.yoayudo_account_id });
   const bot_profile_id = await upsert_bot_profile(pool, account_id, organization_id, solution_template_id);
   await update_legacy_yoayudo_seed_knowledge(pool, { organization_id, account_id });

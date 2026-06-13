@@ -13,8 +13,15 @@ function index_by_bot(rows) {
 
 const BOT_TYPE_FILTERS = new Set(["system", "custom", "all"]);
 
-export async function get_bots_admin_view(pool, { since_hours = 168, q = "", type = "system", include_archived = false } = {}) {
+export async function get_bots_admin_view(
+  pool,
+  { since_hours = 168, q = "", type = "system", include_archived = false, account_id = null } = {},
+) {
   const since = new Date(Date.now() - since_hours * 60 * 60 * 1000);
+  // Optional account scope: el inspector reusa este servicio para listar los
+  // bots de UNA cuenta con los mismos conteos operativos (mensajes, errores...).
+  const bots_params = account_id ? [account_id] : [];
+  const bots_scope = account_id ? "WHERE b.account_id = $1" : "";
   const [bots, messages, conversations, action_errors, guardrails] = await Promise.all([
     pool.query(
       `
@@ -23,8 +30,10 @@ export async function get_bots_admin_view(pool, { since_hours = 168, q = "", typ
         FROM bots b
         JOIN accounts a ON a.id = b.account_id
         JOIN organizations o ON o.id = b.organization_id
+        ${bots_scope}
         ORDER BY o.name, a.name, b.name
       `,
+      bots_params,
     ),
     pool.query(
       `SELECT bot_id, SUM(CASE WHEN created_at >= $1 THEN 1 ELSE 0 END)::int AS messages, MAX(created_at) AS last_at
@@ -107,76 +116,4 @@ export async function get_bots_admin_view(pool, { since_hours = 168, q = "", typ
     archived_count,
     filters: { q: search, type: type_filter, include_archived: Boolean(include_archived) },
   };
-}
-
-// Mueve un bot a otra cuenta. Solo bots "limpios": sin conversaciones/mensajes
-// y sin canales asignados activos — el historial y los canales están scopeados
-// a la cuenta y moverlos corrompería ese aislamiento. El knowledge asignado se
-// limpia (las fuentes pertenecen a la cuenta origen) y el bot_profile legacy
-// también (es por cuenta). Devuelve { bot } o { error, message }.
-export async function move_bot_to_account(pool, { bot_id, account_id }) {
-  const bot = (await pool.query("SELECT * FROM bots WHERE id = $1 LIMIT 1", [bot_id])).rows[0];
-  if (!bot) {
-    return { error: "bot_not_found", message: "El bot no existe." };
-  }
-
-  const target = (
-    await pool.query("SELECT id, organization_id, name FROM accounts WHERE id = $1 LIMIT 1", [account_id])
-  ).rows[0];
-  if (!target) {
-    return { error: "account_not_found", message: "La cuenta destino no existe." };
-  }
-
-  if (target.id === bot.account_id) {
-    return { bot };
-  }
-
-  const [conversations, messages, whatsapp_assignments, instagram_assignments] = await Promise.all([
-    pool.query("SELECT count(*)::int AS count FROM conversations WHERE bot_id = $1", [bot_id]),
-    pool.query("SELECT count(*)::int AS count FROM messages WHERE bot_id = $1", [bot_id]),
-    pool.query("SELECT count(*)::int AS count FROM phone_number_bot_assignments WHERE bot_id = $1 AND status = 'active'", [
-      bot_id,
-    ]),
-    pool.query(
-      "SELECT count(*)::int AS count FROM instagram_account_bot_assignments WHERE bot_id = $1 AND status = 'active'",
-      [bot_id],
-    ),
-  ]);
-
-  if ((conversations.rows[0]?.count ?? 0) > 0 || (messages.rows[0]?.count ?? 0) > 0) {
-    return {
-      error: "bot_has_history",
-      message: "El bot ya tiene conversaciones o mensajes en su cuenta actual; no se puede mover sin corromper ese historial.",
-    };
-  }
-
-  if ((whatsapp_assignments.rows[0]?.count ?? 0) > 0 || (instagram_assignments.rows[0]?.count ?? 0) > 0) {
-    return {
-      error: "bot_has_channels",
-      message: "El bot tiene canales activos asignados; desconéctalos antes de moverlo.",
-    };
-  }
-
-  const definition = bot.definition_json ?? {};
-  const moved_definition = {
-    ...definition,
-    knowledge_source_ids: [],
-  };
-  const updated = await pool.query(
-    `
-      UPDATE bots
-      SET
-        account_id = $2,
-        organization_id = $3,
-        bot_profile_id = NULL,
-        knowledge_base_ids_json = '[]'::jsonb,
-        definition_json = $4::jsonb,
-        updated_at = now()
-      WHERE id = $1
-      RETURNING *
-    `,
-    [bot_id, target.id, target.organization_id, JSON.stringify(moved_definition)],
-  );
-
-  return { bot: updated.rows[0] };
 }

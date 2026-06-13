@@ -40,9 +40,11 @@ a {
 
 .topbar {
   align-items: center;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: saturate(1.4) blur(10px);
-  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  /* Near-opaque warm surface: a faint frost without the muddy see-through band
+     the heavy translucent blur produced at the top of the page. */
+  background: rgba(250, 249, 245, 0.94);
+  backdrop-filter: saturate(1.1) blur(6px);
+  -webkit-backdrop-filter: saturate(1.1) blur(6px);
   border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow-xs);
   display: flex;
@@ -92,6 +94,40 @@ a {
 
 .page-header {
   margin-bottom: 22px;
+}
+
+/* Title row with an optional account switcher on the right (account dashboard). */
+.page-header-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+}
+
+.account-switcher {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.account-switcher-label {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.account-switcher select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
 }
 
 /* Small uppercase label above a title that names what kind of entity it is
@@ -154,7 +190,9 @@ a {
 .metrics {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* auto-fit: las tarjetas (3, 4 o 5 según la vista) caben en un solo row en
+     desktop y envuelven en pantallas angostas, sin fijar el conteo de columnas. */
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .metric,
@@ -524,32 +562,6 @@ button:active {
   color: #9a3412;
   font-size: 13px;
   margin: 6px 0 0;
-}
-
-/* Opt-in (beta) de clasificación por AI en el editor de bot. */
-.ai-intents-toggle {
-  align-items: flex-start;
-  background: var(--surface-strong);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 12px 14px;
-}
-
-.ai-intents-toggle input {
-  accent-color: var(--accent);
-  height: 18px;
-  margin-top: 1px;
-  width: 18px;
-}
-
-.ai-intents-toggle-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 /* Multi-select de grupos humanos: checkboxes en chips que envuelven; el valor
@@ -3158,6 +3170,36 @@ button.help-tip:focus-visible::after {
   margin-top: 0;
 }
 
+/* Toolbar de filtros en dos filas: búsqueda arriba, filtros abajo (para 4+
+   controles que apretarían en una sola fila). */
+.filter-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter-row input[type="search"] {
+  flex: 1;
+}
+
+.filter-row select {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  width: auto;
+}
+
+.filter-row .button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .bots-toolbar .inline-form input[type="search"] {
   flex: 2;
 }
@@ -3269,7 +3311,8 @@ button.help-tip:focus-visible::after {
   margin: 0;
 }
 
-button.icon-button {
+.icon-button {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -3277,18 +3320,31 @@ button.icon-button {
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
+  justify-content: center;
   margin: 0;
   padding: 6px;
+  text-decoration: none;
 }
 
-button.icon-button:hover {
+.icon-button:hover {
   background: var(--surface-strong);
   color: var(--text);
 }
 
-button.icon-button .ui-icon {
+.icon-button .ui-icon {
   height: 18px;
   width: 18px;
+}
+
+/* Icon links inside tables (e.g. inspector row actions) must not inherit the
+   underlined accent style from `td a:not(.button)`; keep them as icon buttons. */
+td a.icon-button {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+td a.icon-button:hover {
+  color: var(--text);
 }
 
 .entity-head {
@@ -3371,6 +3427,457 @@ button.icon-button .ui-icon {
   background: var(--accent-dark);
   border-color: var(--accent-dark);
   color: #fff;
+}
+
+/* Métricas: microcopy + tints sobrios de estado (success / warning). */
+.metric-hint {
+  color: var(--muted);
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.metric--success {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.metric--success strong {
+  color: var(--accent-dark);
+}
+
+.metric--warn {
+  background: #fbf1e0;
+  border-color: #ecd9b3;
+}
+
+.metric--warn strong {
+  color: #9a3412;
+}
+
+/* ============================================================
+   /admin/interactions · Configuración — premium card redesign
+   ============================================================ */
+.ix-note {
+  background: #fbf1e0;
+  border: 1px solid #ecd9b3;
+  border-radius: 0.5rem;
+  color: #8a5a16;
+  font-size: 0.8125rem;
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.ix-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.ix-search {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+.ix-filter {
+  flex: 0 0 auto;
+  min-width: 11rem;
+  width: auto;
+}
+
+.ix-count {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin-left: auto;
+}
+
+.ix-group {
+  margin-top: 1.5rem;
+}
+
+.ix-group-title {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+}
+
+.ix-grid {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+}
+
+/* White surface (not beige) for contrast; tint reserved for states only. */
+.ix-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.125rem;
+}
+
+/* Cards without params are lighter and more compact than configurable ones. */
+.ix-card--simple {
+  background: color-mix(in srgb, var(--surface) 70%, var(--bg));
+  gap: 0.625rem;
+}
+
+.ix-card.is-inactive {
+  opacity: 0.72;
+}
+
+.ix-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.ix-card-id {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.ix-card-name {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.ix-card-slug {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.ix-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ix-chip {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.6rem;
+}
+
+.ix-chip--provider {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.ix-badge {
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  padding: 0.2rem 0.6rem;
+}
+
+.ix-badge--neutral {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+.ix-badge--ok {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.ix-badge--warn {
+  background: #fbf1e0;
+  color: #8a5a16;
+}
+
+.ix-provider {
+  background: color-mix(in srgb, var(--surface-strong) 55%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+}
+
+.ix-provider-legend {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  letter-spacing: 0.04em;
+  padding: 0 0.2rem;
+  text-transform: uppercase;
+}
+
+.ix-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.ix-field-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.ix-field-input {
+  width: 100%;
+}
+
+.ix-field-help {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.ix-defaults {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.ix-card-foot {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  padding-top: 0.625rem;
+}
+
+.ix-foot-item--error {
+  color: #9a3412;
+  font-weight: 650;
+}
+
+.ix-card-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  min-height: 2.25rem;
+}
+
+.ix-actions-idle {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.ix-actions-dirty {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ix-actions-dirty button {
+  margin: 0;
+}
+
+.ix-actions-saved {
+  color: var(--accent-dark);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.ix-actions-error {
+  color: #9a3412;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+/* Accessible switch: hidden checkbox drives a styled track + thumb. */
+.switch {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
+}
+
+.switch-input {
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.switch-track {
+  background: var(--line-strong);
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+  height: 1.25rem;
+  position: relative;
+  transition: background 140ms ease;
+  width: 2.25rem;
+}
+
+.switch-thumb {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+  height: 1rem;
+  left: 0.125rem;
+  position: absolute;
+  top: 0.125rem;
+  transition: transform 140ms ease;
+  width: 1rem;
+}
+
+.switch-input:checked ~ .switch-track {
+  background: var(--accent);
+}
+
+.switch-input:checked ~ .switch-track .switch-thumb {
+  transform: translateX(1rem);
+}
+
+.switch-input:focus-visible ~ .switch-track {
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.switch-text {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+/* El atributo `hidden` debe ganar a cualquier display de clase (e.g. estados
+   dirty/saved que alternan visibilidad). */
+[hidden] {
+  display: none !important;
+}
+
+/* Lista compacta de interacciones (cada fila abre el editor en popup). */
+.ix-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ix-row {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  box-shadow: none;
+  cursor: pointer;
+  display: flex;
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  transition: background 120ms ease, border-color 120ms ease;
+  width: 100%;
+}
+
+.ix-row:hover {
+  background: var(--surface-strong);
+  border-color: var(--line-strong);
+}
+
+.ix-row:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.ix-row-main {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.ix-row-name {
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.ix-row-slug {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.ix-row-stats {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+}
+
+.ix-status {
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+}
+
+.ix-status.is-on {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.ix-status.is-off {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+.ix-row-chevron {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* Editor dentro del popup (movido desde #ix_editor_templates). */
+.ix-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.ix-editor-head {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.ix-provider-head {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.125rem;
+}
+
+.ix-provider-title {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* Configuración tab: one card per interaction (enable/disable + provider config) */

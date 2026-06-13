@@ -1,44 +1,155 @@
 extends ../layout
 
 block content
-  - const scoped_account = (typeof account !== "undefined" && account) ? account : null;
-  section.page-header
-    if scoped_account
-      p.page-eyebrow= `Cuenta · Negocio: ${scoped_account.organization_name}`
-      h1= scoped_account.name
-      p Inspector de bots y agentes de esta cuenta
-    else
-      h1= business ? business.name : "YoAyudo"
-      p Inspector de bots y agentes
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const scoped = Boolean(typeof account !== "undefined" && account);
+    const base_path = scoped ? `/inspector/accounts/${account.id}` : "/inspector";
+    // Negocio/cuenta: no aplica cuando ya estamos scopeados a una cuenta, ni en
+    // la vista de solo-sistema (los bots de sistema son de plataforma).
+    const show_org_column = !scoped && filters.type !== "system";
+    const days = Math.round((since_hours || 168) / 24);
+    const current_hours = since_hours || 168;
+    const periods = [
+      { hours: 24, label: "24 h" },
+      { hours: 168, label: "7 días" },
+      { hours: 720, label: "30 días" },
+    ];
+    const inspector_query = (overrides = {}) => {
+      const params = new URLSearchParams();
+      params.set("since_hours", String(overrides.since_hours ?? current_hours));
+      const q = overrides.q ?? filters.q;
+      if (q) params.set("q", q);
+      const type = overrides.type ?? filters.type;
+      if (type && type !== "all") params.set("type", type);
+      const archived = overrides.include_archived ?? filters.include_archived;
+      if (archived) params.set("archived", "1");
+      return `${base_path}?${params.toString()}`;
+    };
+    const type_label = (value) => (value === "system" ? "Sistema" : value === "custom" ? "Personalizado" : value);
+    const filters_active = Boolean(filters.q) || filters.type !== "all" || filters.include_archived;
+    const toggle_archived_href = inspector_query({ include_archived: !filters.include_archived });
+    const svg_open = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+    const action_icons = {
+      edit: `${svg_open}<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`,
+      chat: `${svg_open}<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+      activity: `${svg_open}<path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+    };
 
-  if scoped_account
+  section.page-header
+    if scoped
+      p.page-eyebrow= `Cuenta · ${account.organization_name || (business && business.name) || "Negocio"}`
+    else
+      p.page-eyebrow Plataforma YoAyudo
+    h1 Inspector por bots
+    if scoped
+      p= `Bots y agentes de ${account.name} · últimos ${days} días`
+    else
+      p= `Todos los bots de la plataforma y su actividad · últimos ${days} días`
+
+  if scoped
     .scope-banner
-      span Mostrando solo los bots de #{scoped_account.name}.
+      span Mostrando solo los bots de #{account.name}.
       a(href="/inspector") Ver todos los bots
+
+  .period-filter
+    span.period-filter-label Periodo
+    each period in periods
+      a(href=inspector_query({ since_hours: period.hours }), class=(current_hours === period.hours ? "is-active" : ""))= period.label
+
+  //- Toolbar igual que /admin/bots: una fila, sin botón. Filtra al escribir o al
+  //- cambiar el tipo. Los archivados se piden con el link discreto de abajo.
+  section.panel.bots-toolbar
+    form#inspector_filter_form.inline-form(method="get", action=base_path)
+      input(type="hidden", name="since_hours", value=current_hours)
+      if filters.include_archived
+        input(type="hidden", name="archived", value="1")
+      input(type="search", name="q", value=filters.q, placeholder="Buscar por nombre o descripción", aria-label="Buscar bot")
+      select(name="type", aria-label="Tipo de bot")
+        option(value="all", selected=filters.type === "all") Todos
+        option(value="system", selected=filters.type === "system") Sistema
+        option(value="custom", selected=filters.type === "custom") Personalizados
+
+  .metrics
+    article.metric
+      span.label Bots
+      strong= totals.bots
+    article.metric
+      span.label Activos
+      strong= totals.active
+    article.metric
+      span.label Mensajes
+      strong= totals.messages
+    article.metric
+      span.label Errores
+      strong= totals.errors
 
   section.panel
     h2 Bots / agentes
     if bots && bots.length
-      table
-        thead
-          tr
-            th Nombre
-            th Tipo
-            th Estado
-            th Cuenta
-            th
-        tbody
-          each bot in bots
+      .table-wrap
+        table.activity-table
+          thead
             tr
-              td
-                a(href=`/inspector/bots/${bot.id}`)= bot.name
-                if bot.description
-                  div.meta= bot.description
-              td= bot.bot_type || bot.channel
-              td
-                span.status= bot.status
-              td= bot.account_name || "sin cuenta"
-              td
-                a.button(href=`/inspector/bots/${bot.id}`) Editar
+              th Bot
+              if show_org_column
+                th Negocio / cuenta
+              th Tipo
+              th Estado
+              th Mensajes
+              th Conversaciones
+              th Errores
+              th Última actividad
+              th Acciones
+          tbody
+            each bot in bots
+              tr
+                td
+                  a(href=`/inspector/bots/${bot.id}`)= bot.name
+                  if bot.description
+                    div.meta= bot.description
+                if show_org_column
+                  td.meta= bot.bot_type === "system" ? "Plataforma" : `${bot.organization_name} · ${bot.account_name}`
+                td
+                  span(class=`bot-type-chip is-${bot.bot_type}`)= type_label(bot.bot_type)
+                td
+                  span(class=`status-pill ${bot.status === "active" ? "status-executed" : bot.status === "draft" ? "status-pending_provider" : "status-blocked"}`)= bot.status
+                td= bot.messages
+                td= bot.conversations
+                td
+                  if bot.errors
+                    span.count-error= bot.errors
+                  else
+                    = 0
+                td.meta= when(bot.last_at)
+                td
+                  .bot-actions
+                    a.icon-button(href=`/inspector/bots/${bot.id}`, title="Editar", aria-label=`Editar ${bot.name}`)!= action_icons.edit
+                    a.icon-button(href=`/inspector/bots/${bot.id}/conversations`, title="Conversaciones", aria-label=`Conversaciones de ${bot.name}`)!= action_icons.chat
+                    a.icon-button(href=`/inspector/bots/${bot.id}/activity`, title="Actividad", aria-label=`Actividad de ${bot.name}`)!= action_icons.activity
+    else if filters_active
+      .empty Sin bots que coincidan con los filtros.
     else
-      div.empty Sin bots configurados.
+      .empty Sin bots configurados.
+
+  //- Archivados fuera de la vista por default; un link discreto los trae.
+  p.archived-link
+    if filters.include_archived
+      a(href=toggle_archived_href) Ocultar archivados
+    else
+      a(href=toggle_archived_href)= archived_count ? `Ver archivados (${archived_count})` : "Ver archivados"
+
+  script.
+    (() => {
+      const form = document.getElementById("inspector_filter_form");
+      if (!form) return;
+      form.querySelector('select[name="type"]')?.addEventListener("change", () => form.submit());
+      const search = form.querySelector('input[name="q"]');
+      let timer;
+      search?.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => form.submit(), 450);
+      });
+    })();

@@ -7,7 +7,7 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
 ## Prioridades
 
 1. Conectar el Prompt Compiler / seleccion de acciones por AI al inbound real.
-   - Hecho: el inbound ejecuta operaciones via `execute_action` (auditado), multi-ejecucion, y ya **selecciona intenciones/acciones por AI** — `openai_provider.classify_intents` (multi-intent lenguaje libre), **opt-in por bot** (`definition_json.ai.use_ai_intents`, checkbox en el editor), con **fallback deterministico** en error (registrado en `ai_calls`). Ver `architecture/bot_engine.md`.
+   - Hecho: el inbound ejecuta operaciones via `execute_action` (auditado), multi-ejecucion, y ya **selecciona intenciones/acciones por AI** — `openai_provider.classify_intents` (multi-intent lenguaje libre), **on por default para todos los bots** (no opt-in; AI es el edge), con **fallback deterministico** en error (registrado en `ai_calls`). Ver `architecture/bot_engine.md`.
    - Falta: usar el **Prompt Compiler completo** en el inbound (hoy solo `test_message` compila prompt) y **extraccion de campos por AI** (hoy los `extract_*` son deterministicos; AI decide la intencion, no los montos).
 
 2. Implementar mas handlers reales para las actions `stub_*`.

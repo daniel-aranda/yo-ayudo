@@ -36,6 +36,7 @@ block content
     a(href="/admin/interactions") Interacciones
     a(href="/admin/bots") Bots
     a.is-active(href="/admin/businesses") Negocios
+    a(href="/admin/conversations") Conversaciones
     a(href="/admin/guardrails") Guardrails
 
   section.page-header.builder-header
@@ -112,6 +113,8 @@ block content
 
           //- Altas vía popups compartidos: el contexto (negocio/cuentas) viaja
           //- en data-attrs y el JS lo inyecta al popup correspondiente.
+          //- Bots se crean desde el dashboard de la cuenta ("Agregar bot"),
+          //- con tabs Bot Nuevo / preconfigurado. Aquí solo cuenta y usuario.
           .entity-create-row
             button.secondary-button(
               type="button",
@@ -119,13 +122,6 @@ block content
               data-organization-id=business.id,
               data-business-name=business.name
             ) Crear cuenta
-            if business.accounts && business.accounts.length
-              button.secondary-button(
-                type="button",
-                data-create-bot,
-                data-business-name=business.name,
-                data-accounts=JSON.stringify(business.accounts.map((account) => ({ id: account.id, name: account.name })))
-              ) Crear bot
             button.secondary-button(
               type="button",
               data-create-user,
@@ -173,23 +169,6 @@ block content
           input#create_account_name(type="text", name="name", required)
           div.form-actions
             button(type="submit") Crear cuenta
-
-  #create_bot_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-bot-popup)
-    .popup.popup--sm.popup--default
-      .popup__header
-        .popup__header-text
-          h3.popup__title Crear bot
-          .popup__subtitle(data-popup-business-name)
-        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
-      .popup__body
-        form.popup-form(method="post", action="/admin/bots")
-          label(for="create_bot_account") Cuenta
-          select#create_bot_account(name="account_id", required)
-          label(for="create_bot_name") Nombre del bot
-          input#create_bot_name(type="text", name="name", required)
-          p.meta El bot se crea en borrador y se abre su editor para configurarlo.
-          div.form-actions
-            button(type="submit") Crear bot
 
   #create_user_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-user-popup)
     .popup.popup--sm.popup--default
@@ -262,7 +241,6 @@ block content
 
       const businessPopup = popupFor("[data-create-business-popup]");
       const accountPopup = popupFor("[data-create-account-popup]");
-      const botPopup = popupFor("[data-create-bot-popup]");
       const userPopup = popupFor("[data-create-user-popup]");
 
       document.getElementById("open_create_business")?.addEventListener("click", () => businessPopup?.open());
@@ -288,34 +266,6 @@ block content
         const userTrigger = event.target.closest("[data-create-user]");
         if (userTrigger) {
           openScopedPopup(userPopup, "[data-create-user-popup]", userTrigger);
-          return;
-        }
-
-        const botTrigger = event.target.closest("[data-create-bot]");
-        if (botTrigger) {
-          const overlay = document.querySelector("[data-create-bot-popup]");
-          const select = overlay?.querySelector('select[name="account_id"]');
-          if (select) {
-            let accounts = [];
-            try {
-              accounts = JSON.parse(botTrigger.dataset.accounts || "[]");
-            } catch (error) {
-              accounts = [];
-            }
-            select.innerHTML = accounts
-              .map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`)
-              .join("");
-          }
-          openScopedPopup(botPopup, "[data-create-bot-popup]", botTrigger);
         }
       });
-
-      function escapeHtml(value) {
-        return String(value || "")
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      }
     })();

@@ -415,13 +415,16 @@ async function process_inbound_message(dependencies, input) {
     resolution.bot_profile?.timezone ?? resolution.account?.timezone ?? "America/Mexico_City",
   );
   const parser = new message_intent_parser(observed_provider);
-  // Opt-in por bot: clasificación de intenciones por AI (el provider decide si
-  // puede; mock ignora el flag). En error de AI degradamos a determinístico —
-  // el inbound nunca debe romperse y el fallo queda registrado en ai_calls.
-  const use_ai_classification = Boolean(resolution.bot?.definition_json?.ai?.use_ai_intents);
+  // AI por default para TODOS los bots (es el edge del producto): siempre se
+  // intenta clasificar con el modelo. El provider decide capacidad (OpenAI con
+  // key → AI; mock o sin key → keywords). En error de AI degradamos a
+  // determinístico — el inbound nunca se rompe y el fallo queda en ai_calls.
   let intents;
   try {
-    ({ intents } = await observed_provider.classify_intents({ text: normalized.normalized_text, use_ai_classification }));
+    ({ intents } = await observed_provider.classify_intents({
+      text: normalized.normalized_text,
+      use_ai_classification: true,
+    }));
   } catch {
     ({ intents } = await observed_provider.classify_intents({
       text: normalized.normalized_text,

@@ -154,9 +154,10 @@ describe("Operational dashboard", () => {
 
     // Pug HTML-escapes `&` to `&amp;` in attributes (browsers decode it back).
     const qs = `?business=${organization_id}&amp;account=${account_id}`;
-    // Dashboard points back at this account's dashboard; Inspector/Review carry the scope.
+    // Dashboard points back at this account's dashboard; Inspector scopes via the
+    // path (/inspector/accounts/:id), Review still carries the scope as a query.
     expect(response.text).toContain(`href="/dashboard/business/${organization_id}/accounts/${account_id}"`);
-    expect(response.text).toContain(`href="/inspector${qs}"`);
+    expect(response.text).toContain(`href="/inspector/accounts/${account_id}"`);
     expect(response.text).toContain(`href="/review${qs}"`);
     // Admin is intentionally global — never scoped.
     expect(response.text).toContain('href="/admin/integrations"');

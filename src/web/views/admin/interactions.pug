@@ -24,6 +24,7 @@ block content
     a.is-active(href="/admin/interactions") Interacciones
     a(href="/admin/bots") Bots
     a(href="/admin/businesses") Negocios
+    a(href="/admin/conversations") Conversaciones
     a(href="/admin/guardrails") Guardrails
 
   section.page-header
@@ -39,18 +40,23 @@ block content
     article.metric
       span.label Interacciones
       strong= totals.interactions_count
+      span.metric-hint Total del catálogo
     article.metric
       span.label Ejecutables
       strong= totals.executable_count
-    article.metric
+      span.metric-hint Disponibles para bots
+    article.metric.metric--success
       span.label Ejecuciones OK
       strong= totals.interactions_success
-    article.metric
+      span.metric-hint= `Últimos ${days} días`
+    article.metric(class=(totals.interactions_error ? "metric--warn" : ""))
       span.label Ejecuciones con error
       strong= totals.interactions_error
+      span.metric-hint Requieren revisión
     article.metric
       span.label Llamadas externas
       strong= totals.external_total
+      span.metric-hint= `Últimos ${days} días`
 
   .wamy-tabs.admin-tabs
     #interactions-tabs.tabs(data-initial-tab=initial_tab, role="tablist", aria-label="Admin de interacciones")
@@ -116,31 +122,141 @@ block content
                     span.meta —
 
   section.tab-section(data-parent-tab="interactions-tabs", data-section="config", hidden=(initial_tab !== "config"))
+    -
+      const IX_CATEGORIES = [
+        { key: "prospeccion", label: "Prospección", types: ["buscar_negocios"] },
+        { key: "operacion", label: "Operación diaria", types: ["registrar_inicio_dia", "registrar_venta", "registrar_compra", "registrar_inventario", "registrar_cierre_dia"] },
+        { key: "memoria", label: "Memoria y notas", types: ["guardar_nota", "registrar_nota_dia"] },
+        { key: "productividad", label: "Productividad", types: ["crear_tarea", "generar_resumen", "generar_reporte_dia"] },
+        { key: "voz", label: "Voz", types: ["responder_voz"] },
+      ];
+      const ix_executable = interactions.filter((i) => i.executable);
+      const ix_active = ix_executable.filter((i) => i.enabled).length;
+      const ix_inactive = ix_executable.length - ix_active;
+      const ix_categorized = new Set(IX_CATEGORIES.flatMap((c) => c.types));
+      const ix_groups = IX_CATEGORIES
+        .map((c) => ({ ...c, items: ix_executable.filter((i) => c.types.includes(i.type)) }))
+        .filter((g) => g.items.length);
+      const ix_others = ix_executable.filter((i) => !ix_categorized.has(i.type));
+      if (ix_others.length) ix_groups.push({ key: "otras", label: "Otras", items: ix_others });
+      const cat_label_of = (type) => (IX_CATEGORIES.find((c) => c.types.includes(type)) || { label: "Otras" }).label;
+      const cat_key_of = (type) => (IX_CATEGORIES.find((c) => c.types.includes(type)) || { key: "otras" }).key;
+      const field_help = {
+        max_results: "Límite usado por ejecución para controlar costo y ruido.",
+        voice_id: "ID de voz configurado en ElevenLabs.",
+        model_id: "Modelo de voz de ElevenLabs.",
+      };
+      const ix_state = (i) => {
+        if (!i.handler_real) return { label: "Pendiente", tone: "warn" };
+        const fields = Array.isArray(i.settings_schema) ? i.settings_schema : [];
+        if (!fields.length) return { label: "Defaults del sistema", tone: "neutral" };
+        const filled = fields.every((f) => String((i.config && i.config[f.key]) ?? "").trim());
+        if (i.provider && !filled) return { label: "Requiere proveedor", tone: "warn" };
+        return { label: filled ? "Configurada" : "Configurable", tone: filled ? "ok" : "neutral" };
+      };
     .panel
-      h2 Configuración de interacciones
-      p.meta Habilita o deshabilita cada interacción a nivel plataforma y ajusta su proveedor. Deshabilitar bloquea la interacción en todos los bots (con guardrail).
-      .config-grid
-        each interaction in interactions
-          if interaction.executable
-            form.config-card(method="post", action="/admin/interactions/settings")
-              input(type="hidden", name="type", value=interaction.type)
-              .config-card-head
-                div.config-card-title
-                  strong= interaction.label
-                  div.meta= interaction.provider ? `${interaction.action_id} · ${interaction.provider}` : interaction.action_id
-                label.config-toggle
-                  input(type="checkbox", name="enabled", checked=interaction.enabled)
-                  span.config-toggle-label Activa
-              if interaction.settings_schema && interaction.settings_schema.length
-                .config-fields
+      h2 Configuración global de interacciones
+      p.meta Activa, desactiva y configura las interacciones disponibles para los bots. Los cambios aplican a nivel plataforma.
+      p.ix-note Desactivar una interacción evita que cualquier bot la ejecute.
+
+      .ix-toolbar
+        input#ix_search.ix-search(type="search", placeholder="Buscar interacción…", aria-label="Buscar interacción", autocomplete="off")
+        select#ix_filter_status.ix-filter(aria-label="Filtrar por estado")
+          option(value="") Todas
+          option(value="active") Activas
+          option(value="inactive") Inactivas
+          option(value="error") Con error
+        select#ix_filter_cat.ix-filter(aria-label="Filtrar por categoría")
+          option(value="") Todas las categorías
+          each group in ix_groups
+            option(value=group.key)= group.label
+        span#ix_count.ix-count= `${ix_active} activas · ${ix_inactive} inactivas`
+
+      each group in ix_groups
+        section.ix-group(data-ix-group=group.key)
+          h3.ix-group-title= group.label
+          .ix-list
+            each interaction in group.items
+              -
+                const row_state = ix_state(interaction);
+                const search_key = `${interaction.label} ${interaction.action_id} ${cat_label_of(interaction.type)}`.toLowerCase();
+              button.ix-row(
+                type="button",
+                data-ix-open=interaction.type,
+                data-ix-search=search_key,
+                data-ix-category=cat_key_of(interaction.type),
+                data-ix-active=interaction.enabled ? "1" : "0",
+                data-ix-error=interaction.error ? "1" : "0",
+                aria-haspopup="dialog"
+              )
+                span.ix-row-main
+                  span.ix-row-name= interaction.label
+                  code.ix-row-slug= interaction.action_id
+                span(class=`ix-badge ix-badge--${row_state.tone}`)= row_state.label
+                span.ix-row-stats
+                  | Uso #{interaction.total}
+                  if interaction.error
+                    span.ix-foot-item--error= ` · ${interaction.error} err`
+                span(class=`ix-status ${interaction.enabled ? "is-on" : "is-off"}`, data-ix-row-status)= interaction.enabled ? "Activa" : "Inactiva"
+                span.ix-row-chevron(aria-hidden="true") ›
+
+      #ix_editor_templates(hidden)
+        each interaction in ix_executable
+          -
+            const ed_state = ix_state(interaction);
+            const has_fields = Array.isArray(interaction.settings_schema) && interaction.settings_schema.length;
+          form.ix-editor(method="post", action="/admin/interactions/settings", data-ix-editor=interaction.type, data-ix-label=interaction.label)
+            input(type="hidden", name="type", value=interaction.type)
+            .ix-editor-head
+              label.switch
+                input.switch-input(type="checkbox", name="enabled", checked=interaction.enabled, data-ix-toggle, aria-label=`Activa: ${interaction.label}`)
+                span.switch-track(aria-hidden="true")
+                  span.switch-thumb
+                span.switch-text Activa
+              span(class=`ix-badge ix-badge--${ed_state.tone}`)= ed_state.label
+            .ix-card-tags
+              span.ix-chip= cat_label_of(interaction.type)
+            if has_fields
+              if interaction.provider
+                .ix-provider
+                  .ix-provider-head
+                    span.ix-provider-title Proveedor
+                    span.ix-chip.ix-chip--provider= interaction.provider
                   each field in interaction.settings_schema
-                    label.config-field
-                      span.config-field-label= field.label
-                      input(type="text", name=`config_${field.key}`, value=(interaction.config && interaction.config[field.key]) || "", placeholder=field.placeholder || "")
+                    label.ix-field
+                      span.ix-field-label= field.label
+                      input.ix-field-input(type="text", name=`config_${field.key}`, value=(interaction.config && interaction.config[field.key]) || "", placeholder=field.placeholder || "", data-ix-input)
+                      if field_help[field.key]
+                        span.ix-field-help= field_help[field.key]
               else
-                p.config-none Sin parámetros configurables (usa los defaults del sistema).
-              .config-actions
-                button.config-save(type="submit") Guardar
+                each field in interaction.settings_schema
+                  label.ix-field
+                    span.ix-field-label= field.label
+                    input.ix-field-input(type="text", name=`config_${field.key}`, value=(interaction.config && interaction.config[field.key]) || "", placeholder=field.placeholder || "", data-ix-input)
+                    if field_help[field.key]
+                      span.ix-field-help= field_help[field.key]
+            else
+              p.ix-defaults No requiere configuración. Usa los defaults del sistema.
+            footer.ix-card-foot
+              span.ix-foot-item Uso #{interaction.total}
+              span(class="ix-foot-item" + (interaction.error ? " ix-foot-item--error" : ""))= `${interaction.error} errores`
+              span.ix-foot-item= `Último: ${when(interaction.last_at)}`
+            .ix-card-actions(data-ix-actions)
+              span.ix-actions-idle Sin cambios
+              .ix-actions-dirty(hidden)
+                button.secondary-button(type="button", data-ix-discard) Descartar
+                button(type="submit") Guardar cambios
+              span.ix-actions-saved(hidden) Guardado
+              span.ix-actions-error(hidden, data-ix-error-msg)
+
+      #ix_editor_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-ix-popup, data-autosave-ignore)
+        .popup.popup--md.popup--default
+          .popup__header
+            .popup__header-text
+              h3.popup__title#ix_editor_title Configurar interacción
+              .popup__subtitle Cambios a nivel plataforma
+            button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+          .popup__body#ix_editor_mount
 
   section.tab-section(data-parent-tab="interactions-tabs", data-section="externas", hidden)
     .panel
@@ -207,7 +323,137 @@ block content
         p.trace-empty Sin actividad reciente.
 
   script
+    include ../../public/js/core/Popup.js
+  script
     include ../../public/js/core/Tab_Navigator.js
 
   script.
     window.TabNavigator?.render("#interactions-tabs");
+
+    (() => {
+      const search = document.getElementById("ix_search");
+      const filterStatus = document.getElementById("ix_filter_status");
+      const filterCat = document.getElementById("ix_filter_cat");
+      const countEl = document.getElementById("ix_count");
+      const rows = Array.from(document.querySelectorAll("[data-ix-open]"));
+      const groups = Array.from(document.querySelectorAll("[data-ix-group]"));
+
+      function applyFilters() {
+        const q = (search?.value || "").trim().toLowerCase();
+        const status = filterStatus?.value || "";
+        const cat = filterCat?.value || "";
+        for (const row of rows) {
+          const okQ = !q || (row.dataset.ixSearch || "").includes(q);
+          const okCat = !cat || row.dataset.ixCategory === cat;
+          let okStatus = true;
+          if (status === "active") okStatus = row.dataset.ixActive === "1";
+          else if (status === "inactive") okStatus = row.dataset.ixActive === "0";
+          else if (status === "error") okStatus = row.dataset.ixError === "1";
+          row.hidden = !(okQ && okCat && okStatus);
+        }
+        for (const group of groups) {
+          group.hidden = group.querySelectorAll("[data-ix-open]:not([hidden])").length === 0;
+        }
+      }
+      search?.addEventListener("input", applyFilters);
+      filterStatus?.addEventListener("change", applyFilters);
+      filterCat?.addEventListener("change", applyFilters);
+
+      function updateCount() {
+        const active = rows.filter((row) => row.dataset.ixActive === "1").length;
+        if (countEl) countEl.textContent = `${active} activas · ${rows.length - active} inactivas`;
+      }
+
+      // Cada fila abre un popup con su editor (movido del contenedor de plantillas
+      // al cuerpo del popup; mover el nodo preserva sus listeners).
+      const popup = window.Popup ? new window.Popup({ overlay_selector: "[data-ix-popup]" }) : null;
+      popup?.iniciar();
+      const templates = document.getElementById("ix_editor_templates");
+      const mount = document.getElementById("ix_editor_mount");
+      const titleEl = document.getElementById("ix_editor_title");
+
+      function openEditor(type) {
+        const form = templates?.querySelector(`[data-ix-editor="${type}"]`);
+        if (!form || !popup || !mount) return;
+        Array.from(mount.children).forEach((node) => templates.appendChild(node));
+        mount.appendChild(form);
+        if (titleEl) titleEl.textContent = form.dataset.ixLabel || "Configurar interacción";
+        popup.open();
+      }
+      rows.forEach((row) => row.addEventListener("click", () => openEditor(row.dataset.ixOpen)));
+
+      for (const form of Array.from(templates?.querySelectorAll("[data-ix-editor]") ?? [])) {
+        const row = rows.find((item) => item.dataset.ixOpen === form.dataset.ixEditor);
+        const toggle = form.querySelector("[data-ix-toggle]");
+        const inputs = Array.from(form.querySelectorAll("[data-ix-input]"));
+        const actions = form.querySelector("[data-ix-actions]");
+        const idle = actions.querySelector(".ix-actions-idle");
+        const dirty = actions.querySelector(".ix-actions-dirty");
+        const saved = actions.querySelector(".ix-actions-saved");
+        const errorEl = actions.querySelector("[data-ix-error-msg]");
+        let snapshot = readState();
+        let savedTimer;
+
+        function readState() {
+          return JSON.stringify({ enabled: toggle ? toggle.checked : null, values: inputs.map((input) => input.value) });
+        }
+        function render() {
+          const isDirty = readState() !== snapshot;
+          idle.hidden = isDirty;
+          dirty.hidden = !isDirty;
+          if (isDirty) {
+            saved.hidden = true;
+            errorEl.hidden = true;
+          }
+        }
+        function onChange() {
+          clearTimeout(savedTimer);
+          render();
+        }
+        toggle?.addEventListener("change", onChange);
+        inputs.forEach((input) => input.addEventListener("input", onChange));
+
+        form.querySelector("[data-ix-discard]")?.addEventListener("click", () => {
+          const snap = JSON.parse(snapshot);
+          if (toggle) toggle.checked = snap.enabled;
+          inputs.forEach((input, index) => {
+            input.value = snap.values[index];
+          });
+          render();
+        });
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          errorEl.hidden = true;
+          try {
+            const response = await fetch(form.action, {
+              method: "POST",
+              headers: { "X-Requested-With": "XMLHttpRequest" },
+              body: new URLSearchParams(new FormData(form)),
+            });
+            if (!response.ok) throw new Error("save failed");
+            snapshot = readState();
+            if (row && toggle) {
+              row.dataset.ixActive = toggle.checked ? "1" : "0";
+              const statusEl = row.querySelector("[data-ix-row-status]");
+              if (statusEl) {
+                statusEl.textContent = toggle.checked ? "Activa" : "Inactiva";
+                statusEl.classList.toggle("is-on", toggle.checked);
+                statusEl.classList.toggle("is-off", !toggle.checked);
+              }
+              updateCount();
+            }
+            idle.hidden = true;
+            dirty.hidden = true;
+            saved.hidden = false;
+            savedTimer = setTimeout(() => {
+              saved.hidden = true;
+              idle.hidden = false;
+            }, 2000);
+          } catch {
+            errorEl.textContent = "Error al guardar. Reintenta.";
+            errorEl.hidden = false;
+          }
+        });
+      }
+    })();

@@ -113,9 +113,45 @@ describe("admin integrations dashboard", () => {
     expect(voice.config_json).toMatchObject({ model_id: "eleven_turbo_v2", voice_id: "abc123" });
 
     const page = await request(app).get("/admin/interactions?tab=config").expect(200);
-    expect(page.text).toContain("Configuración de interacciones");
+    expect(page.text).toContain("Configuración global de interacciones");
     expect(page.text).toContain("eleven_turbo_v2");
+    // El catálogo (misma página) sigue mostrando el estado Inactiva del setting guardado.
     expect(page.text).toContain("Inactiva");
+  });
+
+  it("lists conversations across all accounts with filters and links to the inspector view", async () => {
+    const bot = (await pool.query("SELECT id, account_id, organization_id FROM bots LIMIT 1")).rows[0];
+    const contact = (
+      await pool.query(
+        "INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name) VALUES ($1, $2, '5215559990000', 'Cliente Admin Convo') RETURNING id",
+        [bot.account_id, bot.organization_id],
+      )
+    ).rows[0];
+    const convo = (
+      await pool.query(
+        `INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at)
+         VALUES ($1, $2, $3, $4, 'whatsapp', 'open', now()) RETURNING id, account_id`,
+        [bot.account_id, bot.organization_id, bot.id, contact.id],
+      )
+    ).rows[0];
+    expect(convo).toBeTruthy();
+
+    const app = create_admin_test_app(pool);
+    const page = await request(app).get("/admin/conversations").expect(200);
+    expect(page.text).toContain("Conversaciones");
+    expect(page.text).toContain("Todas las conversaciones de la plataforma");
+    // Cada fila enlaza al visor del inspector.
+    expect(page.text).toContain(`/inspector/conversations/${convo.id}`);
+
+    // Filtro por cuenta del seed: la conversación sigue presente.
+    const by_account = await request(app).get(`/admin/conversations?account_id=${convo.account_id}`).expect(200);
+    expect(by_account.text).toContain(`/inspector/conversations/${convo.id}`);
+
+    // Filtro por una cuenta inexistente: estado vacío.
+    const empty = await request(app)
+      .get("/admin/conversations?account_id=00000000-0000-0000-0000-000000000123")
+      .expect(200);
+    expect(empty.text).toContain("Sin conversaciones que coincidan");
   });
 
   it("renders guardrail events with filters, capability-gap rollup, and converts an event into an internal task", async () => {
@@ -291,8 +327,9 @@ describe("admin integrations dashboard", () => {
     expect(page.text).toContain("status-toggle");
     expect(page.text).toContain("Archivado");
     expect(page.text).toContain("data-create-account");
-    expect(page.text).toContain("data-create-bot");
     expect(page.text).toContain("data-create-user");
+    // Los bots se crean desde el dashboard de la cuenta, no desde aquí.
+    expect(page.text).not.toContain("data-create-bot");
     expect(page.text).toContain("create_business_popup");
   });
 
@@ -329,85 +366,4 @@ describe("admin integrations dashboard", () => {
     expect(no_match.text).toContain("Sin negocios que coincidan");
   });
 
-  it("creates a draft custom bot from admin and redirects to its editor", async () => {
-    const app = create_admin_test_app(pool);
-    const account = (await pool.query("SELECT id FROM accounts LIMIT 1")).rows[0];
-
-    const created = await request(app)
-      .post("/admin/bots")
-      .type("form")
-      .send({ account_id: account.id, name: "Bot Admin Test" })
-      .expect(302);
-
-    const bot = (
-      await pool.query("SELECT * FROM bots WHERE account_id = $1 AND slug = 'bot-admin-test' LIMIT 1", [account.id])
-    ).rows[0];
-    expect(bot).toBeTruthy();
-    expect(bot.bot_type).toBe("custom");
-    expect(bot.status).toBe("draft");
-    expect(created.headers.location).toBe(`/inspector/bots/${bot.id}`);
-
-    // Mismo nombre otra vez: el slug se desambigua, no se pisa el bot existente.
-    await request(app).post("/admin/bots").type("form").send({ account_id: account.id, name: "Bot Admin Test" }).expect(302);
-    const duplicated = await pool.query("SELECT slug FROM bots WHERE account_id = $1 AND slug LIKE 'bot-admin-test%'", [
-      account.id,
-    ]);
-    expect(duplicated.rows.map((row) => row.slug).sort()).toEqual(["bot-admin-test", "bot-admin-test-2"]);
-
-    // Sin cuenta o sin nombre → 400.
-    await request(app).post("/admin/bots").type("form").send({ name: "Sin cuenta" }).expect(400);
-    await request(app)
-      .post("/admin/bots")
-      .type("form")
-      .send({ account_id: "00000000-0000-0000-0000-000000000009", name: "Cuenta fantasma" })
-      .expect(400);
-  });
-
-  it("moves a clean bot to another account and blocks bots with channels or history", async () => {
-    const app = create_admin_test_app(pool);
-
-    await request(app).post("/admin/businesses").type("form").send({ name: "Negocio Destino" }).expect(302);
-    const target_org = (await pool.query("SELECT id FROM organizations WHERE slug = 'negocio-destino' LIMIT 1")).rows[0];
-    await request(app)
-      .post("/admin/accounts")
-      .type("form")
-      .send({ organization_id: target_org.id, name: "Cuenta Destino" })
-      .expect(302);
-    const target_account = (
-      await pool.query("SELECT id FROM accounts WHERE organization_id = $1 AND slug = 'cuenta-destino' LIMIT 1", [
-        target_org.id,
-      ])
-    ).rows[0];
-
-    // Bot limpio recién creado: se puede mover, y queda en el negocio destino.
-    const source_account = (await pool.query("SELECT id FROM accounts WHERE slug = 'yoayudo-ventas' LIMIT 1")).rows[0];
-    await request(app)
-      .post("/admin/bots")
-      .type("form")
-      .send({ account_id: source_account.id, name: "Bot Movible" })
-      .expect(302);
-    const bot = (await pool.query("SELECT id FROM bots WHERE slug = 'bot-movible' LIMIT 1")).rows[0];
-
-    await request(app)
-      .post(`/admin/bots/${bot.id}/move`)
-      .type("form")
-      .send({ account_id: target_account.id })
-      .expect(302)
-      .expect("Location", "/admin/bots");
-    const moved = (await pool.query("SELECT account_id, organization_id, bot_profile_id FROM bots WHERE id = $1", [bot.id]))
-      .rows[0];
-    expect(moved.account_id).toBe(target_account.id);
-    expect(moved.organization_id).toBe(target_org.id);
-    expect(moved.bot_profile_id).toBeNull();
-
-    // El bot seedeado tiene un canal de WhatsApp activo asignado: bloqueado.
-    // (El move ya no tiene UI en /admin/bots — quedó como endpoint utilitario.)
-    const seeded_bot = (await pool.query("SELECT id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")).rows[0];
-    const blocked = await request(app)
-      .post(`/admin/bots/${seeded_bot.id}/move`)
-      .type("form")
-      .send({ account_id: target_account.id })
-      .expect(400);
-    expect(blocked.text).toContain("canales");
-  });
 });

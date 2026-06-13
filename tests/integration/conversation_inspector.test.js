@@ -216,7 +216,7 @@ describe("Conversation Inspector", () => {
     `);
     const app = create_inspector_test_app(pool);
 
-    await request(app).get("/inspector").expect(200).expect(/Inspector de bots y agentes/);
+    await request(app).get("/inspector").expect(200).expect(/Inspector por bots/);
     await request(app)
       .get(`/inspector/bots/${ids.rows[0].bot_id}?saved=1`)
       .expect(302)
@@ -315,7 +315,7 @@ describe("Conversation Inspector", () => {
       .expect(/Ruteo determinístico por intención/);
   });
 
-  it("scopes the inspector home to a single account when ?account= is present", async () => {
+  it("scopes the inspector to a single account via path param (legacy ?account= redirects)", async () => {
     await simulate(pool, client, "hola");
     const account = (
       await pool.query(`
@@ -328,8 +328,14 @@ describe("Conversation Inspector", () => {
     ).rows[0];
     const app = create_inspector_test_app(pool);
 
-    // Scoped: shows the account header + a way back to the unscoped list.
-    const scoped = await request(app).get(`/inspector?account=${account.id}`).expect(200);
+    // Legacy ?account= redirects to the canonical path (scope lives in the path now).
+    await request(app)
+      .get(`/inspector?account=${account.id}`)
+      .expect(302)
+      .expect("Location", `/inspector/accounts/${account.id}`);
+
+    // Scoped path: shows the account header + a way back to the unscoped list.
+    const scoped = await request(app).get(`/inspector/accounts/${account.id}`).expect(200);
     expect(scoped.text).toContain(account.name);
     expect(scoped.text).toContain("Ver todos los bots");
     expect(scoped.text).toContain("scope-banner");

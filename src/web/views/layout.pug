@@ -30,6 +30,8 @@ html(lang="es")
       // Admin stays global on purpose.
       const ctx_qs = nav_ctx ? `?business=${nav_ctx.business_id}&account=${nav_ctx.account_id}` : "";
       const dashboard_href = nav_ctx ? `/dashboard/business/${nav_ctx.business_id}/accounts/${nav_ctx.account_id}` : "/dashboard";
+      // Inspector "por bots" scopea con la cuenta en el path (no query string).
+      const inspector_href = nav_ctx ? `/inspector/accounts/${nav_ctx.account_id}` : "/inspector";
       // Con auth activo: un usuario de negocio solo ve su dashboard; las
       // herramientas internas (Inspector/Review/Admin) son del owner.
       const session_user = (typeof current_user !== "undefined" && current_user) ? current_user : null;
@@ -40,7 +42,7 @@ html(lang="es")
       nav.nav
         a(href=member_home || dashboard_href, class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
         unless is_business_user
-          a(href=`/inspector${ctx_qs}`, class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
+          a(href=inspector_href, class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
           a(href=`/review${ctx_qs}`, class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
           a(href="/admin/integrations", class=(nav_active === "admin" ? "is-active" : ""), aria-current=(nav_active === "admin" ? "page" : false)) Admin
         if session_user

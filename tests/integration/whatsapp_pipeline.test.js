@@ -274,19 +274,7 @@ describe("WhatsApp inbound pipeline", () => {
     expect(events.rows[0].details_json.phone_number_bot_assignment_id).toBeTruthy();
   });
 
-  async function enable_ai_intents_on_main_bot() {
-    const bot = (
-      await pool.query("SELECT id, definition_json FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
-    ).rows[0];
-    const definition = {
-      ...bot.definition_json,
-      ai: { ...(bot.definition_json.ai ?? {}), use_ai_intents: true },
-    };
-    await pool.query("UPDATE bots SET definition_json = $2::jsonb WHERE id = $1", [bot.id, JSON.stringify(definition)]);
-  }
-
-  it("passes the per-bot AI opt-in flag to the provider's classify_intents", async () => {
-    await enable_ai_intents_on_main_bot();
+  it("attempts AI classification for every bot (AI is on by default, no per-bot opt-in)", async () => {
     const flags = [];
     class spy_provider extends mock_provider {
       async classify_intents(input) {
@@ -302,11 +290,11 @@ describe("WhatsApp inbound pipeline", () => {
       memory_store: new local_memory_store({ base_dir: ".storage/test-memory" }),
     });
 
+    // Sin tocar ninguna config del bot: el inbound pide AI siempre.
     expect(flags).toContain(true);
   });
 
   it("degrades to deterministic classification when AI classification throws (inbound never breaks)", async () => {
-    await enable_ai_intents_on_main_bot();
     const flags = [];
     class failing_ai_provider extends mock_provider {
       async classify_intents(input) {
