@@ -1,0 +1,141 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const status_options = [
+      { value: "pendiente", label: "Pendiente" },
+      { value: "en_progreso", label: "En progreso" },
+      { value: "hecha", label: "Hecha" },
+    ];
+    const detail_url = `${base_path}/${task.id}`;
+    const default_actor = (typeof current_user !== "undefined" && current_user) ? current_user.name : "";
+
+  //- Estado como chips compactos (segmented): el actual resaltado, los otros dos
+  //- son clicks que avanzan el follow-up. Vuelve a este detalle.
+  mixin state_chips()
+    .status-toggle.status-toggle--chips(role="group", aria-label="Estado de la tarea")
+      each option in status_options
+        if option.value === task.status
+          span.status-toggle-option.is-current(class=`is-${option.value}`, aria-current="true")= option.label
+        else
+          form.status-toggle-form(method="post", action=`${detail_url}/status`)
+            input(type="hidden", name="status", value=option.value)
+            input(type="hidden", name="return_to", value=detail_url)
+            button.status-toggle-option(type="submit", title=`Marcar como ${option.label.toLowerCase()}`)= option.label
+
+  section.task-modal
+    header.task-modal-head
+      .task-modal-titles
+        h1.task-modal-title= task.titulo
+        if task.descripcion
+          p.task-modal-desc= task.descripcion
+        if task.conversation_id
+          a.task-modal-conv(href=(task.account_id ? `/inspector/accounts/${task.account_id}/conversations/${task.conversation_id}` : `/inspector/conversations/${task.conversation_id}`), target="_top") Ver conversación relevante →
+      .task-modal-state
+        span.task-modal-state-label Estado
+        +state_chips()
+
+    .task-modal-grid
+      section.task-modal-main
+        .task-section-head
+          h2 Seguimiento
+          button.button.secondary-button#toggle_update(type="button", aria-expanded="false", aria-controls="task_update_form") Registrar actualización
+
+        if updates && updates.length
+          ol.task-timeline
+            each update in updates
+              li.task-event
+                .task-event-head
+                  span.task-event-actor= update.actor || "Sistema"
+                  span.task-event-time= when(update.created_at)
+                if update.status_changed
+                  span.task-event-status= `${update.from_label} → ${update.to_label}`
+                if update.note
+                  p.task-event-note= update.note
+        else
+          p.task-empty
+            strong Sin actividad todavía.
+            |  Registra la primera actualización.
+
+        //- Form colapsado por default; se abre con "Registrar actualización".
+        form.task-update-form#task_update_form(method="post", action=`${detail_url}/update`, hidden)
+          .task-form-row
+            .task-form-field
+              label(for="task_update_actor") Atendido por
+              input#task_update_actor(type="text", name="actor", value=default_actor, placeholder="Tu nombre")
+            .task-form-field
+              label(for="task_update_status") Cambiar estado
+              select#task_update_status(name="status")
+                option(value="") Sin cambio
+                each option in status_options
+                  option(value=option.value, selected=option.value === task.status)= option.label
+          .task-form-field
+            label(for="task_update_note") Nota
+            textarea#task_update_note(name="note", rows="2", placeholder="Qué pasó: a quién contactaste, resultado, próximos pasos…")
+          .form-actions
+            button(type="submit") Guardar actualización
+            button.secondary-button#cancel_update(type="button") Cancelar
+
+      aside.task-modal-side
+        dl.task-meta
+          div
+            dt Responsable
+            dd= task.assigned_to || "Sin asignar"
+          div
+            dt Contacto
+            dd= task.contact_name || task.contact_phone || "—"
+          div
+            dt Bot · cuenta
+            dd= task.account_name ? `${task.bot_name ? `${task.bot_name} · ` : ""}${task.account_name}` : (task.bot_name || "—")
+          div
+            dt Creada
+            dd= when(task.created_at)
+          if task.due_at
+            div
+              dt Vence
+              dd= when(task.due_at)
+
+  script.
+    (() => {
+      const form = document.getElementById("task_update_form");
+      const toggle = document.getElementById("toggle_update");
+      const cancel = document.getElementById("cancel_update");
+
+      // Avisa al popup contenedor la altura real del contenido para que el iframe
+      // se ajuste y no quede espacio muerto (ni scroll innecesario) en laptop.
+      function postHeight() {
+        try {
+          // Medir el contenedor real (un bloque que se dimensiona a su contenido):
+          // documentElement.scrollHeight se "clava" a la altura del iframe y no
+          // dejaría encoger. getBoundingClientRect().bottom da la altura real.
+          const container = document.querySelector("main.container");
+          const height = container
+            ? Math.ceil(container.getBoundingClientRect().bottom + 2)
+            : document.documentElement.scrollHeight;
+          window.parent?.postMessage({ type: "yoayudo:task-height", height }, "*");
+        } catch (error) {
+          /* standalone: no parent listener */
+        }
+      }
+
+      // "Registrar actualización" (arriba) abre el form y se oculta; "Cancelar"
+      // (dentro del form, junto a Guardar) lo cierra y vuelve a mostrar el botón.
+      function setFormOpen(open) {
+        form.toggleAttribute("hidden", !open);
+        toggle.toggleAttribute("hidden", open);
+        toggle.setAttribute("aria-expanded", String(open));
+        if (open) form.querySelector("input, textarea")?.focus();
+        postHeight();
+      }
+
+      toggle?.addEventListener("click", () => setFormOpen(true));
+      cancel?.addEventListener("click", () => setFormOpen(false));
+
+      window.addEventListener("resize", postHeight);
+      postHeight();
+      requestAnimationFrame(postHeight);
+      setTimeout(postHeight, 200);
+    })();

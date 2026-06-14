@@ -45,6 +45,9 @@ block content
       a.metric.metric--link(href="#panel-conversaciones")
         span.label Conversaciones
         strong= stats.conversations_count || 0
+      a.metric.metric--link(href=`/dashboard/business/${account.organization_id}/accounts/${account.id}/tasks`)
+        span.label Tareas abiertas
+        strong= open_tasks_count || 0
       a.metric.metric--link(href="#panel-actividad")
         span.label Eventos con error
         strong= stats.error_events_count || 0
@@ -123,7 +126,7 @@ block content
               each channel in channels
                 tr
                   td WhatsApp
-                  td= channel.display_phone_number || channel.phone_number_id
+                  td= channel.display_phone_number ? phone(channel.display_phone_number) : channel.phone_number_id
                   td
                     span.status= channel.status
         else
@@ -249,8 +252,8 @@ block content
               each conversation in conversations
                 tr
                   td
-                    a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
-                    div.meta= conversation.whatsapp_phone
+                    a(href=`/inspector/accounts/${account.id}/conversations/${conversation.id}`)= conversation.display_name || phone(conversation.whatsapp_phone)
+                    div.meta= phone(conversation.whatsapp_phone)
                   td= conversation.bot_name || "sin bot"
                   td= conversation.last_message || "-"
                   td

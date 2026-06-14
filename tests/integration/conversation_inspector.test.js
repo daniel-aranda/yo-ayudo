@@ -8,7 +8,7 @@ import { create_simulated_whatsapp_payload } from "../../src/channels/whatsapp/w
 import { resolve_whatsapp_identity_by_phone_number_id } from "../../src/channels/whatsapp/whatsapp_identity_resolver.js";
 import { handle_whatsapp_webhook_payload } from "../../src/engine/message_processor.js";
 import { register_inspector_routes } from "../../src/inspector/inspector_routes.js";
-import { json_text, message_alignment, present_conversation_turns } from "../../src/inspector/inspector_presenter.js";
+import { json_text, message_alignment, present_conversation_turns, format_phone } from "../../src/inspector/inspector_presenter.js";
 import { compact_trace_summary } from "../../src/inspector/inspector_presenter.js";
 import { seed_demo_conversation, seed_routed_demo_conversation } from "../../src/db/seed.js";
 import { build_message_trace } from "../../src/inspector/trace_builder.js";
@@ -64,6 +64,7 @@ function create_inspector_test_app(pool, dependencies = {}) {
   app.locals.datetime = format_datetime_es;
   app.locals.json = json_text;
   app.locals.message_alignment = message_alignment;
+  app.locals.phone = format_phone;
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
 
@@ -193,7 +194,9 @@ describe("Conversation Inspector", () => {
     const view = await get_conversation_view(pool, conversation.rows[0].id);
 
     expect(view.conversation.bot_name).toBe("Agente WhatsApp YoAyudo");
+    expect(view.conversation.bot_display_phone_number).toBe("+525555999999");
     expect(view.messages).toHaveLength(2);
+    expect(view.value_summary.purchases.count).toBe(1);
     // No legacy agent routing; the inbound message is the parsed purchase.
     expect(view.messages[0].compact_trace_summary.selected_agent).toBeFalsy();
     expect(view.messages[0].message.parsed_intent).toBe("purchase");
@@ -216,7 +219,12 @@ describe("Conversation Inspector", () => {
     `);
     const app = create_inspector_test_app(pool);
 
-    await request(app).get("/inspector").expect(200).expect(/Inspector por bots/);
+    // El inspector siempre es por cuenta: /inspector sin cuenta manda a elegir una.
+    await request(app).get("/inspector").expect(302).expect("Location", "/dashboard");
+    await request(app)
+      .get(`/inspector/accounts/${ids.rows[0].account_id}`)
+      .expect(200)
+      .expect(/Inspector por bots/);
     await request(app)
       .get(`/inspector/bots/${ids.rows[0].bot_id}?saved=1`)
       .expect(302)
@@ -296,15 +304,20 @@ describe("Conversation Inspector", () => {
     ]) {
       expect(bot_page.text).not.toContain(legacy_text);
     }
-    await request(app)
-      .get(`/inspector/conversations/${ids.rows[0].conversation_id}`)
-      .expect(200)
-      // Minimal view: the action label chip + the intent in the click popover.
-      .expect(/turn-action-chip/)
-      .expect(/Intención/)
-      // Phase 2: top summary strip + sidebar diagnostics.
-      .expect(/conv-summary/)
-      .expect(/Diagnóstico/);
+    const conversation_page = await request(app)
+      .get(`/inspector/accounts/${ids.rows[0].account_id}/conversations/${ids.rows[0].conversation_id}`)
+      .expect(200);
+    // Minimal view: the action label chip + the intent in the click popover.
+    expect(conversation_page.text).toContain("turn-action-chip");
+    expect(conversation_page.text).toContain("Intención");
+    expect(conversation_page.text).toContain("conv-summary");
+    // Sidebar: contact/channel + value artifacts, no redundant low-value panels.
+    expect(conversation_page.text).toContain("Contacto y canal");
+    expect(conversation_page.text).toContain("Número del bot");
+    expect(conversation_page.text).toContain("Valor capturado");
+    expect(conversation_page.text).toContain("Compras");
+    expect(conversation_page.text).not.toContain("Diagnóstico");
+    expect(conversation_page.text).not.toContain("Acciones rápidas");
     await request(app)
       .get(`/inspector/messages/${ids.rows[0].message_id}`)
       .expect(200)
@@ -334,15 +347,16 @@ describe("Conversation Inspector", () => {
       .expect(302)
       .expect("Location", `/inspector/accounts/${account.id}`);
 
-    // Scoped path: shows the account header + a way back to the unscoped list.
+    // Scoped path: muestra el header de la cuenta (siempre es por cuenta).
     const scoped = await request(app).get(`/inspector/accounts/${account.id}`).expect(200);
     expect(scoped.text).toContain(account.name);
-    expect(scoped.text).toContain("Ver todos los bots");
-    expect(scoped.text).toContain("scope-banner");
+    expect(scoped.text).toContain("Inspector por bots");
+    // Ya no hay vista global ni banner de "ver todos los bots".
+    expect(scoped.text).not.toContain("scope-banner");
+    expect(scoped.text).not.toContain("Ver todos los bots");
 
-    // Unscoped: no scope banner.
-    const unscoped = await request(app).get("/inspector").expect(200);
-    expect(unscoped.text).not.toContain("scope-banner");
+    // Sin cuenta: el inspector manda a elegir una (no renderea lista global).
+    await request(app).get("/inspector").expect(302).expect("Location", "/dashboard");
   });
 
   it("seeds a multi-execution demo conversation (a single turn fires more than one interaction)", async () => {
@@ -398,6 +412,47 @@ describe("Conversation Inspector", () => {
     expect(trace.router_runs[0].agent_key).toBe("reports_agent");
     expect(Number(trace.router_runs[0].routing_confidence)).toBeGreaterThan(0.8);
     expect(trace.agent_runs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("surfaces the bot-created task in the conversation visor (closes the human follow-up loop)", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot = (
+      await pool.query("SELECT id, account_id, organization_id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
+    ).rows[0];
+    await seed_routed_demo_conversation(pool, {
+      account_id: bot.account_id,
+      organization_id: bot.organization_id,
+      bot_id: bot.id,
+    });
+    const conversation = (
+      await pool.query(
+        `SELECT c.id FROM conversations c
+         JOIN contacts ct ON ct.id = c.contact_id
+         WHERE ct.whatsapp_phone = '5215550000222' LIMIT 1`,
+      )
+    ).rows[0];
+    expect(conversation).toBeTruthy();
+
+    // La URL plana legacy redirige al canónico con la cuenta en el path.
+    await request(app)
+      .get(`/inspector/conversations/${conversation.id}`)
+      .expect(302)
+      .expect("Location", `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}`);
+
+    const page = await request(app)
+      .get(`/inspector/accounts/${bot.account_id}/conversations/${conversation.id}`)
+      .expect(200);
+    // La interacción crear_tarea dejó una tarea real; el panel slim la muestra
+    // (título + estado) y al hacer click abre el detalle en popup (data-open-task).
+    expect(page.text).toContain("Llamar al cliente");
+    expect(page.text).toContain("conv-task-row");
+    expect(page.text).toContain("Consultar humano");
+    const task = (
+      await pool.query("SELECT id FROM internal_tasks WHERE titulo LIKE 'Llamar al cliente%' LIMIT 1")
+    ).rows[0];
+    expect(page.text).toContain(`data-open-task="${task.id}"`);
+    expect(page.text).toContain("turn-action-combo");
+    expect(page.text).toContain("turn-task-button");
   });
 
   it("shows Instagram as a connected channel (parity with WhatsApp) for the seeded agent", async () => {

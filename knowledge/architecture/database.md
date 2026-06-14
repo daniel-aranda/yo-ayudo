@@ -147,7 +147,8 @@ Para Bot Engine configurable, la trazabilidad principal debe vivir en:
 - `bot_prompt_compilations`
 - `bot_guardrail_events`
 - `internal_notes`
-- `internal_tasks`
+- `internal_tasks` (incluye `assigned_to` = responsable que atendió)
+- `task_updates` (historial de seguimiento de una tarea: `actor`, `note`, `from_status`, `to_status`)
 
 `diagnosticos_ai` guarda diagnósticos vendidos a prospectos o clientes:
 
@@ -190,7 +191,7 @@ Las acciones futuras de voz y OCR real no escriben proveedores externos todavía
 - input inválido.
 - permiso insuficiente.
 
-`internal_notes` e `internal_tasks` son almacenamiento interno mínimo para preflight founder. Permiten que `guardar_nota` y `crear_tarea` sean acciones reales sin depender todavía de CRM, email, OCR, Twilio u otra integración externa.
+`internal_notes` e `internal_tasks` son almacenamiento interno mínimo para preflight founder. Permiten que `guardar_nota` y `crear_tarea` sean acciones reales sin depender todavía de CRM, email, OCR, Twilio u otra integración externa. `internal_tasks` se gestiona en la bandeja de Tareas (`/admin/tasks` y por cuenta) con seguimiento: `assigned_to` (responsable) y `task_updates` (bitácora de quién atendió y qué pasó). Detalle de UI en `frontend.md` y `conversation_inspector.md`.
 
 ## Business Day
 
@@ -221,7 +222,7 @@ Las migraciones son SQL explícito en:
 src/db/migrations
 ```
 
-`npm run db:migrate` aplica en orden las once migraciones actuales:
+`npm run db:migrate` aplica en orden las migraciones actuales:
 
 ```text
 0001_initial
@@ -235,6 +236,12 @@ src/db/migrations
 0009_account_remaining_tables
 0010_drop_tenant_branch
 0011_sync_bot_organization
+0012_integration_events
+0013_interaction_settings
+0014_instagram_channels
+0015_agent_runs_routing_columns
+0016_users_auth
+0017_task_activity   # assigned_to + task_updates (seguimiento de tareas)
 ```
 
 Las migraciones 0005 a 0011 siguen un enfoque expand-migrate-contract: agregan `account_id`/`organization_id`, migran los datos y finalmente eliminan tenant/branch (`0010_drop_tenant_branch` elimina fisicamente las tablas y columnas) hasta unificar todo en organization/account. El runner registra archivos aplicados en `schema_migrations`.

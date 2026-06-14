@@ -78,7 +78,7 @@ describe("WhatsApp inbound pipeline", () => {
     expect(messages.rowCount).toBe(2);
     expect(messages.rows[0].raw_payload_json.message.text.body).toBe("abrimos con 1500 en caja");
     expect(messages.rows[0].parsed_intent).toBe("day_start");
-    expect(client.sent_messages[0]?.body).toContain("Inicio del día registrado");
+    expect(client.sent_messages[0]?.body).toContain("Caja inicial del día registrada");
   });
 
   it("ignores duplicate webhook deliveries with the same message id (idempotent)", async () => {
@@ -152,7 +152,7 @@ describe("WhatsApp inbound pipeline", () => {
     ]);
     expect(audit.rows.every((row) => row.status === "executed")).toBe(true);
     // The single reply acknowledges every interaction.
-    expect(client.sent_messages[0].body).toContain("Inicio del día registrado");
+    expect(client.sent_messages[0].body).toContain("Caja inicial del día registrada");
     expect(client.sent_messages[0].body).toContain("Venta acumulada registrada");
     expect(client.sent_messages[0].body).toContain("Compra registrada");
   });

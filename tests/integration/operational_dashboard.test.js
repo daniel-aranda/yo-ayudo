@@ -6,7 +6,9 @@ import { register_dashboard_routes } from "../../src/dashboard/dashboard_routes.
 import { navigation_context } from "../../src/app/navigation_middleware.js";
 import { format_money } from "../../src/shared/money.js";
 import { format_date_es, format_datetime_es } from "../../src/shared/dates.js";
+import { format_phone } from "../../src/inspector/inspector_presenter.js";
 import { create_test_pool } from "../helpers/test_pool.js";
+import { seed_routed_demo_conversation } from "../../src/db/seed.js";
 
 function create_dashboard_test_app(pool) {
   const app = express();
@@ -17,6 +19,7 @@ function create_dashboard_test_app(pool) {
   app.locals.money = format_money;
   app.locals.date = format_date_es;
   app.locals.datetime = format_datetime_es;
+  app.locals.phone = format_phone;
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
   app.use(navigation_context);
@@ -332,5 +335,50 @@ describe("Operational dashboard", () => {
         bot_id: bot.id,
       })
       .expect(400);
+  });
+
+  it("account tasks module: lists, shows detail with follow-up history, and scopes to the account", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const bot = (
+      await pool.query("SELECT id FROM bots WHERE account_id = $1 AND status = 'active' LIMIT 1", [account_id])
+    ).rows[0];
+    await seed_routed_demo_conversation(pool, { account_id, organization_id, bot_id: bot.id });
+    const app = create_dashboard_test_app(pool);
+    const base = `/dashboard/business/${organization_id}/accounts/${account_id}/tasks`;
+
+    // Lista scopeada a la cuenta (breadcrump + sin columna Negocio/cuenta).
+    const list = await request(app).get(base).expect(200);
+    expect(list.text).toContain("Llamar al cliente");
+    expect(list.text).not.toContain("Negocio / cuenta");
+
+    const task = (
+      await pool.query("SELECT id FROM internal_tasks WHERE titulo LIKE 'Llamar al cliente%' LIMIT 1")
+    ).rows[0];
+
+    // Detalle + agregar actualización (quién atendió y qué pasó).
+    const detail = await request(app).get(`${base}/${task.id}`).expect(200);
+    expect(detail.text).toContain("Seguimiento");
+    await request(app)
+      .post(`${base}/${task.id}/update`)
+      .type("form")
+      .send({ actor: "Beto", note: "Cliente contactado, cerrado.", status: "hecha" })
+      .expect(302);
+    const after = await request(app).get(`${base}/${task.id}`).expect(200);
+    expect(after.text).toContain("Beto");
+    expect(after.text).toContain("Cliente contactado, cerrado.");
+    expect((await pool.query("SELECT status, assigned_to FROM internal_tasks WHERE id = $1", [task.id])).rows[0].status).toBe(
+      "hecha",
+    );
+
+    // Scope: una 2da cuenta del mismo negocio NO ve esa tarea (404).
+    const other = (
+      await pool.query(
+        "INSERT INTO accounts (organization_id, name, slug, status) VALUES ($1, 'Otra Cuenta Tasks', 'otra-cuenta-tasks', 'active') RETURNING id",
+        [organization_id],
+      )
+    ).rows[0];
+    await request(app)
+      .get(`/dashboard/business/${organization_id}/accounts/${other.id}/tasks/${task.id}`)
+      .expect(404);
   });
 });

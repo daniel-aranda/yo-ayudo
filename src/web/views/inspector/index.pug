@@ -38,21 +38,12 @@ block content
       activity: `${svg_open}<path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
     };
 
+  //- El inspector SIEMPRE es por cuenta (no hay vista global de plataforma; el
+  //- overview cross-account vive en /admin/bots). Por eso no hay banner de escape.
   section.page-header
-    if scoped
-      p.page-eyebrow= `Cuenta · ${account.organization_name || (business && business.name) || "Negocio"}`
-    else
-      p.page-eyebrow Plataforma YoAyudo
+    p.page-eyebrow= `Cuenta · ${account.organization_name || (business && business.name) || "Negocio"}`
     h1 Inspector por bots
-    if scoped
-      p= `Bots y agentes de ${account.name} · últimos ${days} días`
-    else
-      p= `Todos los bots de la plataforma y su actividad · últimos ${days} días`
-
-  if scoped
-    .scope-banner
-      span Mostrando solo los bots de #{account.name}.
-      a(href="/inspector") Ver todos los bots
+    p= `Bots y agentes de ${account.name} · últimos ${days} días`
 
   .period-filter
     span.period-filter-label Periodo

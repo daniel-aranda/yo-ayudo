@@ -77,6 +77,11 @@ La direccion actual es Bot Engine configurable:
 - Admin de interacciones (`/admin/interactions`, `admin_interactions_service.js`): catalogo + uso real (usos/OK/error/ultimo desde `action_audit_logs`), APIs externas (AI + proveedores, OK/error/latencia), logs recientes unificados, **filtro de periodo** (24h/7d/30d) y tab **Configuración**.
 - Admin de bots global (`/admin/bots`, `admin_bots_service.js`): todos los bots de la plataforma (JOIN a accounts/organizations) con conteos operativos por bot —mensajes, conversaciones, errores (`action_audit_logs` failed/blocked/... + `bot_guardrail_events`) y ultima actividad— y totales arriba; filtro de periodo (24h/7d/30d). El nombre enlaza a `/inspector/bots/:id`. La columna **Negocio/cuenta** se oculta en la vista `type=system` (los bots de sistema son de plataforma, clonables a cualquier cuenta) y en vistas mixtas las filas de sistema muestran "Plataforma". `get_bots_admin_view` acepta `account_id` opcional para scopear (lo reusa la home del inspector "por bots"). Sub-nav comun entre `/admin/integrations`, `/admin/interactions`, `/admin/bots`, `/admin/businesses`, `/admin/conversations` y `/admin/guardrails`.
 - Admin de Conversaciones (`/admin/conversations`, `admin_conversations_service.js`): conversaciones globales (cualquier cuenta) con filtros (cuenta/bot/estado/canal + busqueda de contacto, auto-submit) y rollup (total, esperando humano, pendientes de review). Reusa `present_conversation_summary` del inspector; cada fila abre el visor `/inspector/conversations/:id`. Enriquecimiento por conversacion (N+1), cap 100.
+- Tareas internas (`admin_tasks_service.js`): bandeja accionable de `internal_tasks` (lo que un humano tiene que hacer). Las crea el bot con la interacción `crear_tarea` (`metadata_json.source = bot_engine_action`) o la conversión de un guardrail (`source = guardrail_event`); antes se escribían y **nadie las veía**.
+  - **Bandeja** (admin global `/admin/tasks`; por cuenta `/dashboard/business/:b/accounts/:a/tasks` — misma vista `admin/tasks.pug` parametrizada por `base_path`/`scoped`): filtros (estado/cuenta/bot + búsqueda, auto-submit), rollup (pendiente/en progreso/hecha), columna Responsable y **toggle de estado**.
+  - **Detalle por tarea** (`admin/task_detail.pug`, en página o **popup iframe** desde la bandeja y el visor de conversación): estado + **historial de seguimiento** ("quién atendió y qué pasó") desde `task_updates`, con form para **agregar actualización** (actor + nota + cambio de estado opcional) que también setea `assigned_to`. El toggle de estado loguea un update también.
+  - **Account-level**: los usuarios del negocio ven/atienden las tareas de SU cuenta (scopeado por `account_id`, 404 cross-account); el dashboard de cuenta tiene una tarjeta "Tareas abiertas".
+  - Cierra el loop en ambos sentidos: el visor de conversación muestra `Valor capturado` + un panel "Tareas" con link al detalle; además, el chip del turno muestra **"Ver tarea"** cuando hay una tarea derivada. Si el turno venía de `human_help`, el label visible del combo es **"Consultar humano"** aunque la action auditada siga siendo `crear_tarea`. Cada tarea enlaza a su conversación.
 - Admin de Negocios/Cuentas (`/admin/businesses`, `admin_businesses_service.js`): lista todos los negocios (organizations) y sus cuentas (accounts) en cualquier estado, con conteos por cuenta (bots/canales/conversaciones; el conteo de bots incluye TODOS los status para que un draft recien creado sea visible). Soporta **busqueda** (`?q=` por nombre/slug, case-insensitive) y **paginacion** (`?page=`, `?per_page=` default 100, clamp 10–500; filtro+slice en JS sobre organizations, pg-mem-safe), con colapso/expansion por negocio y global (client-side). Nombre de negocio enlaza a `/dashboard/business/:id` y cada cuenta a su dashboard. Permite **crear negocio**, **crear cuenta**, **crear usuario** de negocio (login) y **pausar/archivar/activar** negocio/cuenta (status `active`/`paused`/`archived`). Los **bots se crean solo desde el dashboard de cuenta** ("Agregar bot", con tabs Bot Nuevo / preconfigurado) — aquí no hay alta de bot. Repo `src/organizations/organization_repository.js` (`create_organization`, `set_organization_status`, `set_account_status`, `slugify`) + `upsert_account`.
 - **Auth opcional por negocio** (`src/auth/`, flag `AUTH_ENABLED`, default OFF = cero cambio de comportamiento): login con email+password en `/login` (scrypt nativo de `node:crypto`, cookie HMAC firmada `yoayudo_session`, sin tabla de sesiones — revocar = cambiar `SESSION_SECRET` o desactivar el usuario). Politica (`auth_middleware.js`): el **platform owner** (`is_platform_owner`) ve todo; un **usuario de negocio** solo `/dashboard/business/:su_organization_id` y subrutas — cualquier otra ruta lo regresa a su negocio, y el topbar le esconde Inspector/Review/Admin (solo ve Dashboard + Salir). Publicos: `/login`, `/logout`, `/health`, `/public/`, `/webhooks/` (Meta) e `/internal/` (token propio). En production con auth activo, `SESSION_SECRET` es obligatorio (throw al firmar). Seed crea `owner@yoayudo.local`/`yoayudo-owner` (owner global) y `demo@yoayudo.local`/`yoayudo-demo` (usuario del negocio demo). Esto es control de acceso founder-stage, no auth productivo completo (sin reset de password, sin invitaciones, sin rate-limit de login).
 - Navegacion dashboard explicita Negocio → Cuenta: `/dashboard/business/:id` YA NO redirige a la cuenta primaria; muestra la pagina del negocio con sus cuentas. El home y el visor de conversacion enlazan al negocio; la pagina de cuenta lleva breadcrumb `Dashboard › Negocio › Cuenta` y eyebrow "Cuenta · Negocio: X". Ver `architecture/frontend.md`.
@@ -84,7 +89,7 @@ La direccion actual es Bot Engine configurable:
 - Interaction settings (capa system-level, migracion `0013`, tabla `interaction_settings`, `src/interactions/interaction_settings_repository.js`): habilitar/deshabilitar una interaccion a nivel plataforma y configurar su proveedor (ej. `responder_voz` -> modelo/voz de ElevenLabs). El `action_execution_service` **bloquea** (con guardrail `interaccion_deshabilitada`) cualquier accion cuya interaccion este deshabilitada, sin importar la config por bot; la config fluye al handler (`context.interaction_config`). Es la tercera capa: catalogo estatico (codigo) -> settings system-level -> config por bot (`definition_json.interactions`).
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
-- Tests unitarios e integracion del pipeline, router, memory, inspector, auth, clasificacion por AI, guardrails admin, auto-aprendizaje y Bot Engine comercial. **133 tests / 29 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope + auto-learn) y el scope del top nav en `operational_dashboard.test.js`.
+- Tests unitarios e integracion del pipeline, router, memory, inspector, auth, clasificacion por AI, guardrails admin, auto-aprendizaje y Bot Engine comercial. **135 tests / 29 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope + auto-learn) y el scope del top nav en `operational_dashboard.test.js`.
 
 ## Migraciones
 
@@ -119,10 +124,10 @@ Dashboard/review/inspector:
 - `GET /dashboard/business/:business_id/accounts/:account_id`
 - `GET /review` (`?account=` filtra los pendientes a una cuenta; muestra `.scope-banner` + link de escape)
 - `POST /review/:review_item_id/resolve` (reenvía `business`/`account` para preservar el scope; con `learn` marcado guarda la resolución como business_knowledge reusable — auto-aprendizaje, ver `architecture/memory.md`)
-- `GET /inspector` (home "Inspector por bots": vista estilo `/admin/bots` enfocada a cuenta; `?account=` legacy redirige a `/inspector/accounts/:id`)
-- `GET /inspector/organizations`
+- `GET /inspector` (NO renderea: el inspector siempre es por cuenta. `?account=` legacy redirige a `/inspector/accounts/:id`; sin cuenta redirige a `/dashboard`)
+- `GET /inspector/organizations` → redirige a `/dashboard`
 - `GET /inspector/organizations/:organization_id`
-- `GET /inspector/accounts/:account_id` (misma vista "Inspector por bots" scopeada a la cuenta vía path; reusa `get_bots_admin_view`)
+- `GET /inspector/accounts/:account_id` (única home "Inspector por bots", scopeada a la cuenta vía path; reusa `get_bots_admin_view`; sin vista global ni scope-banner)
 - `GET /inspector/bots/:bot_id`
 - `POST /inspector/bots/:bot_id` (guardado del builder / autosave)
 - `POST /inspector/bots/:bot_id/test-message`
@@ -130,7 +135,7 @@ Dashboard/review/inspector:
 - `GET` / `POST /inspector/accounts/:account_id/knowledge/:source_id`
 - `GET` / `POST /inspector/knowledge[/:source_id]` (legacy/global: con `?account_id=` o fuente con `account_id` redirige a la ruta con cuenta en el path; sin cuenta lista/edita global)
 - `GET /inspector/bots/:bot_id/conversations`
-- `GET /inspector/conversations/:conversation_id`
+- `GET /inspector/accounts/:account_id/conversations/:conversation_id` (visor scopeado a la cuenta; la URL plana `GET /inspector/conversations/:conversation_id` redirige a la canónica)
 - `GET /inspector/messages/:message_id`
 
 Admin:
@@ -142,6 +147,8 @@ Admin:
 - `POST /admin/bots/:bot_id/status` (activar/pausar-a-draft/archivar) · `POST /admin/bots/:bot_id/clone` (copia custom en draft en su cuenta, redirige al editor)
 - `GET /admin/conversations` (conversaciones de TODAS las cuentas, filtrable por `?account_id=`/`?bot_id=`/`?status=`/`?channel=`/`?q=` busqueda de contacto; cada fila enlaza a `/inspector/conversations/:id`)
 - `GET /admin/guardrails` (guardrail events / capability gaps filtrable por `?account_id=`/`?bot_id=`/`?tipo=`/`?action_id=`/`?status=`; rollup de gaps por accion) · `POST /admin/guardrails/:event_id/task` (convertir evento en tarea interna)
+- `GET /admin/tasks` (bandeja de `internal_tasks` filtrable por `?status=`/`?account_id=`/`?bot_id=`/`?q=`; rollup por estado) · `GET /admin/tasks/:task_id` (detalle + historial, sirve standalone o en popup iframe) · `POST /admin/tasks/:task_id/status` (toggle de estado; `return_to` opcional) · `POST /admin/tasks/:task_id/update` (agregar actualización: actor + nota + estado opcional)
+- `GET /dashboard/business/:b/accounts/:a/tasks` + `/tasks/:task_id` + `POST .../tasks/:task_id/status` + `POST .../tasks/:task_id/update` (módulo de tareas a nivel cuenta, scopeado por cuenta con `dashboard_auth`)
 - `GET /admin/businesses` (negocios + cuentas + usuarios con conteos y estado; `?q=` busqueda, `?page=`/`?per_page=` paginacion default 100)
 - `POST /admin/businesses` (crear negocio) · `POST /admin/businesses/:id/status` (pausar/archivar/activar)
 - `POST /dashboard/business/:business_id/accounts/:account_id/bots` (única alta de bot: desde el dashboard de cuenta — custom con `name`, o clon de bot de sistema con `source_bot_id`; redirect a `#panel-bots`)
@@ -223,7 +230,7 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 29 archivos, 133 tests (Vitest).
+- `npm test`: OK, 29 archivos, 135 tests (Vitest).
 - `npm run db:migrate`: aplica las migraciones `0001`–`0016` en orden.
 
 Comandos locales disponibles:

@@ -54,7 +54,7 @@ Estos eventos son backlog de producto. Muestran que capacidades piden los client
 
 ## Vista Interna (Admin)
 
-`GET /admin/guardrails` (`admin_guardrails_service.js` + `admin/guardrails.pug`) es la contraparte de observabilidad de lo que audita el Action Executor: lista `bot_guardrail_events` filtrable por cuenta/bot/tipo/action/status (selects con auto-submit) y un **rollup de capability gaps por acción** (qué acciones pidieron los bots y no se pudieron ejecutar = prioridad de backlog). `POST /admin/guardrails/:event_id/task` convierte un evento en **tarea interna** (`internal_tasks`, `metadata_json.source = guardrail_event`) y marca el evento `status = en_tarea`. Está en el sub-nav de admin.
+`GET /admin/guardrails` (`admin_guardrails_service.js` + `admin/guardrails.pug`) es la contraparte de observabilidad de lo que audita el Action Executor: lista `bot_guardrail_events` filtrable por cuenta/bot/tipo/action/status (selects con auto-submit) y un **rollup de capability gaps por acción** (qué acciones pidieron los bots y no se pudieron ejecutar = prioridad de backlog). `POST /admin/guardrails/:event_id/task` convierte un evento en **tarea interna** (`internal_tasks`, `metadata_json.source = guardrail_event`) y marca el evento `status = en_tarea`. Esa tarea (y las que crea la interacción `crear_tarea`) se ven y se resuelven en `GET /admin/tasks` (bandeja de tareas, `admin_tasks_service.js`). Está en el sub-nav de admin.
 
 ## Regla De Producto
 

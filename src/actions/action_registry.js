@@ -389,8 +389,8 @@ export const action_catalog = [
   },
   {
     action_id: "registrar_inicio_dia",
-    nombre: "Registrar inicio del día",
-    descripcion: "Abre el día operativo con el efectivo en caja inicial.",
+    nombre: "Registrar caja inicial del día",
+    descripcion: "Abre el día operativo registrando el efectivo (caja) inicial.",
     categoria: "operaciones",
     nivel_riesgo: risk_levels.automatico,
     input_schema: object_schema({

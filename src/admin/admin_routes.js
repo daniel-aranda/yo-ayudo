@@ -6,6 +6,7 @@ import { get_bots_admin_view } from "./admin_bots_service.js";
 import { get_businesses_admin_view } from "./admin_businesses_service.js";
 import { get_guardrails_admin_view } from "./admin_guardrails_service.js";
 import { get_conversations_admin_view } from "./admin_conversations_service.js";
+import { add_task_update, get_task_detail, get_tasks_admin_view, update_task_status } from "./admin_tasks_service.js";
 import { available_agent_interactions } from "../inspector/inspector_repository.js";
 import { upsert_interaction_setting } from "../interactions/interaction_settings_repository.js";
 import {
@@ -206,6 +207,80 @@ export function register_admin_routes(router, dependencies = {}) {
       );
 
       response.redirect("/admin/guardrails");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Bandeja de tareas internas (lo que un humano tiene que hacer): las crea el
+  // bot con `crear_tarea` o la conversión de un guardrail. Aquí se ven y resuelven.
+  router.get("/admin/tasks", admin_auth, async (request, response, next) => {
+    try {
+      response.render(
+        "admin/tasks",
+        await get_tasks_admin_view(route_pool, {
+          account_id: request.query.account_id,
+          bot_id: request.query.bot_id,
+          status: request.query.status,
+          q: request.query.q,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Detalle de una tarea: estado + historial (quién atendió y qué pasó). Se abre
+  // como página o dentro de un popup (iframe) desde la bandeja y la conversación.
+  router.get("/admin/tasks/:task_id", admin_auth, async (request, response, next) => {
+    try {
+      const detail = await get_task_detail(route_pool, request.params.task_id);
+      if (!detail) {
+        response.status(404).send("Tarea no encontrada");
+        return;
+      }
+      response.render("admin/task_detail", { ...detail, base_path: "/admin/tasks" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Follow-up de una tarea: avanzar su estado (pendiente → en progreso → hecha).
+  router.post("/admin/tasks/:task_id/status", admin_auth, async (request, response, next) => {
+    try {
+      const result = await update_task_status(route_pool, {
+        task_id: request.params.task_id,
+        status: String(request.body?.status ?? "").trim(),
+        actor: response.locals?.current_user?.name ?? null,
+      });
+
+      if (result.error) {
+        response.status(result.error === "task_not_found" ? 404 : 400).send(result.message);
+        return;
+      }
+
+      response.redirect(request.body?.return_to || "/admin/tasks");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Agregar una actualización (quién atendió + qué pasó), opcional cambio de estado.
+  router.post("/admin/tasks/:task_id/update", admin_auth, async (request, response, next) => {
+    try {
+      const result = await add_task_update(route_pool, {
+        task_id: request.params.task_id,
+        actor: request.body?.actor ?? response.locals?.current_user?.name ?? null,
+        note: request.body?.note,
+        status: String(request.body?.status ?? "").trim(),
+      });
+
+      if (result.error) {
+        response.status(result.error === "task_not_found" ? 404 : 400).send(result.message);
+        return;
+      }
+
+      response.redirect(`/admin/tasks/${request.params.task_id}`);
     } catch (error) {
       next(error);
     }

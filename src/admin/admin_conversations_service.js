@@ -1,9 +1,9 @@
 import { present_conversation_summary } from "../inspector/inspector_presenter.js";
 
 // Vista admin de conversaciones a través de TODAS las cuentas, filtrable por
-// cuenta/bot/estado/canal y búsqueda de contacto. Cada fila enlaza al visor
-// existente del inspector (/inspector/conversations/:id). Enriquecimiento por
-// conversación (N+1) como en get_bot_conversations; cap a 100 (admin interno).
+// cuenta/bot/estado/canal y búsqueda de contacto. Cada fila enlaza al visor del
+// inspector scopeado a la cuenta (/inspector/accounts/:account_id/conversations/:id).
+// Enriquecimiento por conversación (N+1) como en get_bot_conversations; cap a 100.
 export async function get_conversations_admin_view(pool, input = {}) {
   const filters = [];
   const values = [];

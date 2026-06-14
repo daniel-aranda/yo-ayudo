@@ -41,7 +41,7 @@ block content
           each conversation in conversations
             tr
               td
-                a(href=`/inspector/conversations/${conversation.id}`)= conversation.display_name || conversation.whatsapp_phone
+                a(href=(bot && bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))= conversation.display_name || conversation.whatsapp_phone
               td= conversation.whatsapp_phone
               td= conversation.last_message || "-"
               td= conversation.last_intent || "-"

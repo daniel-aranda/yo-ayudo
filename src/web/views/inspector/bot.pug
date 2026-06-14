@@ -637,7 +637,7 @@ block content
           ul.conv-list
             each conversation in conversations
               li
-                a.conv-row(href=`/inspector/conversations/${conversation.id}`)
+                a.conv-row(href=(bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))
                   div.conv-row__main
                     div.conv-row__head
                       span.conv-row__title= conversation.summary.title

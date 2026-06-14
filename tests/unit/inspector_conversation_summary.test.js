@@ -10,9 +10,10 @@ const inbound = (text, summary) => ({ message: { id: "in", text_body: text, crea
 const outbound = (text) => ({ message: { id: "out", text_body: text, created_at: at }, compact_trace_summary: {} });
 
 describe("format_phone", () => {
-  it("normalizes to a single leading + and strips non-digits", () => {
-    expect(format_phone("5215550000000")).toBe("+5215550000000");
-    expect(format_phone("+52 1 555 000 0000")).toBe("+5215550000000");
+  it("formats Mexican numbers readably (área + 4 + 4), keeping the +52 / 1 móvil", () => {
+    expect(format_phone("5215550000000")).toBe("+52 1 55 5000 0000");
+    expect(format_phone("+52 1 555 000 0000")).toBe("+52 1 55 5000 0000");
+    expect(format_phone("525555777777")).toBe("+52 55 5577 7777");
     expect(format_phone("")).toBe("");
     expect(format_phone(null)).toBe("");
   });
@@ -34,7 +35,7 @@ describe("present_conversation_summary", () => {
   it("titles by contact name and keeps the phone as subtitle — never the raw id", () => {
     const summary = present_conversation_summary(base);
     expect(summary.title).toBe("Operador Demo");
-    expect(summary.subtitle).toBe("+5215550000000");
+    expect(summary.subtitle).toBe("+52 1 55 5000 0000");
     expect(summary.title).not.toContain(base.id);
     expect(summary.preview).toBe("abrimos con 1500 en caja");
     expect(summary.status_label).toBe("Abierta");
@@ -44,7 +45,7 @@ describe("present_conversation_summary", () => {
 
   it("falls back to the formatted phone when there is no display name", () => {
     const summary = present_conversation_summary({ ...base, display_name: "" });
-    expect(summary.title).toBe("+5215550000000");
+    expect(summary.title).toBe("+52 1 55 5000 0000");
     expect(summary.subtitle).toBeNull();
   });
 
@@ -77,11 +78,11 @@ describe("present_conversation_turns", () => {
         incoming: inbound("abrimos con 1500 en caja", {
           intent: "day_start",
           confidence: 0.92,
-          interactions: [{ action_id: "registrar_inicio_dia", label: "Registrar inicio del día", status: "executed" }],
+          interactions: [{ action_id: "registrar_inicio_dia", label: "Registrar caja inicial del día", status: "executed" }],
           memory_status: "stored",
           embedding_status: "completed",
         }),
-        responses: [outbound("Inicio del día registrado con $1,500 en caja.")],
+        responses: [outbound("Caja inicial del día registrada: $1,500.")],
       },
     ]);
 
@@ -89,8 +90,8 @@ describe("present_conversation_turns", () => {
     expect(turn.awaiting_response).toBe(false);
     expect(turn.user.text).toBe("abrimos con 1500 en caja");
     expect(turn.understanding.has_action).toBe(true);
-    expect(turn.understanding.actions[0]).toMatchObject({ label: "Registrar inicio del día", tone: "ok" });
-    expect(turn.understanding.intent_human).toBe("Inicio del día");
+    expect(turn.understanding.actions[0]).toMatchObject({ label: "Registrar caja inicial del día", tone: "ok" });
+    expect(turn.understanding.intent_human).toBe("Caja inicial del día");
     expect(turn.understanding.confidence_pct).toBe(92);
     expect(turn.understanding.confidence_tone).toBe("ok");
     // The minimal view shows only labels; intent code, memory and embedding are gone.
@@ -116,6 +117,48 @@ describe("present_conversation_turns", () => {
     expect(turn.status_tone).toBe("warn");
     expect(turn.understanding.confidence_pct).toBe(50);
     expect(turn.understanding.confidence_tone).toBe("low");
+  });
+
+  it("links a task-producing action to the derived task", () => {
+    const [turn] = present_conversation_turns(
+      [
+        {
+          id: "in",
+          incoming: inbound("necesito que me llame una persona", {
+            intent: "human_help",
+            confidence: 0.88,
+            interactions: [
+              {
+                action_id: "crear_tarea",
+                label: "Crear tarea",
+                status: "executed",
+                output_json: { tarea_id: "task-1" },
+              },
+            ],
+          }),
+          responses: [outbound("Dejé una tarea para seguimiento.")],
+        },
+      ],
+      {
+        tasks: [
+          {
+            id: "task-1",
+            message_id: "in",
+            titulo: "Llamar al cliente",
+            status: "pendiente",
+            status_label: "Pendiente",
+            metadata_json: { source: "bot_engine_action" },
+          },
+        ],
+      },
+    );
+
+    expect(turn.understanding.actions[0].task).toMatchObject({
+      id: "task-1",
+      titulo: "Llamar al cliente",
+      status_label: "Pendiente",
+    });
+    expect(turn.understanding.actions[0].label).toBe("Consultar humano");
   });
 
   it("marks errored and action-less and awaiting turns distinctly", () => {

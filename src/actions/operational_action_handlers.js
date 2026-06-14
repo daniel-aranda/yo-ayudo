@@ -32,7 +32,7 @@ function executed(output) {
 
 async function registrar_inicio_dia(pool, context) {
   const result = await record_day_start(pool, operation_context(context), context.input_json ?? {});
-  return executed({ mensaje: "Inicio del día registrado.", ...result });
+  return executed({ mensaje: "Caja inicial del día registrada.", ...result });
 }
 
 async function registrar_venta(pool, context) {

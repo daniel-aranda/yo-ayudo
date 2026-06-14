@@ -13,6 +13,7 @@ import {
 } from "./inspector_repository.js";
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
 import { present_conversation_overview, present_conversation_turns } from "./inspector_presenter.js";
+import { list_tasks_for_conversation } from "../admin/admin_tasks_service.js";
 import {
   create_knowledge_source,
   get_knowledge_source,
@@ -145,28 +146,21 @@ export function register_inspector_routes(router, dependencies = {}) {
     limits: { fileSize: config.knowledge_upload_max_bytes },
   });
 
-  router.get("/inspector", inspector_auth, async (request, response, next) => {
-    try {
-      // El scope de cuenta ahora vive en el path (/inspector/accounts/:id). El
-      // ?account= legacy redirige al path canónico conservando los filtros.
-      const account_id = route_value(request.query.account);
-      if (account_id) {
-        response.redirect(`/inspector/accounts/${account_id}${bots_filters_query(request)}`);
-        return;
-      }
-
-      response.render("inspector/index", await get_inspector_bots_view(route_pool, parse_bots_filters(request)));
-    } catch (error) {
-      next(error);
+  // El inspector SIEMPRE es por cuenta: no hay home global de plataforma (el
+  // overview cross-account es /admin/bots). `/inspector` sin cuenta no renderea;
+  // el ?account= legacy redirige al path canónico; sin cuenta, manda a elegir una
+  // (dashboard = chooser de negocio→cuenta).
+  router.get("/inspector", inspector_auth, async (request, response) => {
+    const account_id = route_value(request.query.account);
+    if (account_id) {
+      response.redirect(`/inspector/accounts/${account_id}${bots_filters_query(request)}`);
+      return;
     }
+    response.redirect("/dashboard");
   });
 
-  router.get("/inspector/organizations", inspector_auth, async (request, response, next) => {
-    try {
-      response.render("inspector/index", await get_inspector_bots_view(route_pool, parse_bots_filters(request)));
-    } catch (error) {
-      next(error);
-    }
+  router.get("/inspector/organizations", inspector_auth, async (_request, response) => {
+    response.redirect("/dashboard");
   });
 
   router.get("/inspector/organizations/:organization_id", inspector_auth, async (request, response, next) => {
@@ -192,6 +186,8 @@ export function register_inspector_routes(router, dependencies = {}) {
         return;
       }
 
+      // Scopea el top-nav (Dashboard/Inspector/Review) a esta cuenta.
+      response.locals.nav_context = { business_id: view.account.organization_id, account_id: view.account.id };
       response.render("inspector/index", view);
     } catch (error) {
       next(error);
@@ -536,15 +532,63 @@ export function register_inspector_routes(router, dependencies = {}) {
     }
   });
 
+  // El visor de conversación vive scopeado a la cuenta (igual que el resto del
+  // inspector: la cuenta va en el path, la organization se deriva). La URL plana
+  // legacy redirige a la canónica con la cuenta en el path.
+  async function render_conversation_view(response, conversation_id) {
+    const view = await get_conversation_view(route_pool, conversation_id);
+    const tasks = await list_tasks_for_conversation(route_pool, conversation_id);
+    const view_turns = present_conversation_turns(view.turns, { tasks });
+    // Scopea el top-nav (Dashboard/Inspector/Review) al negocio+cuenta de la conversación.
+    const nav_business = view.conversation?.resolved_organization_id ?? view.conversation?.organization_id;
+    const nav_account = view.conversation?.resolved_account_id ?? view.conversation?.account_id;
+    if (nav_business && nav_account) {
+      response.locals.nav_context = { business_id: nav_business, account_id: nav_account };
+    }
+    response.render("inspector/conversation", {
+      ...view,
+      view_turns,
+      overview: present_conversation_overview(view_turns),
+      tasks,
+    });
+  }
+
+  router.get(
+    "/inspector/accounts/:account_id/conversations/:conversation_id",
+    inspector_auth,
+    async (request, response, next) => {
+      try {
+        await render_conversation_view(response, route_value(request.params.conversation_id));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.get("/inspector/conversations/:conversation_id", inspector_auth, async (request, response, next) => {
     try {
-      const view = await get_conversation_view(route_pool, route_value(request.params.conversation_id));
-      const view_turns = present_conversation_turns(view.turns);
-      response.render("inspector/conversation", {
-        ...view,
-        view_turns,
-        overview: present_conversation_overview(view_turns),
-      });
+      const conversation_id = route_value(request.params.conversation_id);
+      // Canónico: cuenta en el path. La conversación trae su cuenta (propia o vía
+      // bot); si la hay, redirige; si no (legacy sin cuenta), sirve directo.
+      const scope = (
+        await route_pool.query(
+          `
+            SELECT COALESCE(conversations.account_id, bots.account_id) AS account_id
+            FROM conversations
+            LEFT JOIN bots ON bots.id = conversations.bot_id
+            WHERE conversations.id = $1
+            LIMIT 1
+          `,
+          [conversation_id],
+        )
+      ).rows[0];
+
+      if (scope?.account_id) {
+        response.redirect(`/inspector/accounts/${scope.account_id}/conversations/${conversation_id}`);
+        return;
+      }
+
+      await render_conversation_view(response, conversation_id);
     } catch (error) {
       next(error);
     }

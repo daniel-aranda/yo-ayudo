@@ -2047,6 +2047,22 @@ pre {
   width: 100%;
 }
 
+/* Iframe que se auto-dimensiona a su contenido (visor de tarea): el JS del host
+   fija la altura recibida por postMessage, así que NO usamos flex-stretch ni
+   height:100% (dejarían dead space o lo aplastarían). Bloque + scroll si excede. */
+.popup__body--taskframe {
+  display: block;
+  overflow: auto;
+  padding: 0;
+}
+
+.popup__body--taskframe iframe {
+  border: 0;
+  display: block;
+  height: 440px;
+  width: 100%;
+}
+
 /* Pages flag themselves as framed (layout.pug) when loaded inside an iframe
    and drop the topbar: the host page already provides the chrome. */
 html.is-framed .topbar {
@@ -2391,6 +2407,31 @@ html.is-framed .topbar {
   color: #9a3412;
 }
 
+/* Última actualización: fecha (icono calendario) + hora (icono reloj), sin coma. */
+.dt-val {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.dt-chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.dt-ico {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+}
+
+.dt-ico .ui-icon {
+  height: 13px;
+  width: 13px;
+}
+
 .conversation-thread {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2546,6 +2587,42 @@ html.is-framed .topbar {
   color: #9a3412;
 }
 
+.turn-actions .turn-action-combo {
+  align-items: center;
+  background: #f2f1ed;
+  border-radius: 999px;
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.turn-actions .turn-action-combo .turn-action-chip {
+  border-radius: 999px 0 0 999px;
+}
+
+.turn-actions .turn-task-button {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid rgba(95, 94, 87, 0.16);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin: 0;
+  padding: 0.25rem 0.625rem 0.25rem 0.55rem;
+  white-space: nowrap;
+}
+
+.turn-actions .turn-task-button:hover {
+  background: rgba(20, 83, 70, 0.07);
+}
+
+.turn-actions .turn-task-button:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -2px;
+}
+
 .turn-action-none {
   color: var(--muted);
   font-size: 0.8125rem;
@@ -2674,15 +2751,44 @@ html.is-framed .topbar {
   justify-content: flex-end;
 }
 
+/* Valor con icono al frente (p. ej. teléfono con icono de tel). Fuente un poco
+   menor y sin wrap: un número no debe partirse a media cifra (overflow-wrap del
+   dd lo rompía). El número se mantiene en una línea. */
+.field-value {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.875rem;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.field-ico {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.field-ico .ui-icon {
+  height: 14px;
+  width: 14px;
+}
+
+/* Copiar como ícono (clipboard → check al copiar), compacto y sin texto. */
 .copy-btn {
+  align-items: center;
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 6px;
+  box-shadow: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
   margin: 0;
-  padding: 2px 8px;
+  padding: 4px;
 }
 
 .copy-btn:hover {
@@ -2696,14 +2802,83 @@ html.is-framed .topbar {
   color: var(--accent-dark);
 }
 
-.quick-actions {
-  display: grid;
-  gap: 8px;
+.copy-btn .ui-icon {
+  height: 14px;
+  width: 14px;
 }
 
-.quick-actions .button {
-  margin-top: 0;
-  width: 100%;
+.copy-ico {
+  align-items: center;
+  display: inline-flex;
+}
+
+.copy-ico-done {
+  display: none;
+}
+
+.copy-btn.is-copied .copy-ico-default {
+  display: none;
+}
+
+.copy-btn.is-copied .copy-ico-done {
+  display: inline-flex;
+}
+
+.conv-value-list {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.conv-value-row {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-bottom: 0.55rem;
+}
+
+.conv-value-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.conv-value-label {
+  color: var(--muted);
+}
+
+.conv-value-main {
+  display: grid;
+  gap: 0.1rem;
+  justify-items: end;
+  min-width: 0;
+  text-align: right;
+}
+
+.conv-value-main strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.conv-value-main small,
+.conv-value-row--stack p {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.conv-value-row--stack {
+  align-items: stretch;
+  display: grid;
+  gap: 0.25rem;
+  justify-content: stretch;
+}
+
+.conv-value-row--stack p {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 780px) {
@@ -2949,6 +3124,345 @@ button.status-toggle-option:hover {
 .status-toggle-option.is-current.is-archived {
   background: #ecdcdc;
   color: #8c4a42;
+}
+
+/* Estados de tarea (bandeja /admin/tasks). */
+.status-toggle-option.is-current.is-pendiente {
+  background: #f6e7c6;
+  color: #8a6116;
+}
+
+.status-toggle-option.is-current.is-en_progreso {
+  background: #d8e6f5;
+  color: #2b5582;
+}
+
+.status-toggle-option.is-current.is-hecha {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+/* Origen de la tarea (Interacción del bot / Capability gap) en la bandeja. */
+.task-origin {
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Lista de tareas de la conversación (sidebar del visor). */
+.conv-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+/* Fila de tarea clickeable en el sidebar de conversación: título + estado + CTA
+   "Ver tarea"; el detalle (quién atendió / qué pasó) abre en popup. Es un <button>,
+   así que reseteamos color/box/margin que hereda del button global (texto blanco). */
+.conv-task-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  text-align: left;
+  width: 100%;
+}
+
+.conv-task-row:hover {
+  background: var(--surface-strong);
+  border-color: var(--line-strong);
+}
+
+.conv-task-line {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.conv-task-title {
+  font-weight: 600;
+}
+
+.conv-task-cta {
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.task-pill {
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+
+.task-pill.is-pendiente {
+  background: #f6e7c6;
+  color: #8a6116;
+}
+
+.task-pill.is-en_progreso {
+  background: #d8e6f5;
+  color: #2b5582;
+}
+
+.task-pill.is-hecha {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+/* Timeline de seguimiento de una tarea (quién atendió y qué pasó). */
+/* ===== Visor/modal de tarea (task_detail.pug) — compacto, alta densidad ===== */
+/* El iframe del popup auto-ajusta su altura (postMessage), así que recortamos el
+   padding del contenedor cuando contiene el modal para no desperdiciar vertical. */
+main.container:has(.task-modal) {
+  max-width: 100%;
+  padding: 16px 18px;
+}
+
+.task-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.task-modal-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  justify-content: space-between;
+}
+
+.task-modal-title {
+  font-size: 1.15rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.task-modal-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
+.task-modal-conv {
+  color: var(--accent-dark);
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 650;
+  margin-top: 0.45rem;
+  text-decoration: none;
+}
+
+.task-modal-conv:hover {
+  text-decoration: underline;
+}
+
+.task-modal-state {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.task-modal-state-label {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.task-modal-grid {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+}
+
+@media (max-width: 560px) {
+  .task-modal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.task-section-head {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.task-section-head h2 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.task-section-head .button {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  margin: 0;
+  padding: 0.3rem 0.7rem;
+}
+
+/* Empty state compacto del historial. */
+.task-empty {
+  background: var(--surface-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+}
+
+/* Timeline de seguimiento (quién atendió y qué pasó), denso y escaneable. */
+.task-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-event {
+  border-left: 2px solid var(--line-strong);
+  padding: 0 0 0.1rem 0.7rem;
+}
+
+.task-event-head {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.task-event-actor {
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.task-event-time {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.task-event-status {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.task-event-note {
+  font-size: 0.85rem;
+  margin: 0.15rem 0 0;
+  white-space: pre-wrap;
+}
+
+/* Form de actualización: colapsado por default, compacto al abrir. */
+.task-update-form {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.task-form-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 460px) {
+  .task-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.task-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.task-update-form label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.task-update-form input,
+.task-update-form textarea,
+.task-update-form select {
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0.4rem 0.55rem;
+}
+
+.task-update-form textarea {
+  min-height: 0;
+  resize: vertical;
+}
+
+.task-update-form .form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.task-update-form .form-actions button {
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+}
+
+/* Columna derecha: ficha secundaria, bajo peso visual. */
+.task-modal-side {
+  background: var(--surface-strong);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+}
+
+.task-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.task-meta div {
+  align-items: baseline;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.task-meta dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.task-meta dd {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0;
+  text-align: right;
 }
 
 /* Fila de botones de alta por negocio (abren popups). */

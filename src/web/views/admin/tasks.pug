@@ -1,0 +1,189 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const status_options = [
+      { value: "pendiente", label: "Pendiente" },
+      { value: "en_progreso", label: "En progreso" },
+      { value: "hecha", label: "Hecha" },
+    ];
+    // base_path/scoped permiten reusar esta vista a nivel admin (global) y a nivel
+    // cuenta (módulo de tareas de un negocio). Sin scope = admin.
+    const base = (typeof base_path !== "undefined" && base_path) ? base_path : "/admin/tasks";
+    const account_scoped = Boolean(typeof scoped !== "undefined" && scoped);
+    const filters_active = Boolean(filters.account_id || filters.bot_id || filters.status || filters.q);
+    const current_query = (() => {
+      const params = new URLSearchParams();
+      if (filters.q) params.set("q", filters.q);
+      if (!account_scoped && filters.account_id) params.set("account_id", filters.account_id);
+      if (filters.bot_id) params.set("bot_id", filters.bot_id);
+      if (filters.status) params.set("status", filters.status);
+      const qs = params.toString();
+      return `${base}${qs ? `?${qs}` : ""}`;
+    })();
+
+  //- Estado de la tarea como control segmentado: el actual resaltado, los otros
+  //- dos son clicks que avanzan el follow-up. Vuelve a la vista filtrada actual.
+  mixin task_status_toggle(task)
+    .status-toggle(role="group", aria-label=`Estado de ${task.titulo}`)
+      each option in status_options
+        if option.value === task.status
+          span.status-toggle-option.is-current(class=`is-${option.value}`, aria-current="true")= option.label
+        else
+          form.status-toggle-form(method="post", action=`${base}/${task.id}/status`)
+            input(type="hidden", name="status", value=option.value)
+            input(type="hidden", name="return_to", value=current_query)
+            button.status-toggle-option(type="submit", title=`Marcar como ${option.label.toLowerCase()}`)= option.label
+
+  if account_scoped
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: business_name, href: `/dashboard/business/${business_id}` }, { label: account_name, href: `/dashboard/business/${business_id}/accounts/${account_id}` }, { label: "Tareas" }])
+  else
+    .admin-subnav
+      a(href="/admin/integrations") Integraciones
+      a(href="/admin/interactions") Interacciones
+      a(href="/admin/bots") Bots
+      a(href="/admin/businesses") Negocios
+      a(href="/admin/conversations") Conversaciones
+      a.is-active(href="/admin/tasks") Tareas
+      a(href="/admin/guardrails") Guardrails
+
+  section.page-header
+    if account_scoped
+      p.page-eyebrow= `Cuenta · ${account_name}`
+    h1 Tareas
+    p Lo que un humano tiene que hacer: tareas que dejó el bot (p. ej. "que me llame una persona") y capability gaps convertidos en backlog.
+
+  section.panel.bots-toolbar
+    form#tasks_filter_form.filter-rows(method="get", action=base)
+      .filter-row
+        input(type="search", name="q", value=filters.q, placeholder="Buscar por tarea, contacto o teléfono", aria-label="Buscar tarea")
+      .filter-row
+        select(name="status", aria-label="Estado")
+          option(value="") Todos los estados
+          each st in status_options
+            option(value=st.value, selected=filters.status === st.value)= st.label
+        unless account_scoped
+          select(name="account_id", aria-label="Cuenta")
+            option(value="") Todas las cuentas
+            each account in options.accounts
+              option(value=account.id, selected=filters.account_id === account.id)= account.name
+        select(name="bot_id", aria-label="Bot")
+          option(value="") Todos los bots
+          each bot in options.bots
+            option(value=bot.id, selected=filters.bot_id === bot.id)= bot.name
+        if filters_active
+          a.button.secondary-button(href=base) Limpiar
+
+  .metrics
+    article.metric
+      span.label Pendientes
+      strong= rollup.pendiente
+    article.metric
+      span.label En progreso
+      strong= rollup.en_progreso
+    article.metric
+      span.label Hechas
+      strong= rollup.hecha
+
+  section.panel
+    h2 Tareas
+    if tasks && tasks.length
+      .table-wrap
+        table.activity-table
+          thead
+            tr
+              th Tarea
+              th Contacto
+              if !account_scoped
+                th Negocio / cuenta
+              th Bot
+              th Estado
+              th Responsable
+              th Vence
+              th Creada
+              th
+          tbody
+            each task in tasks
+              tr
+                td
+                  strong= task.titulo
+                  if task.descripcion
+                    div.meta= task.descripcion
+                  div.meta.task-origin= task.origin
+                td.meta= task.contact_name || task.contact_phone || "—"
+                if !account_scoped
+                  td.meta= task.account_name ? `${task.organization_name || ""} · ${task.account_name}` : "—"
+                td.meta= task.bot_name || "—"
+                td
+                  +task_status_toggle(task)
+                td.meta= task.assigned_to || "Sin asignar"
+                td.meta= when(task.due_at)
+                td.meta= when(task.created_at)
+                td
+                  button.button.secondary-button(type="button", data-open-task=task.id) Ver tarea
+    else if filters_active
+      .empty Sin tareas que coincidan con los filtros.
+    else
+      .empty Sin tareas todavía. Cuando un bot deje una tarea (p. ej. "que me llame una persona"), aparecerá aquí.
+
+  //- Detalle de la tarea en popup (iframe): estado + historial de quién atendió
+  //- y qué pasó, sin salir de la bandeja. Al cerrar refresca para ver cambios.
+  #task_detail_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-task-popup, data-task-base=base)
+    .popup.popup--lg.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Tarea
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body.popup__body--taskframe
+        iframe#task_detail_frame(title="Detalle de la tarea")
+
+  script
+    include ../../public/js/core/Popup.js
+
+  script.
+    (() => {
+      const form = document.getElementById("tasks_filter_form");
+      if (form) {
+        form.querySelectorAll("select").forEach((select) => select.addEventListener("change", () => form.submit()));
+        const search = form.querySelector('input[name="q"]');
+        let timer;
+        search?.addEventListener("input", () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => form.submit(), 450);
+        });
+      }
+
+      // Popup de detalle: carga {base}/:id en el iframe; al cerrar recarga la
+      // bandeja para reflejar estado/responsable actualizados.
+      const overlay = document.querySelector("[data-task-popup]");
+      const taskBase = overlay?.dataset.taskBase || "/admin/tasks";
+      const taskPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-task-popup]" }) : null;
+      taskPopup?.iniciar();
+      const frame = document.getElementById("task_detail_frame");
+      let opened = false;
+      // El iframe del detalle nos dice su altura real para ajustarse al contenido
+      // (sin dead space) y solo scrollear si excede el viewport.
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== "yoayudo:task-height" || !frame) return;
+        const max = Math.round(window.innerHeight * 0.82) - 64;
+        frame.style.height = `${Math.min(event.data.height, max)}px`;
+      });
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-open-task]");
+        if (!trigger || !taskPopup || !frame) return;
+        frame.style.height = "440px";
+        frame.src = `${taskBase}/${trigger.dataset.openTask}`;
+        opened = true;
+        taskPopup.open();
+      });
+      const reloadIfChanged = () => { if (opened) window.location.reload(); };
+      overlay?.addEventListener("click", (event) => {
+        if (event.target.closest("[data-popup-close]") || event.target === overlay) reloadIfChanged();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && opened && overlay && !overlay.hidden) reloadIfChanged();
+      });
+    })();

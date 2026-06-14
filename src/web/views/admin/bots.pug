@@ -44,6 +44,7 @@ block content
     a.is-active(href="/admin/bots") Bots
     a(href="/admin/businesses") Negocios
     a(href="/admin/conversations") Conversaciones
+    a(href="/admin/tasks") Tareas
     a(href="/admin/guardrails") Guardrails
 
   section.page-header
@@ -133,7 +134,7 @@ block content
                         input(type="hidden", name="status", value="draft")
                         button.icon-button(type="submit", title="Pausar (pasa a borrador)", aria-label=`Pausar ${bot.name}`)!= action_icons.pause
                     if bot.status !== "archived"
-                      form(method="post", action=`/admin/bots/${bot.id}/status`)
+                      form(method="post", action=`/admin/bots/${bot.id}/status`, data-confirm=`¿Archivar "${bot.name}"? Dejará de operar y se ocultará de la vista (puedes restaurarlo desde "Ver archivados").`)
                         input(type="hidden", name="status", value="archived")
                         button.icon-button(type="submit", title="Archivar", aria-label=`Archivar ${bot.name}`)!= action_icons.archive
                     form(method="post", action=`/admin/bots/${bot.id}/clone`)
@@ -152,6 +153,12 @@ block content
 
   script.
     (() => {
+      // Confirmación para acciones destructivas (archivar).
+      document.addEventListener("submit", (event) => {
+        const form = event.target.closest("form[data-confirm]");
+        if (form && !window.confirm(form.dataset.confirm)) event.preventDefault();
+      });
+
       const form = document.getElementById("bots_filter_form");
       if (!form) return;
       form.querySelector('select[name="type"]')?.addEventListener("change", () => form.submit());

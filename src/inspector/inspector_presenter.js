@@ -8,7 +8,7 @@ export function json_text(value) {
 // Domain intents → human labels. Used as a preview fallback when a message has
 // no text (e.g. media), so a conversation still reads as something meaningful.
 const CONVERSATION_INTENT_LABELS = {
-  day_start: "Inicio del día",
+  day_start: "Caja inicial del día",
   sales_update: "Actualización de ventas",
   purchase: "Compra registrada",
   daily_close: "Cierre del día",
@@ -31,9 +31,24 @@ export function conversation_intent_label(intent) {
 
 // E.164-ish phone → readable. Conservative: only guarantees a single leading
 // "+"; per-country grouping is unreliable so we don't fake spacing.
+// Teléfono legible. México: 52 [+ "1" móvil legacy] + 10 dígitos nacionales que
+// se agrupan área(2) + 4 + 4 (p. ej. "+52 1 55 5000 0222", "+52 55 5577 7777").
+// Fallback genérico: separa código de país de los últimos 10 dígitos.
 export function format_phone(raw) {
   const digits = String(raw ?? "").replace(/[^\d]/g, "");
-  return digits ? `+${digits}` : "";
+  if (!digits) return "";
+  if (digits.length < 10) return `+${digits}`;
+
+  const national = digits.slice(-10);
+  let country = digits.slice(0, -10);
+  let mobile_prefix = "";
+  if (country === "521") {
+    country = "52";
+    mobile_prefix = "1 ";
+  }
+
+  const grouped = `${national.slice(0, 2)} ${national.slice(2, 6)} ${national.slice(6)}`;
+  return country ? `+${country} ${mobile_prefix}${grouped}` : grouped;
 }
 
 function truncate_preview(text, max = 90) {
@@ -86,6 +101,8 @@ export function interactions_from_action_logs(action_logs) {
       action_id: log.action_id,
       label: action?.nombre ?? log.action_id,
       status: log.status,
+      output_json: log.output_json ?? {},
+      metadata_json: log.metadata_json ?? {},
     };
   });
 }
@@ -129,27 +146,102 @@ function action_tone(status) {
   return "blocked";
 }
 
+function object_value(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function task_id_from_action_output(action) {
+  const output = object_value(action.output_json);
+  return output.tarea_id ?? output.task_id ?? null;
+}
+
+function task_matches_action(task, action_id) {
+  const metadata = object_value(task.metadata_json);
+  if (metadata.action_id) {
+    return metadata.action_id === action_id || (action_id === "consult_human" && metadata.action_id === "crear_tarea");
+  }
+
+  return ["crear_tarea", "consult_human"].includes(action_id) && metadata.source === "bot_engine_action";
+}
+
+function present_action_task(task) {
+  return task
+    ? {
+        id: task.id,
+        titulo: task.titulo,
+        status: task.status,
+        status_label: task.status_label ?? task.status,
+      }
+    : null;
+}
+
+function index_tasks_by_message(tasks) {
+  const by_message = new Map();
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    if (!task.message_id) continue;
+    const key = String(task.message_id);
+    by_message.set(key, [...(by_message.get(key) ?? []), task]);
+  }
+  return by_message;
+}
+
+function find_task_for_action(action, { tasks_by_id, message_tasks, used_task_ids }) {
+  const direct_task_id = task_id_from_action_output(action);
+  if (direct_task_id) {
+    const task = tasks_by_id.get(String(direct_task_id));
+    if (task && !used_task_ids.has(String(task.id))) {
+      return task;
+    }
+  }
+
+  return message_tasks.find(
+    (task) => !used_task_ids.has(String(task.id)) && task_matches_action(task, action.action_id),
+  );
+}
+
+function present_action_label(action, trace, task) {
+  if (task && trace?.intent === "human_help" && action.action_id === "crear_tarea") {
+    return "Consultar humano";
+  }
+
+  return action.label;
+}
+
 // A conversation turn (one inbound + its replies, already grouped server-side)
 // → a view-model the timeline can render directly: the user message, the action
 // label(s) the agent fired (the rest of the interpretation — intent + confidence
 // — lives in a click popover), the agent replies, and an overall status tone.
 // No backend contract changes.
-export function present_conversation_turns(turns) {
+export function present_conversation_turns(turns, options = {}) {
+  const tasks = Array.isArray(options.tasks) ? options.tasks : [];
+  const tasks_by_id = new Map(tasks.map((task) => [String(task.id), task]));
+  const tasks_by_message = index_tasks_by_message(tasks);
+
   return (Array.isArray(turns) ? turns : []).map((turn) => {
     const trace = turn.incoming?.compact_trace_summary ?? null;
     const has_incoming = Boolean(turn.incoming);
+    const incoming_message_id = turn.incoming?.message?.id ?? null;
+    const message_tasks = incoming_message_id ? (tasks_by_message.get(String(incoming_message_id)) ?? []) : [];
+    const used_task_ids = new Set();
     const responses = (turn.responses ?? []).map((reply) => ({
       text: reply.message.text_body || "",
       at: reply.message.created_at,
     }));
     const awaiting_response = has_incoming && responses.length === 0;
 
-    const actions = (trace?.interactions ?? []).map((ix) => ({
-      label: ix.label,
-      action_id: ix.action_id,
-      status: ix.status,
-      tone: action_tone(ix.status),
-    }));
+    const actions = (trace?.interactions ?? []).map((ix) => {
+      const task = find_task_for_action(ix, { tasks_by_id, message_tasks, used_task_ids });
+      if (task?.id) {
+        used_task_ids.add(String(task.id));
+      }
+      return {
+        label: present_action_label(ix, trace, task),
+        action_id: ix.action_id,
+        status: ix.status,
+        tone: action_tone(ix.status),
+        task: present_action_task(task),
+      };
+    });
     const confidence_pct =
       trace && trace.confidence != null && trace.confidence !== ""
         ? Math.round(Number(trace.confidence) * 100)

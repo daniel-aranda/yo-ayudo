@@ -27,7 +27,7 @@ block content
         if option.value === status
           span.status-toggle-option.is-current(class=`is-${option.value}`, aria-current="true")= option.label
         else
-          form.status-toggle-form(method="post", action=`${action_base}/${id}/status`)
+          form.status-toggle-form(method="post", action=`${action_base}/${id}/status`, data-confirm=(option.value === "archived" ? `¿Archivar ${entity_label}? Se ocultará de las vistas activas (puedes reactivarlo después).` : false))
             input(type="hidden", name="status", value=option.value)
             button.status-toggle-option(type="submit", title=`Cambiar a ${option.label.toLowerCase()}`)= option.label
 
@@ -37,6 +37,7 @@ block content
     a(href="/admin/bots") Bots
     a.is-active(href="/admin/businesses") Negocios
     a(href="/admin/conversations") Conversaciones
+    a(href="/admin/tasks") Tareas
     a(href="/admin/guardrails") Guardrails
 
   section.page-header.builder-header
@@ -195,6 +196,12 @@ block content
 
   script.
     (() => {
+      // Confirmación para acciones destructivas (archivar negocio/cuenta).
+      document.addEventListener("submit", (event) => {
+        const form = event.target.closest("form[data-confirm]");
+        if (form && !window.confirm(form.dataset.confirm)) event.preventDefault();
+      });
+
       const toggleAll = document.getElementById("toggle_all_businesses");
       const panels = Array.from(document.querySelectorAll("[data-business-panel]"));
 

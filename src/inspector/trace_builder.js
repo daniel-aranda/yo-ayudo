@@ -187,7 +187,7 @@ export async function compact_trace_for_message(pool, message) {
   );
   const action_logs = await rows(
     pool,
-    "SELECT action_id, status, actor_type, created_at FROM action_audit_logs WHERE message_id = $1 ORDER BY created_at",
+    "SELECT action_id, status, actor_type, output_json, metadata_json, created_at FROM action_audit_logs WHERE message_id = $1 ORDER BY created_at",
     [message.id],
   );
 

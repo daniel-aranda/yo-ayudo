@@ -9,6 +9,35 @@ block content
     const conversations_url = conversation && conversation.bot_id ? `/inspector/bots/${conversation.bot_id}/conversations` : "/inspector";
     const status_value = conversation ? (conversation.status || "open") : "open";
     const status_label = status_value === "closed" ? "Cerrada" : status_value === "open" ? "Abierta" : status_value;
+    const bot_phone = conversation ? (conversation.bot_display_phone_number || conversation.bot_phone_number_id || "") : "";
+    const value = value_summary || {};
+    const task_count = Array.isArray(tasks) ? tasks.length : 0;
+    const open_task_count = Array.isArray(tasks) ? tasks.filter((task) => task.status !== "hecha").length : 0;
+    const sales_count = Number(value.sales?.count || 0);
+    const purchases_count = Number(value.purchases?.count || 0);
+    const inventory_count = Number(value.inventory?.count || 0);
+    const notes_count = Array.isArray(value.notes) ? value.notes.length : 0;
+    const purchase_items = Array.isArray(value.purchases?.items) ? value.purchases.items : [];
+    const latest_purchase = purchase_items[0] || null;
+    const has_opening_cash = value.opening_cash !== undefined && value.opening_cash !== null;
+    const has_closing_cash = value.closing_cash !== undefined && value.closing_cash !== null;
+    const has_value_summary = Boolean(value.has_value || task_count);
+    const copy_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    const check_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const calendar_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/></svg>';
+    const clock_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>';
+    const phone_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+    // datetime() = "fecha, hora"; separamos para mostrar fecha (icono calendario) y
+    // hora (icono reloj) sin la coma de enmedio. Sin helper nuevo.
+    const last_dt = overview && overview.last_at ? datetime(overview.last_at) : "";
+    const last_time = last_dt.includes(", ") ? last_dt.split(", ").slice(1).join(", ") : "";
+
+  //- Botón de copiar como ícono (clipboard → check al copiar). El feedback es por
+  //- clase .is-copied (no se toca el innerHTML, para no borrar el SVG).
+  mixin copy_icon(value, label)
+    button.copy-btn(type="button", data-copy=value, aria-label=label, title="Copiar")
+      span.copy-ico.copy-ico-default!= copy_svg
+      span.copy-ico.copy-ico-done!= check_svg
 
   if !conversation
     section.page-header
@@ -43,7 +72,17 @@ block content
               span.conv-summary-val(class=(overview.errors_count ? "is-error" : ""))= overview.errors_count
             .conv-summary-item
               span.conv-summary-key Última actualización
-              span.conv-summary-val= overview.last_at ? datetime(overview.last_at) : "No disponible"
+              if overview.last_at
+                span.conv-summary-val.dt-val
+                  span.dt-chip
+                    span.dt-ico!= calendar_svg
+                    span= date(overview.last_at)
+                  if last_time
+                    span.dt-chip
+                      span.dt-ico!= clock_svg
+                      span= last_time
+              else
+                span.conv-summary-val No disponible
           .conversation-thread
             each turn in view_turns
               article.turn(class=`turn--${turn.status_tone}`)
@@ -67,7 +106,12 @@ block content
                       .turn-actions-list
                         if turn.understanding.has_action
                           each action in turn.understanding.actions
-                            button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
+                            if action.task
+                              span.turn-action-combo
+                                button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
+                                button.turn-task-button(type="button", data-open-task=action.task.id, aria-label=`Abrir tarea derivada: ${action.task.titulo}`) Ver tarea
+                            else
+                              button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
                         else
                           span.turn-action-none Sin acción ejecutada
                       if turn.understanding.intent_human || turn.understanding.confidence_pct != null
@@ -97,7 +141,7 @@ block content
 
       aside.inspector-sidebar
         section.inspector-panel
-          h2 Contacto
+          h2 Contacto y canal
           dl.compact
             div
               dt Nombre
@@ -105,64 +149,131 @@ block content
             div
               dt Teléfono
               dd.with-copy
-                span= conversation.whatsapp_phone || "-"
+                span.field-value
+                  span.field-ico!= phone_svg
+                  span= conversation.whatsapp_phone ? phone(conversation.whatsapp_phone) : "-"
                 if conversation.whatsapp_phone
-                  button.copy-btn(type="button", data-copy=conversation.whatsapp_phone, aria-label="Copiar teléfono") Copiar
+                  +copy_icon(conversation.whatsapp_phone, "Copiar teléfono")
+            div
+              dt Número del bot
+              dd.with-copy
+                span.field-value
+                  span.field-ico!= phone_svg
+                  span= bot_phone ? phone(bot_phone) : "-"
+                if bot_phone
+                  +copy_icon(bot_phone, "Copiar número del bot")
             div
               dt Estado
               dd
                 span.status-badge(class=`is-${status_value}`)= status_label
 
-        section.inspector-panel
-          h2 Agente
-          dl.compact
-            div
-              dt Bot
-              dd
-                if conversation.bot_id
-                  a.entity-link(href=`/inspector/bots/${conversation.bot_id}`)= conversation.bot_name || "sin bot"
-                else
-                  = conversation.bot_name || "sin bot"
-            div
-              dt Cuenta
-              dd
-                if resolved_org_id && resolved_account_id
-                  a.entity-link(href=dashboard_url)= conversation.account_name || "-"
-                else
-                  = conversation.account_name || "-"
-            div
-              dt Negocio
-              dd
-                if resolved_org_id
-                  a.entity-link(href=`/dashboard/business/${resolved_org_id}`)= conversation.organization_name || "-"
-                else
-                  = conversation.organization_name || "-"
+        if has_value_summary
+          section.inspector-panel.conv-value-panel
+            h2 Valor capturado
+            ul.conv-value-list
+              if task_count
+                li.conv-value-row
+                  span.conv-value-label Tareas
+                  .conv-value-main
+                    strong= open_task_count ? `${open_task_count} abiertas` : `${task_count} totales`
+                    if open_task_count && open_task_count !== task_count
+                      small= `${task_count} totales`
+              if sales_count
+                li.conv-value-row
+                  span.conv-value-label Ventas
+                  .conv-value-main
+                    strong= value.sales.latest_amount != null ? money(value.sales.latest_amount) : `${sales_count} registros`
+                    small= sales_count === 1 ? "1 actualización" : `${sales_count} actualizaciones`
+              if has_opening_cash
+                li.conv-value-row
+                  span.conv-value-label Caja inicial
+                  .conv-value-main
+                    strong= money(value.opening_cash)
+              if has_closing_cash
+                li.conv-value-row
+                  span.conv-value-label Caja final
+                  .conv-value-main
+                    strong= money(value.closing_cash)
+              if purchases_count
+                li.conv-value-row
+                  span.conv-value-label Compras
+                  .conv-value-main
+                    strong= money(value.purchases.total)
+                    small= purchases_count === 1 ? "1 compra" : `${purchases_count} compras`
+              if latest_purchase
+                li.conv-value-row.conv-value-row--stack
+                  span.conv-value-label Última compra
+                  p= [latest_purchase.item_name, latest_purchase.quantity, latest_purchase.unit].filter(Boolean).join(" ")
+              if inventory_count
+                li.conv-value-row
+                  span.conv-value-label Inventario
+                  .conv-value-main
+                    strong= inventory_count === 1 ? "1 conteo" : `${inventory_count} conteos`
+              if notes_count
+                li.conv-value-row
+                  span.conv-value-label Notas
+                  .conv-value-main
+                    strong= notes_count === 1 ? "1 nota" : `${notes_count} notas`
+              if value.latest_summary
+                li.conv-value-row.conv-value-row--stack
+                  span.conv-value-label Resumen
+                  p= value.latest_summary
 
-        if overview && overview.turns_count
+        if tasks && tasks.length
           section.inspector-panel
-            h2 Diagnóstico
-            dl.compact
-              div
-                dt Turnos
-                dd= overview.turns_count
-              div
-                dt Acciones exitosas
-                dd= overview.success_count
-              div
-                dt Errores
-                dd(class=(overview.errors_count ? "is-error" : ""))= overview.errors_count
-              div
-                dt Última intención
-                dd= overview.last_intent || "No disponible"
+            h2 Tareas
+            //- Slim: solo título + estado; el detalle (quién atendió/qué pasó)
+            //- vive en el popup que abre al hacer click.
+            ul.conv-tasks
+              each task in tasks
+                li
+                  button.conv-task-row(type="button", data-open-task=task.id)
+                    .conv-task-line
+                      span.conv-task-title= task.titulo
+                      span(class=`task-pill is-${task.status}`)= task.status_label
+                    span.conv-task-cta Ver tarea →
 
-        section.inspector-panel
-          h2 Acciones rápidas
-          .quick-actions
-            if conversation.bot_id
-              a.button.button-ghost(href=`/inspector/bots/${conversation.bot_id}`) Ver bot
-            a.button.button-ghost(href=dashboard_url) Ver dashboard del negocio
-            if conversation.whatsapp_phone
-              button.button.button-ghost.copy-btn(type="button", data-copy=conversation.whatsapp_phone) Copiar teléfono
+  //- Detalle de la tarea (estado + historial) en popup, sin salir de la conversación.
+  #task_detail_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-task-popup)
+    .popup.popup--lg.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Tarea
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body.popup__body--taskframe
+        iframe#task_detail_frame(title="Detalle de la tarea")
+
+  script
+    include ../../public/js/core/Popup.js
+
+  script.
+    (() => {
+      const taskPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-task-popup]" }) : null;
+      taskPopup?.iniciar();
+      const frame = document.getElementById("task_detail_frame");
+      let opened = false;
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== "yoayudo:task-height" || !frame) return;
+        const max = Math.round(window.innerHeight * 0.82) - 64;
+        frame.style.height = `${Math.min(event.data.height, max)}px`;
+      });
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-open-task]");
+        if (!trigger || !taskPopup || !frame) return;
+        frame.style.height = "440px";
+        frame.src = `/admin/tasks/${trigger.dataset.openTask}`;
+        opened = true;
+        taskPopup.open();
+      });
+      const overlay = document.querySelector("[data-task-popup]");
+      const reloadIfChanged = () => { if (opened) window.location.reload(); };
+      overlay?.addEventListener("click", (event) => {
+        if (event.target.closest("[data-popup-close]") || event.target === overlay) reloadIfChanged();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && opened && overlay && !overlay.hidden) reloadIfChanged();
+      });
+    })();
 
   script.
     (() => {
@@ -170,13 +281,10 @@ block content
         const button = event.target.closest(".copy-btn");
         if (!button || !button.dataset.copy || !navigator.clipboard) return;
         navigator.clipboard.writeText(button.dataset.copy).then(() => {
-          const original = button.textContent;
-          button.textContent = "Copiado";
+          // Feedback por clase (el CSS cambia el ícono a check); no tocamos el
+          // innerHTML para no borrar el SVG.
           button.classList.add("is-copied");
-          setTimeout(() => {
-            button.textContent = original;
-            button.classList.remove("is-copied");
-          }, 1400);
+          setTimeout(() => button.classList.remove("is-copied"), 1400);
         }).catch(() => {});
       });
 

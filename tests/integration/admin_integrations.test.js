@@ -8,6 +8,7 @@ import {
   get_integration_event_summary,
 } from "../../src/integrations/integration_event_repository.js";
 import { get_interaction_settings_map } from "../../src/interactions/interaction_settings_repository.js";
+import { seed_routed_demo_conversation } from "../../src/db/seed.js";
 import { create_test_pool } from "../helpers/test_pool.js";
 
 function http_response(status) {
@@ -140,12 +141,12 @@ describe("admin integrations dashboard", () => {
     const page = await request(app).get("/admin/conversations").expect(200);
     expect(page.text).toContain("Conversaciones");
     expect(page.text).toContain("Todas las conversaciones de la plataforma");
-    // Cada fila enlaza al visor del inspector.
-    expect(page.text).toContain(`/inspector/conversations/${convo.id}`);
+    // Cada fila enlaza al visor del inspector, scopeado a la cuenta (path).
+    expect(page.text).toContain(`/inspector/accounts/${convo.account_id}/conversations/${convo.id}`);
 
     // Filtro por cuenta del seed: la conversación sigue presente.
     const by_account = await request(app).get(`/admin/conversations?account_id=${convo.account_id}`).expect(200);
-    expect(by_account.text).toContain(`/inspector/conversations/${convo.id}`);
+    expect(by_account.text).toContain(`/inspector/accounts/${convo.account_id}/conversations/${convo.id}`);
 
     // Filtro por una cuenta inexistente: estado vacío.
     const empty = await request(app)
@@ -364,6 +365,69 @@ describe("admin integrations dashboard", () => {
 
     const no_match = await request(app).get("/admin/businesses?q=no-existe-xyz").expect(200);
     expect(no_match.text).toContain("Sin negocios que coincidan");
+  });
+
+  it("lists internal tasks and advances their status from the admin inbox", async () => {
+    const app = create_admin_test_app(pool);
+
+    // La conversación ruteada deja una tarea real (interacción crear_tarea).
+    const bot = (
+      await pool.query("SELECT id, account_id, organization_id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
+    ).rows[0];
+    await seed_routed_demo_conversation(pool, {
+      account_id: bot.account_id,
+      organization_id: bot.organization_id,
+      bot_id: bot.id,
+    });
+
+    const page = await request(app).get("/admin/tasks").expect(200);
+    expect(page.text).toContain("Tareas");
+    expect(page.text).toContain("Llamar al cliente");
+    expect(page.text).toContain("Pendiente");
+    expect(page.text).toContain("Interacción del bot");
+
+    const task = (
+      await pool.query("SELECT id, conversation_id FROM internal_tasks WHERE titulo LIKE 'Llamar al cliente%' LIMIT 1")
+    ).rows[0];
+    expect(task).toBeTruthy();
+    // La fila abre el detalle en popup (no enlaza directo a la conversación).
+    expect(page.text).toContain(`data-open-task="${task.id}"`);
+
+    // Detalle: estado + historial + link a la conversación que la generó.
+    const detail = await request(app).get(`/admin/tasks/${task.id}`).expect(200);
+    expect(detail.text).toContain("Seguimiento");
+    expect(detail.text).toContain("Sin actividad todavía");
+    expect(detail.text).toContain(`/inspector/accounts/${bot.account_id}/conversations/${task.conversation_id}`);
+
+    // Agregar actualización: quién atendió + qué pasó (+ cambio de estado).
+    await request(app)
+      .post(`/admin/tasks/${task.id}/update`)
+      .type("form")
+      .send({ actor: "Ana", note: "Llamé al cliente, agendamos demo.", status: "en_progreso" })
+      .expect(302);
+    const after = await request(app).get(`/admin/tasks/${task.id}`).expect(200);
+    expect(after.text).toContain("Ana");
+    expect(after.text).toContain("Llamé al cliente, agendamos demo.");
+    expect(after.text).toContain("Pendiente → En progreso");
+    const updated = (await pool.query("SELECT status, assigned_to FROM internal_tasks WHERE id = $1", [task.id])).rows[0];
+    expect(updated.status).toBe("en_progreso");
+    expect(updated.assigned_to).toBe("Ana");
+    // El historial quedó registrado.
+    const log = await pool.query("SELECT count(*)::int AS count FROM task_updates WHERE task_id = $1", [task.id]);
+    expect(log.rows[0].count).toBeGreaterThanOrEqual(1);
+
+    // Follow-up por el toggle de la bandeja (también loguea).
+    await request(app).post(`/admin/tasks/${task.id}/status`).type("form").send({ status: "hecha" }).expect(302);
+    expect((await pool.query("SELECT status FROM internal_tasks WHERE id = $1", [task.id])).rows[0].status).toBe("hecha");
+
+    // Estado inválido → 400.
+    await request(app).post(`/admin/tasks/${task.id}/status`).type("form").send({ status: "bogus" }).expect(400);
+
+    // Filtro por estado.
+    const done_page = await request(app).get("/admin/tasks?status=hecha").expect(200);
+    expect(done_page.text).toContain("Llamar al cliente");
+    const pending_page = await request(app).get("/admin/tasks?status=pendiente").expect(200);
+    expect(pending_page.text).not.toContain("Llamar al cliente");
   });
 
 });

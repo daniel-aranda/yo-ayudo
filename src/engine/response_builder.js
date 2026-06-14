@@ -16,7 +16,7 @@ export function build_reply(parsed, result) {
     case "sales_update":
       return `Venta acumulada registrada: ${format_money(parsed.data.accumulated_sales)}.`;
     case "day_start":
-      return `Inicio del día registrado con ${format_money(parsed.data.opening_cash)} en caja.`;
+      return `Caja inicial del día registrada: ${format_money(parsed.data.opening_cash)}.`;
     case "daily_close":
       return "Cierre registrado. Estoy preparando el resumen del día.";
     case "inventory_update":

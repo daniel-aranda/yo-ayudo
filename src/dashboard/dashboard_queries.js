@@ -103,7 +103,7 @@ export async function get_business_dashboard_data(pool, business_id) {
 // inbound messages that didn't trigger an operation. The technical pipeline trace
 // (webhook/parsing/agent/memory events) lives in the inspector, not here.
 const ACTIVITY_LABELS = {
-  registrar_inicio_dia: "Inicio del día",
+  registrar_inicio_dia: "Caja inicial del día",
   registrar_venta: "Venta registrada",
   registrar_compra: "Compra registrada",
   registrar_inventario: "Inventario registrado",
@@ -208,6 +208,11 @@ export async function get_account_dashboard_data(pool, input) {
   const sibling_accounts = await pool.query(
     "SELECT id, name FROM accounts WHERE organization_id = $1 AND status = 'active' ORDER BY name",
     [input.business_id],
+  );
+  // Tareas abiertas (no hechas) de la cuenta, para la tarjeta del dashboard.
+  const open_tasks = await pool.query(
+    "SELECT count(*)::int AS count FROM internal_tasks WHERE account_id = $1 AND status <> 'hecha'",
+    [input.account_id],
   );
   // Bots de sistema (mantenidos por la plataforma) disponibles como base para
   // crear un bot de esta cuenta clonando su definición.
@@ -349,6 +354,7 @@ export async function get_account_dashboard_data(pool, input) {
   return {
     account: account.rows[0] ?? null,
     sibling_accounts: sibling_accounts.rows,
+    open_tasks_count: open_tasks.rows[0]?.count ?? 0,
     bots: bots.rows,
     system_bots: system_bots.rows,
     channels: channels.rows,

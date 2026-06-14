@@ -66,6 +66,7 @@ A nivel engine las Actions siguen igual: registry en codigo, handler, validacion
 En el editor de bots ya no existe una lista separada de "Acciones del bot". Todo se configura como **interacciones**, y cada interaccion tiene su propio prompt. Una interaccion ejecutable lleva un `action_id` que la conecta con una Action del engine.
 
 - Hoy las interacciones ejecutables reales son `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen`. El resto del registry son stubs (`stub_*`) de roadmap.
+- `crear_tarea` escribe en `internal_tasks` (con `conversation_id`/`message_id`); esas tareas se ven y se resuelven en `GET /admin/tasks` (bandeja de tareas) y aparecen en el panel "Tareas" del visor de conversación. `guardar_nota` escribe en `internal_notes`.
 - Al guardar el bot, `acciones_habilitadas_json` se **deriva** de las interacciones habilitadas que tienen `action_id` (en `src/inspector/inspector_repository.js`). Ese campo sigue siendo la puerta de ejecucion del engine.
 - El prompt compiler inyecta el prompt (instrucciones) de cada interaccion ejecutable en la seccion "# Acciones disponibles" del prompt final, en lugar de una descripcion estatica. Asi la accion lleva el prompt del operador (por ejemplo, como prospectar, hacer cherry-pick o excluir contactados en `buscar_negocios`).
 

@@ -132,8 +132,8 @@ export const available_agent_interactions = [
   {
     type: "registrar_inicio_dia",
     key: "registrar_inicio_dia",
-    label: "Registrar inicio del día",
-    description: "Abre el día operativo con el efectivo inicial en caja.",
+    label: "Registrar caja inicial del día",
+    description: "Abre el día operativo registrando el efectivo (caja) inicial.",
     instructions_placeholder:
       "Describe cómo el negocio reporta la apertura (p. ej. \"abrimos con $X en caja\") y qué confirmar.",
     action_id: "registrar_inicio_dia",
@@ -859,6 +859,159 @@ export async function get_bot_conversations(pool, input) {
   return { conversations, bot, search: input.search ?? "" };
 }
 
+async function get_bot_whatsapp_number(pool, bot_id) {
+  if (!bot_id) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `
+      SELECT whatsapp_phone_numbers.display_phone_number, whatsapp_phone_numbers.phone_number_id
+      FROM phone_number_bot_assignments
+      JOIN whatsapp_phone_numbers
+        ON whatsapp_phone_numbers.id = phone_number_bot_assignments.whatsapp_phone_number_id
+      WHERE phone_number_bot_assignments.bot_id = $1
+        AND phone_number_bot_assignments.status = 'active'
+        AND phone_number_bot_assignments.active_key = 'active'
+      ORDER BY phone_number_bot_assignments.assigned_at DESC
+      LIMIT 1
+    `,
+    [bot_id],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+function first_string(...values) {
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) ?? null;
+}
+
+function latest_action_value(rows, action_id, ...keys) {
+  const row = rows.find((item) => item.action_id === action_id);
+  const input = row?.input_json ?? {};
+  const output = row?.output_json ?? {};
+  for (const key of keys) {
+    const value = input[key] ?? output[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return null;
+}
+
+async function get_conversation_value_summary(pool, conversation_id) {
+  const message_filter = "SELECT id FROM messages WHERE conversation_id = $1";
+  const [sales, latest_sale, purchases, purchase_items, inventory, notes, action_logs] = await Promise.all([
+    pool.query(
+      `
+        SELECT count(*)::int AS count, max(created_at) AS last_at
+        FROM op_sales_updates
+        WHERE source_message_id IN (${message_filter})
+      `,
+      [conversation_id],
+    ),
+    pool.query(
+      `
+        SELECT accumulated_sales, cash_sales, card_sales, transfer_sales, delivery_app_sales, created_at
+        FROM op_sales_updates
+        WHERE source_message_id IN (${message_filter})
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [conversation_id],
+    ),
+    pool.query(
+      `
+        SELECT count(*)::int AS count, COALESCE(sum(total_cost), 0) AS total
+        FROM op_purchases
+        WHERE source_message_id IN (${message_filter})
+      `,
+      [conversation_id],
+    ),
+    pool.query(
+      `
+        SELECT item_name, quantity, unit, total_cost, created_at
+        FROM op_purchases
+        WHERE source_message_id IN (${message_filter})
+        ORDER BY created_at DESC
+        LIMIT 3
+      `,
+      [conversation_id],
+    ),
+    pool.query(
+      `
+        SELECT count(*)::int AS count
+        FROM op_inventory_snapshots
+        WHERE source_message_id IN (${message_filter})
+      `,
+      [conversation_id],
+    ),
+    pool.query(
+      `
+        SELECT id, note, created_at
+        FROM internal_notes
+        WHERE conversation_id = $1
+        ORDER BY created_at DESC
+        LIMIT 3
+      `,
+      [conversation_id],
+    ),
+    pool.query(
+      `
+        SELECT action_id, input_json, output_json, created_at
+        FROM action_audit_logs
+        WHERE conversation_id = $1
+          AND action_id IN ('registrar_inicio_dia', 'registrar_cierre_dia', 'generar_resumen')
+          AND status = 'executed'
+        ORDER BY created_at DESC
+      `,
+      [conversation_id],
+    ),
+  ]);
+
+  const logs = action_logs.rows;
+  const latest_summary_row = logs.find((row) => row.action_id === "generar_resumen");
+  const latest_summary = latest_summary_row
+    ? first_string(
+        latest_summary_row.output_json?.resumen,
+        latest_summary_row.output_json?.summary_text,
+        latest_summary_row.output_json?.mensaje,
+      )
+    : null;
+
+  const summary = {
+    sales: {
+      count: sales.rows[0]?.count ?? 0,
+      latest_amount: latest_sale.rows[0]?.accumulated_sales ?? null,
+      last_at: latest_sale.rows[0]?.created_at ?? sales.rows[0]?.last_at ?? null,
+    },
+    purchases: {
+      count: purchases.rows[0]?.count ?? 0,
+      total: purchases.rows[0]?.total ?? 0,
+      items: purchase_items.rows,
+    },
+    inventory: {
+      count: inventory.rows[0]?.count ?? 0,
+    },
+    notes: notes.rows,
+    opening_cash: latest_action_value(logs, "registrar_inicio_dia", "opening_cash"),
+    closing_cash: latest_action_value(logs, "registrar_cierre_dia", "closing_cash", "cash_on_hand", "final_cash"),
+    latest_summary,
+  };
+
+  summary.has_value = Boolean(
+    summary.sales.count ||
+      summary.purchases.count ||
+      summary.inventory.count ||
+      summary.notes.length ||
+      summary.opening_cash != null ||
+      summary.closing_cash != null ||
+      summary.latest_summary,
+  );
+
+  return summary;
+}
+
 export async function get_conversation_view(pool, conversation_id) {
   const conversation = await pool.query(
     `
@@ -883,6 +1036,11 @@ export async function get_conversation_view(pool, conversation_id) {
     [conversation_id],
   );
   const conversation_row = conversation.rows[0] ?? null;
+  if (conversation_row) {
+    const bot_number = await get_bot_whatsapp_number(pool, conversation_row.bot_id);
+    conversation_row.bot_display_phone_number = bot_number?.display_phone_number ?? null;
+    conversation_row.bot_phone_number_id = bot_number?.phone_number_id ?? null;
+  }
   const messages = await pool.query(
     "SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC",
     [conversation_id],
@@ -942,6 +1100,7 @@ export async function get_conversation_view(pool, conversation_id) {
     messages: messages_with_trace,
     turns,
     operational_day,
+    value_summary: await get_conversation_value_summary(pool, conversation_id),
   };
 }
 

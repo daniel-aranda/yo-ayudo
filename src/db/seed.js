@@ -585,10 +585,10 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
     {
       key: "registrar_inicio_dia",
       type: "registrar_inicio_dia",
-      label: "Registrar inicio del día",
+      label: "Registrar caja inicial del día",
       enabled: true,
       action_id: "registrar_inicio_dia",
-      instructions: "Cuando el negocio diga que abrió (\"abrimos con $X en caja\"), registra el inicio del día con ese efectivo.",
+      instructions: "Cuando el negocio diga que abrió (\"abrimos con $X en caja\"), registra la caja inicial del día con ese efectivo.",
     },
     {
       key: "registrar_venta",
@@ -1438,7 +1438,8 @@ export async function seed_demo_conversation(pool, { account_id, organization_id
       intent: "day_start",
       confidence: 0.93,
       actions: ["registrar_inicio_dia"],
-      reply: "Inicio del día registrado con $1,800 en caja.",
+      outputs: { registrar_inicio_dia: { opening_cash: 1800 } },
+      reply: "Caja inicial del día registrada: $1,800.",
     },
     {
       text: "ya vendimos 2500 y compré 600 de fruta",
@@ -1479,7 +1480,7 @@ export async function seed_demo_conversation(pool, { account_id, organization_id
         action_id,
         status: "executed",
         input_json: { source: "seed_demo" },
-        output_json: { ok: true },
+        output_json: turn.outputs?.[action_id] ?? { ok: true },
         actor_type: "bot",
       });
     }
@@ -1559,7 +1560,8 @@ export async function seed_routed_demo_conversation(pool, { account_id, organiza
       routing_confidence: 0.96,
       candidates: ["operations_agent", "reports_agent"],
       actions: ["registrar_inicio_dia"],
-      reply: "Inicio del día registrado con $1,800 en caja.",
+      outputs: { registrar_inicio_dia: { opening_cash: 1800 } },
+      reply: "Caja inicial del día registrada: $1,800.",
     },
     {
       text: "necesito que me llame una persona, es urgente",
@@ -1573,6 +1575,12 @@ export async function seed_routed_demo_conversation(pool, { account_id, organiza
       handoff: true,
       handoff_reason: "El cliente pidió hablar con una persona (urgente).",
       actions: ["crear_tarea"],
+      // La interacción crear_tarea deja una tarea real en la bandeja (/admin/tasks),
+      // no solo el chip: así el demo muestra el follow-up de punta a punta.
+      task: {
+        titulo: "Llamar al cliente Multi-Agente (urgente)",
+        descripcion: "El cliente pidió por WhatsApp que una persona lo llame lo antes posible.",
+      },
       reply: "Claro, te conecto con una persona. Dejé una tarea para que te llamen lo antes posible.",
     },
   ];
@@ -1646,9 +1654,33 @@ export async function seed_routed_demo_conversation(pool, { account_id, organiza
         action_id,
         status: "executed",
         input_json: { source: "seed_routed_demo" },
-        output_json: { ok: true },
+        output_json: turn.outputs?.[action_id] ?? { ok: true },
         actor_type: "bot",
       });
+    }
+
+    // La interacción crear_tarea produce una tarea real en internal_tasks.
+    if (turn.task) {
+      await pool.query(
+        `
+          INSERT INTO internal_tasks (
+            organization_id, account_id, bot_id, conversation_id, message_id,
+            titulo, descripcion, status, metadata_json, created_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendiente', $8::jsonb, $9, $9)
+        `,
+        [
+          organization_id,
+          account_id,
+          bot_id,
+          conversation.id,
+          inbound.id,
+          turn.task.titulo,
+          turn.task.descripcion,
+          JSON.stringify({ source: "bot_engine_action", action_id: "crear_tarea", seed: "routed_demo" }),
+          at(minute),
+        ],
+      );
     }
 
     await pool.query(

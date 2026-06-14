@@ -6,6 +6,12 @@ import {
   get_dashboard_home,
 } from "./dashboard_queries.js";
 import { custom_bot_service, minimal_draft_definition } from "../bots/custom_bot_service.js";
+import {
+  add_task_update,
+  get_task_detail,
+  get_tasks_admin_view,
+  update_task_status,
+} from "../admin/admin_tasks_service.js";
 import { get_bot_by_id } from "../bots/bot_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
@@ -29,11 +35,35 @@ export function register_dashboard_routes(router, dependencies = {}) {
   const pool = dependencies.pool ?? default_pool;
 
   async function account_in_business(account_id, business_id) {
-    const result = await pool.query("SELECT id FROM accounts WHERE id = $1 AND organization_id = $2 LIMIT 1", [
-      account_id,
-      business_id,
-    ]);
+    const result = await pool.query(
+      `
+        SELECT accounts.id, accounts.name AS account_name, organizations.name AS business_name
+        FROM accounts
+        JOIN organizations ON organizations.id = accounts.organization_id
+        WHERE accounts.id = $1 AND accounts.organization_id = $2
+        LIMIT 1
+      `,
+      [account_id, business_id],
+    );
     return result.rows[0] ?? null;
+  }
+
+  // Contexto común para el módulo de tareas de una cuenta (valida pertenencia y
+  // trae los nombres para el breadcrumb). Devuelve null si la cuenta no es del negocio.
+  async function account_tasks_context(request) {
+    const business_id = require_param(request.params.business_id, "business_id");
+    const account_id = require_param(request.params.account_id, "account_id");
+    const account = await account_in_business(account_id, business_id);
+    if (!account) {
+      return null;
+    }
+    return {
+      business_id,
+      account_id,
+      business_name: account.business_name,
+      account_name: account.account_name,
+      base_path: `/dashboard/business/${business_id}/accounts/${account_id}/tasks`,
+    };
   }
 
   router.get("/dashboard", dashboard_auth, async (_request, response, next) => {
@@ -67,6 +97,109 @@ export function register_dashboard_routes(router, dependencies = {}) {
             account_id: require_param(request.params.account_id, "account_id"),
           }),
         );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  // Módulo de tareas a nivel cuenta: los usuarios del negocio ven y dan
+  // seguimiento a las tareas de SU cuenta (quién atendió y qué pasó). Reusa la
+  // bandeja y el detalle del admin, scopeados por account_id.
+  router.get(
+    "/dashboard/business/:business_id/accounts/:account_id/tasks",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_tasks_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe en este negocio.");
+          return;
+        }
+        const view = await get_tasks_admin_view(pool, {
+          account_id: context.account_id,
+          bot_id: request.query.bot_id,
+          status: request.query.status,
+          q: request.query.q,
+        });
+        response.render("admin/tasks", { ...view, ...context, scoped: true });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    "/dashboard/business/:business_id/accounts/:account_id/tasks/:task_id",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_tasks_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe en este negocio.");
+          return;
+        }
+        const detail = await get_task_detail(pool, request.params.task_id, { account_id: context.account_id });
+        if (!detail) {
+          response.status(404).send("Tarea no encontrada");
+          return;
+        }
+        response.render("admin/task_detail", { ...detail, base_path: context.base_path });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/dashboard/business/:business_id/accounts/:account_id/tasks/:task_id/status",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_tasks_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe en este negocio.");
+          return;
+        }
+        const result = await update_task_status(pool, {
+          task_id: request.params.task_id,
+          status: String(request.body?.status ?? "").trim(),
+          actor: response.locals?.current_user?.name ?? null,
+          account_id: context.account_id,
+        });
+        if (result.error) {
+          response.status(result.error === "task_not_found" ? 404 : 400).send(result.message);
+          return;
+        }
+        response.redirect(request.body?.return_to || context.base_path);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/dashboard/business/:business_id/accounts/:account_id/tasks/:task_id/update",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_tasks_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe en este negocio.");
+          return;
+        }
+        const result = await add_task_update(pool, {
+          task_id: request.params.task_id,
+          actor: request.body?.actor ?? response.locals?.current_user?.name ?? null,
+          note: request.body?.note,
+          status: String(request.body?.status ?? "").trim(),
+          account_id: context.account_id,
+        });
+        if (result.error) {
+          response.status(result.error === "task_not_found" ? 404 : 400).send(result.message);
+          return;
+        }
+        response.redirect(`${context.base_path}/${request.params.task_id}`);
       } catch (error) {
         next(error);
       }
