@@ -35,20 +35,21 @@ block content
       else
         p Bots, canales y conversaciones de esta cuenta
 
+    //- Las tarjetas de métrica son atajos: saltan a su pestaña (Tareas es página aparte).
     .metrics
-      a.metric.metric--link(href="#panel-bots")
+      a.metric.metric--link(href="#panel-bots", data-go-tab="bots")
         span.label Bots asignados
         strong= stats.bots_count || 0
-      a.metric.metric--link(href="#panel-canales")
+      a.metric.metric--link(href="#panel-canales", data-go-tab="canales")
         span.label Canales conectados
         strong= stats.channels_count || 0
-      a.metric.metric--link(href="#panel-conversaciones")
+      a.metric.metric--link(href="#panel-conversaciones", data-go-tab="conversaciones")
         span.label Conversaciones
         strong= stats.conversations_count || 0
       a.metric.metric--link(href=`/dashboard/accounts/${account.id}/tasks`)
         span.label Tareas abiertas
         strong= open_tasks_count || 0
-      a.metric.metric--link(href="#panel-actividad")
+      a.metric.metric--link(href="#panel-actividad", data-go-tab="actividad")
         span.label Eventos con error
         strong= stats.error_events_count || 0
 
@@ -110,65 +111,40 @@ block content
         else
           .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
 
-    .two-column
-      section.panel#panel-canales
-        .section-title
-          h2 Canales conectados
-          button#open_add_channel(type="button") Agregar canal
-        if channels && channels.length
+    //- Tab Navigator de la cuenta: una sección a la vez (reusa el patrón pill del
+    //- editor de bot — .tabs/.tab + .tab-section togglea `hidden`).
+    .account-tab-shell.wamy-tabs
+      #account-tabs.tabs(data-initial-tab="conversaciones", role="tablist", aria-label="Secciones de la cuenta")
+        button.tab.active(type="button", data-section="conversaciones", role="tab", aria-selected="true") Conversaciones
+        button.tab(type="button", data-section="bots", role="tab", aria-selected="false") Bots
+        button.tab(type="button", data-section="canales", role="tab", aria-selected="false") Canales
+        button.tab(type="button", data-section="actividad", role="tab", aria-selected="false") Actividad
+
+    .tab-section(data-parent-tab="account-tabs", data-section="conversaciones")
+      section.panel#panel-conversaciones
+        h2 Conversaciones recientes
+        if conversations && conversations.length
           table
             thead
               tr
-                th Canal
-                th Identificador
+                th Contacto
+                th Bot
+                th Último mensaje
                 th Estado
             tbody
-              each channel in channels
+              each conversation in conversations
                 tr
-                  td WhatsApp
-                  td= channel.display_phone_number ? phone(channel.display_phone_number) : channel.phone_number_id
                   td
-                    span.status= channel.status
+                    a(href=`/inspector/accounts/${account.id}/conversations/${conversation.id}`)= conversation.display_name || phone(conversation.whatsapp_phone)
+                    div.meta= phone(conversation.whatsapp_phone)
+                  td= conversation.bot_name || "sin bot"
+                  td= conversation.last_message || "-"
+                  td
+                    span.status= conversation.status
         else
-          .empty Sin canales conectados. Conecta uno con "Agregar canal".
+          .empty Sin conversaciones.
 
-      //- Alta de canal: WhatsApp con los datos de Meta (y bot opcional para
-      //- conectarlo de una vez); Instagram llegará con OAuth, aún no se captura.
-      #add_channel_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-add-channel-popup)
-        .popup.popup--md.popup--default
-          .popup__header
-            .popup__header-text
-              h3.popup__title Agregar canal
-              .popup__subtitle Conecta el canal por donde te escriben tus clientes.
-            button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
-          .popup__body
-            .add-channel-tab-shell.wamy-tabs
-              #add-channel-tabs.tabs(data-initial-tab="whatsapp", role="tablist", aria-label="Tipo de canal")
-                button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true") WhatsApp
-                button.tab(type="button", data-section="instagram", role="tab", aria-selected="false") Instagram
-            .tab-section(data-parent-tab="add-channel-tabs", data-section="whatsapp")
-              form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/channels`)
-                input(type="hidden", name="channel_type", value="whatsapp")
-                label(for="channel_display_phone_number") Número de WhatsApp
-                input#channel_display_phone_number(type="tel", name="display_phone_number", placeholder="+52 55 1234 5678", required)
-                p.field-hint El número con lada que ven tus clientes.
-                label(for="channel_phone_number_id") ID del número en Meta
-                input#channel_phone_number_id(type="text", name="phone_number_id", placeholder="Phone number ID de la API de WhatsApp", required)
-                p.field-hint Lo encuentras en Meta Business → WhatsApp → Configuración de la API.
-                if bots && bots.length
-                  label(for="channel_bot_id") Conectar a un bot (opcional)
-                  select#channel_bot_id(name="bot_id")
-                    option(value="") Conectar después
-                    each bot in bots
-                      option(value=bot.id)= bot.name
-                div.form-actions
-                  button(type="submit") Conectar WhatsApp
-            .tab-section(data-parent-tab="add-channel-tabs", data-section="instagram", hidden)
-              .channel-coming-soon
-                p
-                  strong Instagram llega pronto.
-                  |  Se conectará con tu cuenta de Instagram vía OAuth — sin capturar IDs a mano.
-
+    .tab-section(data-parent-tab="account-tabs", data-section="bots", hidden)
       section.panel#panel-bots
         .section-title
           h2 Bots asignados
@@ -193,74 +169,29 @@ block content
         else
           .empty Sin bots asignados. Crea uno con "Agregar bot".
 
-      //- Alta de bot de la cuenta: tabs Personalizado | Desde bot de sistema.
-      //- Los de sistema se eligen en tarjetas (nombre + descripción), no dropdown.
-      #add_bot_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-add-bot-popup)
-        .popup.popup--lg.popup--tall.popup--default
-          .popup__header
-            .popup__header-text
-              h3.popup__title Agregar bot
-              .popup__subtitle El bot se crea en borrador; configúralo y actívalo cuando esté listo.
-            button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
-          .popup__body
-            .add-bot-tab-shell.wamy-tabs
-              #add-bot-tabs.tabs(data-initial-tab="custom", role="tablist", aria-label="Tipo de bot")
-                button.tab.active(type="button", data-section="custom", role="tab", aria-selected="true") Bot Nuevo
-                if system_bots && system_bots.length
-                  button.tab(type="button", data-section="system", role="tab", aria-selected="false") Bot preconfigurado
-            .tab-section(data-parent-tab="add-bot-tabs", data-section="custom")
-              form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
-                label(for="new_bot_name") Nombre del bot
-                input#new_bot_name(type="text", name="name", placeholder="Ej. Agente de ventas", required)
-                p.meta Empieza en blanco y configúralo a tu medida.
-                div.form-actions
-                  button(type="submit") Crear bot
-            if system_bots && system_bots.length
-              .tab-section(data-parent-tab="add-bot-tabs", data-section="system", hidden)
-                form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
-                  .system-bot-toolbar
-                    input#system_bot_search(type="search", placeholder="Buscar bot preconfigurado...", aria-label="Buscar bot preconfigurado", autocomplete="off")
-                    button.help-tip(
-                      type="button",
-                      aria-label="¿Qué es un bot preconfigurado?",
-                      data-tip="Bots listos de YoAyudo. Al usarlo como base se copia su configuración como un bot propio de esta cuenta, sin knowledge ni grupos de la cuenta origen."
-                    ) ?
-                  .system-bot-list
-                    each system_bot, index in system_bots
-                      label.system-bot-pick
-                        input.system-bot-pick-input(type="radio", name="source_bot_id", value=system_bot.id, required, checked=index === 0)
-                        span.system-bot-pick-text
-                          span.system-bot-pick-name= system_bot.name
-                          if system_bot.description
-                            span.system-bot-pick-desc= system_bot.description
-                  p.meta#system_bot_search_empty(hidden) Sin bots que coincidan con la búsqueda.
-                  div.form-actions
-                    button#use_system_bot(type="submit") Usar como base
-
-    .two-column
-      section.panel#panel-conversaciones
-        h2 Conversaciones recientes
-        if conversations && conversations.length
+    .tab-section(data-parent-tab="account-tabs", data-section="canales", hidden)
+      section.panel#panel-canales
+        .section-title
+          h2 Canales conectados
+          button#open_add_channel(type="button") Agregar canal
+        if channels && channels.length
           table
             thead
               tr
-                th Contacto
-                th Bot
-                th Último mensaje
+                th Canal
+                th Identificador
                 th Estado
             tbody
-              each conversation in conversations
+              each channel in channels
                 tr
+                  td WhatsApp
+                  td= channel.display_phone_number ? phone(channel.display_phone_number) : channel.phone_number_id
                   td
-                    a(href=`/inspector/accounts/${account.id}/conversations/${conversation.id}`)= conversation.display_name || phone(conversation.whatsapp_phone)
-                    div.meta= phone(conversation.whatsapp_phone)
-                  td= conversation.bot_name || "sin bot"
-                  td= conversation.last_message || "-"
-                  td
-                    span.status= conversation.status
+                    span.status= channel.status
         else
-          .empty Sin conversaciones.
+          .empty Sin canales conectados. Conecta uno con "Agregar canal".
 
+    .tab-section(data-parent-tab="account-tabs", data-section="actividad", hidden)
       section.panel#panel-actividad
         h2 Actividad reciente
         if activity && activity.length
@@ -278,6 +209,88 @@ block content
                     p.activity-detail= item.detail
         else
           .empty Sin actividad reciente. En cuanto el negocio opere por WhatsApp, aparecerá aquí.
+
+    //- Popups al top-level del contenido: un overlay dentro de una .tab-section
+    //- oculta heredaría su `hidden` y nunca abriría. Los botones que los abren
+    //- viven en sus pestañas (Bots / Canales).
+    #add_channel_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-add-channel-popup)
+      .popup.popup--md.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title Agregar canal
+            .popup__subtitle Conecta el canal por donde te escriben tus clientes.
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+        .popup__body
+          .add-channel-tab-shell.wamy-tabs
+            #add-channel-tabs.tabs(data-initial-tab="whatsapp", role="tablist", aria-label="Tipo de canal")
+              button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true") WhatsApp
+              button.tab(type="button", data-section="instagram", role="tab", aria-selected="false") Instagram
+          .tab-section(data-parent-tab="add-channel-tabs", data-section="whatsapp")
+            form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/channels`)
+              input(type="hidden", name="channel_type", value="whatsapp")
+              label(for="channel_display_phone_number") Número de WhatsApp
+              input#channel_display_phone_number(type="tel", name="display_phone_number", placeholder="+52 55 1234 5678", required)
+              p.field-hint El número con lada que ven tus clientes.
+              label(for="channel_phone_number_id") ID del número en Meta
+              input#channel_phone_number_id(type="text", name="phone_number_id", placeholder="Phone number ID de la API de WhatsApp", required)
+              p.field-hint Lo encuentras en Meta Business → WhatsApp → Configuración de la API.
+              if bots && bots.length
+                label(for="channel_bot_id") Conectar a un bot (opcional)
+                select#channel_bot_id(name="bot_id")
+                  option(value="") Conectar después
+                  each bot in bots
+                    option(value=bot.id)= bot.name
+              div.form-actions
+                button(type="submit") Conectar WhatsApp
+          .tab-section(data-parent-tab="add-channel-tabs", data-section="instagram", hidden)
+            .channel-coming-soon
+              p
+                strong Instagram llega pronto.
+                |  Se conectará con tu cuenta de Instagram vía OAuth — sin capturar IDs a mano.
+
+    //- Alta de bot de la cuenta: tabs Personalizado | Desde bot de sistema.
+    //- Los de sistema se eligen en tarjetas (nombre + descripción), no dropdown.
+    #add_bot_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-add-bot-popup)
+      .popup.popup--lg.popup--tall.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title Agregar bot
+            .popup__subtitle El bot se crea en borrador; configúralo y actívalo cuando esté listo.
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+        .popup__body
+          .add-bot-tab-shell.wamy-tabs
+            #add-bot-tabs.tabs(data-initial-tab="custom", role="tablist", aria-label="Tipo de bot")
+              button.tab.active(type="button", data-section="custom", role="tab", aria-selected="true") Bot Nuevo
+              if system_bots && system_bots.length
+                button.tab(type="button", data-section="system", role="tab", aria-selected="false") Bot preconfigurado
+          .tab-section(data-parent-tab="add-bot-tabs", data-section="custom")
+            form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
+              label(for="new_bot_name") Nombre del bot
+              input#new_bot_name(type="text", name="name", placeholder="Ej. Agente de ventas", required)
+              p.meta Empieza en blanco y configúralo a tu medida.
+              div.form-actions
+                button(type="submit") Crear bot
+          if system_bots && system_bots.length
+            .tab-section(data-parent-tab="add-bot-tabs", data-section="system", hidden)
+              form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
+                .system-bot-toolbar
+                  input#system_bot_search(type="search", placeholder="Buscar bot preconfigurado...", aria-label="Buscar bot preconfigurado", autocomplete="off")
+                  button.help-tip(
+                    type="button",
+                    aria-label="¿Qué es un bot preconfigurado?",
+                    data-tip="Bots listos de YoAyudo. Al usarlo como base se copia su configuración como un bot propio de esta cuenta, sin knowledge ni grupos de la cuenta origen."
+                  ) ?
+                .system-bot-list
+                  each system_bot, index in system_bots
+                    label.system-bot-pick
+                      input.system-bot-pick-input(type="radio", name="source_bot_id", value=system_bot.id, required, checked=index === 0)
+                      span.system-bot-pick-text
+                        span.system-bot-pick-name= system_bot.name
+                        if system_bot.description
+                          span.system-bot-pick-desc= system_bot.description
+                p.meta#system_bot_search_empty(hidden) Sin bots que coincidan con la búsqueda.
+                div.form-actions
+                  button#use_system_bot(type="submit") Usar como base
 
   script
     include ../public/js/core/Popup.js
@@ -303,6 +316,29 @@ block content
       addChannelPopup?.iniciar();
       window.TabNavigator?.render("#add-channel-tabs");
       document.getElementById("open_add_channel")?.addEventListener("click", () => addChannelPopup?.open());
+
+      // Tab Navigator de la cuenta + atajos desde las tarjetas de métrica.
+      window.TabNavigator?.render("#account-tabs");
+      const accountTabs = window.TabNavigator?.get("account-tabs");
+
+      // Tras crear bot/canal el server redirige a #panel-bots / #panel-canales:
+      // abrir la pestaña correspondiente (la sección arranca oculta por default).
+      const hashToTab = {
+        "#panel-conversaciones": "conversaciones",
+        "#panel-bots": "bots",
+        "#panel-canales": "canales",
+        "#panel-actividad": "actividad",
+      };
+      const initialTab = hashToTab[window.location.hash];
+      if (initialTab) accountTabs?.activate_by_section(initialTab);
+
+      document.querySelectorAll("[data-go-tab]").forEach((card) => {
+        card.addEventListener("click", (event) => {
+          event.preventDefault();
+          accountTabs?.activate_by_section(card.dataset.goTab);
+          document.getElementById("account-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
 
       // Filtro de bots preconfigurados: oculta tarjetas que no coinciden y
       // mantiene una selección válida (si el filtro esconde la marcada, marca

@@ -832,6 +832,12 @@ button:disabled {
   margin: 0 0 16px;
 }
 
+/* Tab Navigator del dashboard de cuenta: separa la barra de pestañas del
+   overview de arriba y del panel de la pestaña activa. */
+.account-tab-shell {
+  margin: 8px 0 16px;
+}
+
 .tabs {
   align-items: center;
   background: var(--surface);
