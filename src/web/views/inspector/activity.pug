@@ -17,7 +17,7 @@ block content
 
   if bot
     -
-      const account_url = bot.organization_id && bot.account_id ? `/dashboard/business/${bot.organization_id}/accounts/${bot.account_id}` : "/dashboard";
+      const account_url = bot.account_id ? `/dashboard/accounts/${bot.account_id}` : "/dashboard";
     +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: bot.account_name || "Cuenta", href: account_url }, { label: bot.name || "Bot", href: `/inspector/bots/${bot.id}` }, { label: "Actividad" }])
     section.page-header
       div

@@ -82,9 +82,7 @@ describe("Operational dashboard", () => {
     await seed_operational_day(pool, account_id, organization_id);
 
     const app = create_dashboard_test_app(pool);
-    const response = await request(app)
-      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
-      .expect(200);
+    const response = await request(app).get(`/dashboard/accounts/${account_id}`).expect(200);
 
     expect(response.text).toContain("Dashboard operativo");
     expect(response.text).toContain("Ventas del día");
@@ -104,7 +102,8 @@ describe("Operational dashboard", () => {
     const response = await request(app).get(`/dashboard/business/${organization_id}`).expect(200);
 
     expect(response.text).toContain("Cuentas");
-    expect(response.text).toContain(`/dashboard/business/${organization_id}/accounts/${account_id}`);
+    // "Abrir cuenta" apunta a la URL account-only (el negocio se deriva de ella).
+    expect(response.text).toContain(`/dashboard/accounts/${account_id}`);
   });
 
   it("links the dashboard home to the business page (explicit Negocio → Cuenta hierarchy)", async () => {
@@ -117,12 +116,27 @@ describe("Operational dashboard", () => {
     expect(response.text).toContain(`href="/dashboard/business/${organization_id}"`);
   });
 
+  it("redirects the legacy business+account URL (and subroutes) to the account-only canonical", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    const app = create_dashboard_test_app(pool);
+
+    await request(app)
+      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
+      .expect(301)
+      .expect("Location", `/dashboard/accounts/${account_id}`);
+
+    await request(app)
+      .get(`/dashboard/business/${organization_id}/accounts/${account_id}/tasks`)
+      .expect(301)
+      .expect("Location", `/dashboard/accounts/${account_id}/tasks`);
+  });
+
   it("shows the empty operational state when there is no business day", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
 
     const response = await request(app)
-      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
+      .get(`/dashboard/accounts/${account_id}`)
       .expect(200);
 
     expect(response.text).toContain("Aún no hay actividad operativa");
@@ -139,7 +153,7 @@ describe("Operational dashboard", () => {
 
     const app = create_dashboard_test_app(pool);
     const response = await request(app)
-      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
+      .get(`/dashboard/accounts/${account_id}`)
       .expect(200);
 
     // Even with operational data present, no operational bot => no operational dashboard.
@@ -151,18 +165,14 @@ describe("Operational dashboard", () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
 
-    const response = await request(app)
-      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
-      .expect(200);
+    const response = await request(app).get(`/dashboard/accounts/${account_id}`).expect(200);
 
-    // Pug HTML-escapes `&` to `&amp;` in attributes (browsers decode it back).
-    const qs = `?business=${organization_id}&amp;account=${account_id}`;
-    // Dashboard points back at this account's dashboard; Inspector scopes via the
-    // path (/inspector/accounts/:id), Review still carries the scope as a query.
-    expect(response.text).toContain(`href="/dashboard/business/${organization_id}/accounts/${account_id}"`);
+    // La cuenta es el único scope. Dashboard e Inspector la llevan en el path;
+    // Review en ?account=. Admin es global a propósito (nunca scopeado).
+    const qs = `?account=${account_id}`;
+    expect(response.text).toContain(`href="/dashboard/accounts/${account_id}"`);
     expect(response.text).toContain(`href="/inspector/accounts/${account_id}"`);
     expect(response.text).toContain(`href="/review${qs}"`);
-    // Admin is intentionally global — never scoped.
     expect(response.text).toContain('href="/admin/integrations"');
     expect(response.text).not.toContain(`href="/admin/integrations${qs}"`);
   });
@@ -172,10 +182,10 @@ describe("Operational dashboard", () => {
 
     const response = await request(app).get("/dashboard").expect(200);
 
-    // Plain nav targets, no ?business=&account= scope query.
+    // Plain nav targets, no ?account= scope query.
     expect(response.text).toContain('href="/inspector"');
     expect(response.text).toContain('href="/review"');
-    expect(response.text).not.toContain("?business=");
+    expect(response.text).not.toContain("?account=");
   });
 
   it("does not duplicate bots in the account view (one link per active bot)", async () => {
@@ -183,7 +193,7 @@ describe("Operational dashboard", () => {
     const app = create_dashboard_test_app(pool);
 
     const response = await request(app)
-      .get(`/dashboard/business/${organization_id}/accounts/${account_id}`)
+      .get(`/dashboard/accounts/${account_id}`)
       .expect(200);
 
     const bot_link_matches = response.text.match(/href="\/inspector\/bots\//g) ?? [];
@@ -198,7 +208,7 @@ describe("Operational dashboard", () => {
   it("creates account bots from the dashboard: custom draft or cloned from a system bot", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
-    const base = `/dashboard/business/${organization_id}/accounts/${account_id}`;
+    const base = `/dashboard/accounts/${account_id}`;
 
     // La página ofrece el alta con tabs (Bot Nuevo | Bot preconfigurado), los
     // preconfigurados como tarjetas seleccionables (no dropdown) y con buscador.
@@ -248,11 +258,11 @@ describe("Operational dashboard", () => {
       expect(interaction.human_group_ids ?? []).toEqual([]);
     }
 
-    // Guardas: cuenta que no es del negocio → 404; bot de sistema inexistente → 400.
+    // Guardas: cuenta inexistente → 404; bot de sistema inexistente → 400.
     await request(app)
-      .post(`/dashboard/business/00000000-0000-0000-0000-000000000001/accounts/${account_id}/bots`)
+      .post(`/dashboard/accounts/00000000-0000-0000-0000-000000000001/bots`)
       .type("form")
-      .send({ name: "Fuera de negocio" })
+      .send({ name: "Cuenta inexistente" })
       .expect(404);
     await request(app)
       .post(`${base}/bots`)
@@ -265,7 +275,7 @@ describe("Operational dashboard", () => {
   it("connects a WhatsApp channel from the dashboard (Instagram still coming soon)", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
-    const base = `/dashboard/business/${organization_id}/accounts/${account_id}`;
+    const base = `/dashboard/accounts/${account_id}`;
 
     // La página ofrece el alta con tabs WhatsApp | Instagram (coming soon).
     const page = await request(app).get(base).expect(200);
@@ -315,7 +325,7 @@ describe("Operational dashboard", () => {
       )
     ).rows[0];
     const stolen = await request(app)
-      .post(`/dashboard/business/${organization_id}/accounts/${other_account.id}/channels`)
+      .post(`/dashboard/accounts/${other_account.id}/channels`)
       .type("form")
       .send({ channel_type: "whatsapp", display_phone_number: "+52 55 1111 2222", phone_number_id: "dashboard-test-phone-id" })
       .expect(400);
@@ -326,7 +336,7 @@ describe("Operational dashboard", () => {
     await request(app).post(`${base}/channels`).type("form").send({ channel_type: "whatsapp" }).expect(400);
     // Bot de otra cuenta → 400.
     await request(app)
-      .post(`/dashboard/business/${organization_id}/accounts/${other_account.id}/channels`)
+      .post(`/dashboard/accounts/${other_account.id}/channels`)
       .type("form")
       .send({
         channel_type: "whatsapp",
@@ -344,7 +354,7 @@ describe("Operational dashboard", () => {
     ).rows[0];
     await seed_routed_demo_conversation(pool, { account_id, organization_id, bot_id: bot.id });
     const app = create_dashboard_test_app(pool);
-    const base = `/dashboard/business/${organization_id}/accounts/${account_id}/tasks`;
+    const base = `/dashboard/accounts/${account_id}/tasks`;
 
     // Lista scopeada a la cuenta (breadcrump + sin columna Negocio/cuenta).
     const list = await request(app).get(base).expect(200);
@@ -378,7 +388,7 @@ describe("Operational dashboard", () => {
       )
     ).rows[0];
     await request(app)
-      .get(`/dashboard/business/${organization_id}/accounts/${other.id}/tasks/${task.id}`)
+      .get(`/dashboard/accounts/${other.id}/tasks/${task.id}`)
       .expect(404);
   });
 });

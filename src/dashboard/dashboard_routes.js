@@ -34,35 +34,40 @@ function require_param(value, name) {
 export function register_dashboard_routes(router, dependencies = {}) {
   const pool = dependencies.pool ?? default_pool;
 
-  async function account_in_business(account_id, business_id) {
+  // La cuenta basta para identificar todo: el negocio se deriva de ella. Las
+  // URLs son /dashboard/accounts/:account_id (el business no viaja en la ruta).
+  async function resolve_account(account_id) {
     const result = await pool.query(
       `
-        SELECT accounts.id, accounts.name AS account_name, organizations.name AS business_name
+        SELECT
+          accounts.id,
+          accounts.name AS account_name,
+          accounts.organization_id AS business_id,
+          organizations.name AS business_name
         FROM accounts
         JOIN organizations ON organizations.id = accounts.organization_id
-        WHERE accounts.id = $1 AND accounts.organization_id = $2
+        WHERE accounts.id = $1
         LIMIT 1
       `,
-      [account_id, business_id],
+      [account_id],
     );
     return result.rows[0] ?? null;
   }
 
-  // Contexto común para el módulo de tareas de una cuenta (valida pertenencia y
-  // trae los nombres para el breadcrumb). Devuelve null si la cuenta no es del negocio.
+  // Contexto común para el módulo de tareas de una cuenta (resuelve la cuenta y
+  // trae los nombres para el breadcrumb). Devuelve null si la cuenta no existe.
   async function account_tasks_context(request) {
-    const business_id = require_param(request.params.business_id, "business_id");
     const account_id = require_param(request.params.account_id, "account_id");
-    const account = await account_in_business(account_id, business_id);
+    const account = await resolve_account(account_id);
     if (!account) {
       return null;
     }
     return {
-      business_id,
+      business_id: account.business_id,
       account_id,
       business_name: account.business_name,
       account_name: account.account_name,
-      base_path: `/dashboard/business/${business_id}/accounts/${account_id}/tasks`,
+      base_path: `/dashboard/accounts/${account_id}/tasks`,
     };
   }
 
@@ -86,20 +91,33 @@ export function register_dashboard_routes(router, dependencies = {}) {
   });
 
   router.get(
-    "/dashboard/business/:business_id/accounts/:account_id",
+    "/dashboard/accounts/:account_id",
     dashboard_auth,
     async (request, response, next) => {
       try {
-        response.render(
-          "account",
-          await get_account_dashboard_data(pool, {
-            business_id: require_param(request.params.business_id, "business_id"),
-            account_id: require_param(request.params.account_id, "account_id"),
-          }),
-        );
+        const data = await get_account_dashboard_data(pool, {
+          account_id: require_param(request.params.account_id, "account_id"),
+        });
+        if (!data.account) {
+          response.status(404).send("La cuenta no existe.");
+          return;
+        }
+        response.render("account", data);
       } catch (error) {
         next(error);
       }
+    },
+  );
+
+  // Compatibilidad: rutas viejas /dashboard/business/:b/accounts/:a[/...] →
+  // canónica account-only. Un solo handler cubre la cuenta y todas las subrutas.
+  router.get(
+    ["/dashboard/business/:business_id/accounts/:account_id", "/dashboard/business/:business_id/accounts/:account_id/*"],
+    dashboard_auth,
+    (request, response) => {
+      const account_id = require_param(request.params.account_id, "account_id");
+      const rest = request.params[0] ? `/${request.params[0]}` : "";
+      response.redirect(301, `/dashboard/accounts/${account_id}${rest}`);
     },
   );
 
@@ -107,13 +125,13 @@ export function register_dashboard_routes(router, dependencies = {}) {
   // seguimiento a las tareas de SU cuenta (quién atendió y qué pasó). Reusa la
   // bandeja y el detalle del admin, scopeados por account_id.
   router.get(
-    "/dashboard/business/:business_id/accounts/:account_id/tasks",
+    "/dashboard/accounts/:account_id/tasks",
     dashboard_auth,
     async (request, response, next) => {
       try {
         const context = await account_tasks_context(request);
         if (!context) {
-          response.status(404).send("La cuenta no existe en este negocio.");
+          response.status(404).send("La cuenta no existe.");
           return;
         }
         const view = await get_tasks_admin_view(pool, {
@@ -130,13 +148,13 @@ export function register_dashboard_routes(router, dependencies = {}) {
   );
 
   router.get(
-    "/dashboard/business/:business_id/accounts/:account_id/tasks/:task_id",
+    "/dashboard/accounts/:account_id/tasks/:task_id",
     dashboard_auth,
     async (request, response, next) => {
       try {
         const context = await account_tasks_context(request);
         if (!context) {
-          response.status(404).send("La cuenta no existe en este negocio.");
+          response.status(404).send("La cuenta no existe.");
           return;
         }
         const detail = await get_task_detail(pool, request.params.task_id, { account_id: context.account_id });
@@ -152,13 +170,13 @@ export function register_dashboard_routes(router, dependencies = {}) {
   );
 
   router.post(
-    "/dashboard/business/:business_id/accounts/:account_id/tasks/:task_id/status",
+    "/dashboard/accounts/:account_id/tasks/:task_id/status",
     dashboard_auth,
     async (request, response, next) => {
       try {
         const context = await account_tasks_context(request);
         if (!context) {
-          response.status(404).send("La cuenta no existe en este negocio.");
+          response.status(404).send("La cuenta no existe.");
           return;
         }
         const result = await update_task_status(pool, {
@@ -179,13 +197,13 @@ export function register_dashboard_routes(router, dependencies = {}) {
   );
 
   router.post(
-    "/dashboard/business/:business_id/accounts/:account_id/tasks/:task_id/update",
+    "/dashboard/accounts/:account_id/tasks/:task_id/update",
     dashboard_auth,
     async (request, response, next) => {
       try {
         const context = await account_tasks_context(request);
         if (!context) {
-          response.status(404).send("La cuenta no existe en este negocio.");
+          response.status(404).send("La cuenta no existe.");
           return;
         }
         const result = await add_task_update(pool, {
@@ -210,15 +228,14 @@ export function register_dashboard_routes(router, dependencies = {}) {
   // clonando un bot de sistema como base (source_bot_id). Queda en draft y
   // aparece en el panel de bots; se configura en el editor del inspector.
   router.post(
-    "/dashboard/business/:business_id/accounts/:account_id/bots",
+    "/dashboard/accounts/:account_id/bots",
     dashboard_auth,
     async (request, response, next) => {
       try {
-        const business_id = require_param(request.params.business_id, "business_id");
         const account_id = require_param(request.params.account_id, "account_id");
 
-        if (!(await account_in_business(account_id, business_id))) {
-          response.status(404).send("La cuenta no existe en este negocio.");
+        if (!(await resolve_account(account_id))) {
+          response.status(404).send("La cuenta no existe.");
           return;
         }
 
@@ -250,7 +267,7 @@ export function register_dashboard_routes(router, dependencies = {}) {
           });
         }
 
-        response.redirect(`/dashboard/business/${business_id}/accounts/${account_id}#panel-bots`);
+        response.redirect(`/dashboard/accounts/${account_id}#panel-bots`);
       } catch (error) {
         next(error);
       }
@@ -261,17 +278,19 @@ export function register_dashboard_routes(router, dependencies = {}) {
   // phone_number_id de Meta, con bot opcional para conectarlo de una vez);
   // Instagram llegará vía OAuth y el endpoint lo rechaza explícitamente.
   router.post(
-    "/dashboard/business/:business_id/accounts/:account_id/channels",
+    "/dashboard/accounts/:account_id/channels",
     dashboard_auth,
     async (request, response, next) => {
       try {
-        const business_id = require_param(request.params.business_id, "business_id");
         const account_id = require_param(request.params.account_id, "account_id");
 
-        if (!(await account_in_business(account_id, business_id))) {
-          response.status(404).send("La cuenta no existe en este negocio.");
+        const account = await resolve_account(account_id);
+        if (!account) {
+          response.status(404).send("La cuenta no existe.");
           return;
         }
+        // El negocio (organization_id del canal) se deriva de la cuenta.
+        const business_id = account.business_id;
 
         const channel_type = String(request.body?.channel_type ?? "").trim();
 
@@ -326,7 +345,7 @@ export function register_dashboard_routes(router, dependencies = {}) {
           });
         }
 
-        response.redirect(`/dashboard/business/${business_id}/accounts/${account_id}#panel-canales`);
+        response.redirect(`/dashboard/accounts/${account_id}#panel-canales`);
       } catch (error) {
         next(error);
       }

@@ -321,7 +321,7 @@ describe("admin integrations dashboard", () => {
     expect(page.text).toContain("Crear negocio");
     // Cada entidad enlaza a su dashboard y el panel se puede colapsar.
     expect(page.text).toContain(`href="/dashboard/business/${org.id}"`);
-    expect(page.text).toContain(`href="/dashboard/business/${org.id}/accounts/${account.id}"`);
+    expect(page.text).toContain(`href="/dashboard/accounts/${account.id}"`);
     expect(page.text).toContain("data-business-toggle");
     expect(page.text).toContain("toggle_all_businesses");
     // Estado como segmented control (Activo/Pausado/Archivado) y altas vía popups.

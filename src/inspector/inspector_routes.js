@@ -186,8 +186,8 @@ export function register_inspector_routes(router, dependencies = {}) {
         return;
       }
 
-      // Scopea el top-nav (Dashboard/Inspector/Review) a esta cuenta.
-      response.locals.nav_context = { business_id: view.account.organization_id, account_id: view.account.id };
+      // El top-nav ya queda scopeado por navigation_middleware (deriva la cuenta
+      // del path /inspector/accounts/:account_id).
       response.render("inspector/index", view);
     } catch (error) {
       next(error);
@@ -539,12 +539,8 @@ export function register_inspector_routes(router, dependencies = {}) {
     const view = await get_conversation_view(route_pool, conversation_id);
     const tasks = await list_tasks_for_conversation(route_pool, conversation_id);
     const view_turns = present_conversation_turns(view.turns, { tasks });
-    // Scopea el top-nav (Dashboard/Inspector/Review) al negocio+cuenta de la conversación.
-    const nav_business = view.conversation?.resolved_organization_id ?? view.conversation?.organization_id;
-    const nav_account = view.conversation?.resolved_account_id ?? view.conversation?.account_id;
-    if (nav_business && nav_account) {
-      response.locals.nav_context = { business_id: nav_business, account_id: nav_account };
-    }
+    // El top-nav ya queda scopeado por navigation_middleware (deriva la cuenta del
+    // path /inspector/accounts/:account_id/conversations/:id).
     response.render("inspector/conversation", {
       ...view,
       view_turns,

@@ -92,7 +92,7 @@ block content
                     tr
                       td
                         strong
-                          a.entity-link(href=`/dashboard/business/${business.id}/accounts/${account.id}`)= account.name
+                          a.entity-link(href=`/dashboard/accounts/${account.id}`)= account.name
                         div.meta= account.slug
                       td
                         +status_toggle("/admin/accounts", account.id, account.status, account.name)

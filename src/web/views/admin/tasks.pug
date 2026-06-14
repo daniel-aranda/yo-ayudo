@@ -39,7 +39,7 @@ block content
             button.status-toggle-option(type="submit", title=`Marcar como ${option.label.toLowerCase()}`)= option.label
 
   if account_scoped
-    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: business_name, href: `/dashboard/business/${business_id}` }, { label: account_name, href: `/dashboard/business/${business_id}/accounts/${account_id}` }, { label: "Tareas" }])
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: business_name, href: `/dashboard/business/${business_id}` }, { label: account_name, href: `/dashboard/accounts/${account_id}` }, { label: "Tareas" }])
   else
     .admin-subnav
       a(href="/admin/integrations") Integraciones

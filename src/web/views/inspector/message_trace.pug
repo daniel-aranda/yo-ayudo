@@ -29,7 +29,7 @@ block content
     const summary_conf = confidence_pct(summary.confidence);
     const summary_intent_human = intent_human(summary.intent);
     const author = message && message.direction === "outbound" ? "Agente" : "Usuario";
-    const trace_account_url = message && message.organization_id && message.account_id ? `/dashboard/business/${message.organization_id}/accounts/${message.account_id}` : "/dashboard";
+    const trace_account_url = message && message.account_id ? `/dashboard/accounts/${message.account_id}` : "/dashboard";
     const trace_bc = [{ label: "Dashboard", href: "/dashboard" }];
     if (message) {
       if (message.account_name) trace_bc.push({ label: message.account_name, href: trace_account_url });

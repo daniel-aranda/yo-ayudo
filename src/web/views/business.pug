@@ -35,4 +35,4 @@ block content
                 div
                   dt Última actividad
                   dd= account.last_activity ? datetime(account.last_activity) : "sin actividad"
-              a.button(href=`/dashboard/business/${business.id}/accounts/${account.id}`) Abrir cuenta
+              a.button(href=`/dashboard/accounts/${account.id}`) Abrir cuenta

@@ -4,8 +4,7 @@ block content
   -
     const contact_name = conversation ? (conversation.display_name || conversation.whatsapp_phone || "Contacto") : "Contacto";
     const resolved_account_id = conversation ? (conversation.resolved_account_id || conversation.account_id) : null;
-    const resolved_org_id = conversation ? (conversation.resolved_organization_id || conversation.organization_id) : null;
-    const dashboard_url = resolved_org_id && resolved_account_id ? `/dashboard/business/${resolved_org_id}/accounts/${resolved_account_id}` : "/dashboard";
+    const dashboard_url = resolved_account_id ? `/dashboard/accounts/${resolved_account_id}` : "/dashboard";
     const conversations_url = conversation && conversation.bot_id ? `/inspector/bots/${conversation.bot_id}/conversations` : "/inspector";
     const status_value = conversation ? (conversation.status || "open") : "open";
     const status_label = status_value === "closed" ? "Cerrada" : status_value === "open" ? "Abierta" : status_value;

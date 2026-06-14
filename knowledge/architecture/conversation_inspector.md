@@ -54,7 +54,7 @@ Todas las paginas del flujo (account dashboard, editor de bot, conversaciones, c
 
 - Datos: `get_inspector_bots_view(pool, { account_id, q, type, include_archived, since_hours })` (`inspector_repository.js`) **reusa `get_bots_admin_view`** (`admin_bots_service.js`, acepta `account_id` para scopear) como única fuente de verdad de los conteos, y agrega `account`/`business` para el header.
 - Acciones por fila = **links** (no forms): Editar (`/inspector/bots/:id`), Conversaciones (`.../conversations`), Actividad (`.../activity`), con `a.icon-button`. El inspector NO cambia estado de bots (eso es admin); son links de inspección.
-- El scope vive en el **path**. El top nav (`navigation_middleware` + `layout.pug`) usa `inspector_href = /inspector/accounts/:account_id` cuando hay cuenta en contexto; las rutas del inspector scopeadas (home + visor de conversación) **setean `response.locals.nav_context`** para que el nav siga en la cuenta. Sin contexto, `inspector_href = /inspector` redirige a `/dashboard` (chooser). Review sigue con `?business=&account=`.
+- El scope vive en el **path**, y **la cuenta basta** (el negocio se deriva). El top nav (`navigation_middleware` + `layout.pug`) deriva `nav_context = { account_id }` del path `/(dashboard|inspector)/accounts/:id` y arma `inspector_href = /inspector/accounts/:account_id` + `dashboard_href = /dashboard/accounts/:account_id`. Las rutas del inspector **ya no setean `response.locals.nav_context` a mano** (lo cubre el middleware). Sin contexto, `inspector_href = /inspector` redirige a `/dashboard` (chooser). Review usa `?account=`.
 
 ## Vista De Conversacion
 

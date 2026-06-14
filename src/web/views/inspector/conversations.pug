@@ -2,7 +2,7 @@ extends ../layout
 
 block content
   -
-    const account_url = bot && bot.organization_id && bot.account_id ? `/dashboard/business/${bot.organization_id}/accounts/${bot.account_id}` : "/dashboard";
+    const account_url = bot && bot.account_id ? `/dashboard/accounts/${bot.account_id}` : "/dashboard";
     const bc = [{ label: "Dashboard", href: "/dashboard" }];
     if (bot) {
       bc.push({ label: bot.account_name || "Cuenta", href: account_url });

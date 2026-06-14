@@ -1,9 +1,10 @@
 // Top-nav state shared by every view via response.locals:
 // - active_nav: highlights the current section (derived from the first path segment).
-// - nav_context: when a business + account are in context, the top nav
+// - nav_context: when an account is in context, the top nav
 //   (Dashboard/Inspector/Review) stays scoped to that account. Admin is global
-//   (intentionally unscoped). Context comes from the account dashboard path or
-//   from ?business=&account= on the scoped sections.
+//   (intentionally unscoped). The account is the single source of truth: the URLs
+//   are /dashboard/accounts/:id and /inspector/accounts/:id (el negocio se deriva
+//   de la cuenta, no viaja en la URL). Review usa ?account= en el query.
 export function navigation_context(request, response, next) {
   const request_path = request.path || "";
 
@@ -17,14 +18,12 @@ export function navigation_context(request, response, next) {
           ? "admin"
           : "";
 
-  const account_path = request_path.match(/^\/dashboard\/business\/([^/]+)\/accounts\/([^/]+)/);
+  const account_path = request_path.match(/^\/(?:dashboard|inspector)\/accounts\/([^/]+)/);
   if (account_path) {
-    response.locals.nav_context = { business_id: account_path[1], account_id: account_path[2] };
-  } else if (request.query.business && request.query.account) {
-    response.locals.nav_context = {
-      business_id: String(request.query.business),
-      account_id: String(request.query.account),
-    };
+    response.locals.nav_context = { account_id: account_path[1] };
+  } else if (request.query.account) {
+    const account = Array.isArray(request.query.account) ? request.query.account[0] : request.query.account;
+    response.locals.nav_context = account ? { account_id: String(account) } : null;
   } else {
     response.locals.nav_context = null;
   }

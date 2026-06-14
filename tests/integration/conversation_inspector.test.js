@@ -8,6 +8,7 @@ import { create_simulated_whatsapp_payload } from "../../src/channels/whatsapp/w
 import { resolve_whatsapp_identity_by_phone_number_id } from "../../src/channels/whatsapp/whatsapp_identity_resolver.js";
 import { handle_whatsapp_webhook_payload } from "../../src/engine/message_processor.js";
 import { register_inspector_routes } from "../../src/inspector/inspector_routes.js";
+import { navigation_context } from "../../src/app/navigation_middleware.js";
 import { json_text, message_alignment, present_conversation_turns, format_phone } from "../../src/inspector/inspector_presenter.js";
 import { compact_trace_summary } from "../../src/inspector/inspector_presenter.js";
 import { seed_demo_conversation, seed_routed_demo_conversation } from "../../src/db/seed.js";
@@ -67,6 +68,7 @@ function create_inspector_test_app(pool, dependencies = {}) {
   app.locals.phone = format_phone;
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  app.use(navigation_context);
 
   register_inspector_routes(router, { pool, ...dependencies });
   app.use(router);

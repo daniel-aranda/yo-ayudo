@@ -176,6 +176,7 @@ async function get_account_activity(pool, account_id, limit = 10) {
 }
 
 export async function get_account_dashboard_data(pool, input) {
+  // La cuenta basta: el negocio se deriva de ella (URL /dashboard/accounts/:id).
   const account = await pool.query(
     `
       SELECT
@@ -185,12 +186,12 @@ export async function get_account_dashboard_data(pool, input) {
         organizations.status AS business_status
       FROM accounts
       JOIN organizations ON organizations.id = accounts.organization_id
-      WHERE accounts.organization_id = $1
-        AND accounts.id = $2
+      WHERE accounts.id = $1
       LIMIT 1
     `,
-    [input.business_id, input.account_id],
+    [input.account_id],
   );
+  const organization_id = account.rows[0]?.organization_id ?? null;
   // Incluye drafts (un bot recién creado desde este dashboard debe verse);
   // solo lo archivado queda fuera.
   const bots = await pool.query(
@@ -207,7 +208,7 @@ export async function get_account_dashboard_data(pool, input) {
   // cuenta sin volver al dashboard del negocio.
   const sibling_accounts = await pool.query(
     "SELECT id, name FROM accounts WHERE organization_id = $1 AND status = 'active' ORDER BY name",
-    [input.business_id],
+    [organization_id],
   );
   // Tareas abiertas (no hechas) de la cuenta, para la tarjeta del dashboard.
   const open_tasks = await pool.query(

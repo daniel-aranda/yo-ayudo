@@ -26,7 +26,7 @@ block content
             span.account-switcher-label Cuenta
             select#account_switcher(
               aria-label="Cambiar de cuenta",
-              data-base=`/dashboard/business/${account.organization_id}/accounts/`
+              data-base=`/dashboard/accounts/`
             )
               each acc in sibling_accounts
                 option(value=acc.id, selected=acc.id === account.id)= acc.name
@@ -45,7 +45,7 @@ block content
       a.metric.metric--link(href="#panel-conversaciones")
         span.label Conversaciones
         strong= stats.conversations_count || 0
-      a.metric.metric--link(href=`/dashboard/business/${account.organization_id}/accounts/${account.id}/tasks`)
+      a.metric.metric--link(href=`/dashboard/accounts/${account.id}/tasks`)
         span.label Tareas abiertas
         strong= open_tasks_count || 0
       a.metric.metric--link(href="#panel-actividad")
@@ -147,7 +147,7 @@ block content
                 button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true") WhatsApp
                 button.tab(type="button", data-section="instagram", role="tab", aria-selected="false") Instagram
             .tab-section(data-parent-tab="add-channel-tabs", data-section="whatsapp")
-              form.popup-form(method="post", action=`/dashboard/business/${account.organization_id}/accounts/${account.id}/channels`)
+              form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/channels`)
                 input(type="hidden", name="channel_type", value="whatsapp")
                 label(for="channel_display_phone_number") Número de WhatsApp
                 input#channel_display_phone_number(type="tel", name="display_phone_number", placeholder="+52 55 1234 5678", required)
@@ -209,7 +209,7 @@ block content
                 if system_bots && system_bots.length
                   button.tab(type="button", data-section="system", role="tab", aria-selected="false") Bot preconfigurado
             .tab-section(data-parent-tab="add-bot-tabs", data-section="custom")
-              form.popup-form(method="post", action=`/dashboard/business/${account.organization_id}/accounts/${account.id}/bots`)
+              form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
                 label(for="new_bot_name") Nombre del bot
                 input#new_bot_name(type="text", name="name", placeholder="Ej. Agente de ventas", required)
                 p.meta Empieza en blanco y configúralo a tu medida.
@@ -217,7 +217,7 @@ block content
                   button(type="submit") Crear bot
             if system_bots && system_bots.length
               .tab-section(data-parent-tab="add-bot-tabs", data-section="system", hidden)
-                form.popup-form(method="post", action=`/dashboard/business/${account.organization_id}/accounts/${account.id}/bots`)
+                form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
                   .system-bot-toolbar
                     input#system_bot_search(type="search", placeholder="Buscar bot preconfigurado...", aria-label="Buscar bot preconfigurado", autocomplete="off")
                     button.help-tip(

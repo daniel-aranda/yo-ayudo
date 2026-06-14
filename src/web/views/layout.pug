@@ -28,9 +28,10 @@ html(lang="es")
       const nav_ctx = (typeof nav_context !== "undefined" && nav_context) ? nav_context : null;
       // When an account is in context, Dashboard/Inspector/Review stay scoped to it.
       // Admin stays global on purpose.
-      const ctx_qs = nav_ctx ? `?business=${nav_ctx.business_id}&account=${nav_ctx.account_id}` : "";
-      const dashboard_href = nav_ctx ? `/dashboard/business/${nav_ctx.business_id}/accounts/${nav_ctx.account_id}` : "/dashboard";
-      // Inspector "por bots" scopea con la cuenta en el path (no query string).
+      // La cuenta es el único scope: Dashboard e Inspector la llevan en el path,
+      // Review en ?account= (el negocio se deriva de la cuenta, no viaja en URL).
+      const ctx_qs = nav_ctx ? `?account=${nav_ctx.account_id}` : "";
+      const dashboard_href = nav_ctx ? `/dashboard/accounts/${nav_ctx.account_id}` : "/dashboard";
       const inspector_href = nav_ctx ? `/inspector/accounts/${nav_ctx.account_id}` : "/inspector";
       // Con auth activo: un usuario de negocio solo ve su dashboard; las
       // herramientas internas (Inspector/Review/Admin) son del owner.

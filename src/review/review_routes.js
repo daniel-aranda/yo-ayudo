@@ -114,9 +114,9 @@ export function register_review_routes(router, dependencies = {}) {
       }
 
       // Preserve the account scope so resolving an item keeps the filtered view.
-      const business = Array.isArray(request.body.business) ? request.body.business[0] : request.body.business;
+      // La cuenta es el único scope (el negocio se deriva de ella).
       const account = Array.isArray(request.body.account) ? request.body.account[0] : request.body.account;
-      const redirect_qs = business && account ? `?business=${encodeURIComponent(business)}&account=${encodeURIComponent(account)}` : "";
+      const redirect_qs = account ? `?account=${encodeURIComponent(account)}` : "";
       response.redirect(`/review${redirect_qs}`);
     } catch (error) {
       next(error);

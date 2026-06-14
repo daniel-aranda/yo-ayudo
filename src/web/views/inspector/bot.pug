@@ -157,7 +157,7 @@ block content
       // muestra business/account (es de la plataforma); sí los muestra en la vista de cuenta.
       const account_scope = typeof show_account_scope !== "undefined" && show_account_scope;
       const show_account_context = account_scope || !is_system_bot;
-      const bot_account_url = bot.organization_id && bot.account_id ? `/dashboard/business/${bot.organization_id}/accounts/${bot.account_id}` : "/dashboard";
+      const bot_account_url = bot.account_id ? `/dashboard/accounts/${bot.account_id}` : "/dashboard";
       const type_chip_label = is_system_bot ? "Sistema" : "Personalizado";
     if show_account_context
       +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: bot.account_name || "Cuenta", href: bot_account_url }, { label: bot_name }])

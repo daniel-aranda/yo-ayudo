@@ -26,7 +26,6 @@ block content
           p= item.raw_text
           form(method="post", action=`/review/${item.id}/resolve`)
             if account_scope
-              input(type="hidden", name="business", value=account_scope.organization_id)
               input(type="hidden", name="account", value=account_scope.id)
             label(for=`note-${item.id}`) Resolución
             textarea(id=`note-${item.id}`, name="note", rows="3")
