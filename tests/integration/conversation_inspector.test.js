@@ -416,6 +416,37 @@ describe("Conversation Inspector", () => {
     expect(trace.agent_runs.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("renders the per-bot conversations list with Spanish columns and interaction chips", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot = (
+      await pool.query("SELECT id, account_id, organization_id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
+    ).rows[0];
+    await seed_routed_demo_conversation(pool, {
+      account_id: bot.account_id,
+      organization_id: bot.organization_id,
+      bot_id: bot.id,
+    });
+
+    const page = await request(app).get(`/inspector/bots/${bot.id}/conversations`).expect(200);
+
+    // Encabezados en español (ya no en inglés).
+    expect(page.text).toContain("Contacto");
+    expect(page.text).toContain("Interacciones");
+    expect(page.text).toContain("Última actividad");
+    expect(page.text).toContain("Estado");
+    expect(page.text).not.toContain("Last intent");
+    expect(page.text).not.toContain("Last agent");
+
+    // Las interacciones ejecutadas (action_audit_logs status='executed') se
+    // muestran como chips con etiqueta humana — reemplazan intent/agent crudos.
+    expect(page.text).toContain("conv-tag");
+    expect(page.text).toContain("Crear tarea");
+
+    // Última actividad = fecha corta, no el Date crudo con zona horaria.
+    expect(page.text).not.toContain("GMT");
+    expect(page.text).not.toContain("Standard Time");
+  });
+
   it("surfaces the bot-created task in the conversation visor (closes the human follow-up loop)", async () => {
     const app = create_inspector_test_app(pool);
     const bot = (

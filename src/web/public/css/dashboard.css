@@ -3229,6 +3229,32 @@ button.status-toggle-option:hover {
   color: var(--accent-dark);
 }
 
+/* Lista de conversaciones del inspector: Contacto con más aire y las
+   interacciones disparadas como chips (un action_id por chip). */
+.conversations-table .conv-sender {
+  min-width: 180px;
+}
+
+.conversations-table .conv-sender a {
+  font-weight: 650;
+}
+
+.conv-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.conv-tag {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-dark);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+
 /* Timeline de seguimiento de una tarea (quién atendió y qué pasó). */
 /* ===== Visor/modal de tarea (task_detail.pug) — compacto, alta densidad ===== */
 /* El iframe del popup auto-ajusta su altura (postMessage), así que recortamos el

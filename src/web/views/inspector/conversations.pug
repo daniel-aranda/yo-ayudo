@@ -25,31 +25,35 @@ block content
 
   section.panel
     if conversations.length
-      table
+      table.conversations-table
         thead
           tr
-            th Sender
-            th Phone
-            th Last message
-            th Last intent
-            th Last agent
-            th Messages
-            th Review
-            th Last activity
-            th Status
+            th.conv-sender Contacto
+            th Teléfono
+            th Último mensaje
+            th Interacciones
+            th Mensajes
+            th Revisión
+            th Última actividad
+            th Estado
         tbody
           each conversation in conversations
             tr
-              td
-                a(href=(bot && bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))= conversation.display_name || conversation.whatsapp_phone
-              td= conversation.whatsapp_phone
+              td.conv-sender
+                a(href=(bot && bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))= conversation.display_name || phone(conversation.whatsapp_phone)
+              td= phone(conversation.whatsapp_phone)
               td= conversation.last_message || "-"
-              td= conversation.last_intent || "-"
-              td= conversation.last_agent || "-"
+              td
+                if conversation.interactions && conversation.interactions.length
+                  .conv-tags
+                    each interaction in conversation.interactions
+                      span.conv-tag= interaction.label
+                else
+                  | -
               td= conversation.messages_count
               td= conversation.pending_review_count
-              td= conversation.last_activity || "-"
+              td= conversation.last_activity_label || "-"
               td
-                span.status= conversation.status
+                span.status= conversation.summary ? conversation.summary.status_label : conversation.status
     else
       div.empty Sin conversaciones.

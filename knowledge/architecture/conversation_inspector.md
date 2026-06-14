@@ -56,6 +56,13 @@ Todas las paginas del flujo (account dashboard, editor de bot, conversaciones, c
 - Acciones por fila = **links** (no forms): Editar (`/inspector/bots/:id`), Conversaciones (`.../conversations`), Actividad (`.../activity`), con `a.icon-button`. El inspector NO cambia estado de bots (eso es admin); son links de inspección.
 - El scope vive en el **path**, y **la cuenta basta** (el negocio se deriva). El top nav (`navigation_middleware` + `layout.pug`) deriva `nav_context = { account_id }` del path `/(dashboard|inspector)/accounts/:id` y arma `inspector_href = /inspector/accounts/:account_id` + `dashboard_href = /dashboard/accounts/:account_id`. Las rutas del inspector **ya no setean `response.locals.nav_context` a mano** (lo cubre el middleware). Sin contexto, `inspector_href = /inspector` redirige a `/dashboard` (chooser). Review usa `?account=`.
 
+## Lista De Conversaciones Por Bot
+
+`GET /inspector/bots/:bot_id/conversations` (`inspector/conversations.pug`, datos en `get_bot_conversations`). Tabla **en español** con columnas: **Contacto** (link al visor; `.conv-sender` con `min-width` para que el nombre no se parta), **Teléfono** (`phone()`), **Último mensaje**, **Interacciones**, **Mensajes**, **Revisión**, **Última actividad**, **Estado**. Decisiones de UX:
+- **Interacciones** = las acciones que la conversación **ejecutó** (`action_audit_logs` `status='executed'`, distinct `action_id`, recientes primero), una por chip (`.conv-tag`) con la etiqueta humana (`get_action(action_id).nombre`). Reemplaza las viejas columnas `last_intent`/`last_agent` (crudas, poco útiles): muestra qué hizo la conversación (Registrar venta, Crear tarea, Cierre del día…).
+- **Última actividad** = fecha corta `format_short_date_es` ("9 jun"; agrega año solo si no es el actual) — no el `Date` crudo.
+- **Estado** = `summary.status_label` en español (Abierta/Cerrada/…), no el valor crudo en inglés.
+
 ## Vista De Conversacion
 
 `GET /inspector/conversations/:id` (`conversation.pug`) es un visor de observabilidad, no una lista cruda de logs. `get_conversation_view` devuelve, ademas de `messages` (lista plana, la consumen tests), un arreglo `turns`, `operational_day` y `value_summary`:

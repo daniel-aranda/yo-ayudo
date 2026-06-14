@@ -47,6 +47,26 @@ export function format_date_es(value) {
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
+// Fecha corta en es-MX, p. ej. "14 jun" — agrega el año SOLO si no es el actual
+// ("14 jun 2025"). Para listas donde una fecha completa con hora es demasiado ruido.
+export function format_short_date_es(value) {
+  if (value === undefined || value === null || value === "") {
+    return "";
+  }
+
+  const date = to_date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const options = { day: "numeric", month: "short" };
+  if (date.getFullYear() !== new Date().getFullYear()) {
+    options.year = "numeric";
+  }
+
+  return new Intl.DateTimeFormat("es-MX", options).format(date);
+}
+
 // Relative time in es-MX, e.g. "justo ahora", "hace 5 min", "hace 3 h", "hace 2 d".
 // Older than a week falls back to the absolute date. Safe for null/invalid input.
 export function relative_time_es(value) {

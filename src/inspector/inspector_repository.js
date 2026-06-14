@@ -10,6 +10,7 @@ import {
 } from "../channels/instagram/instagram_account_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
 import { present_conversation_summary } from "./inspector_presenter.js";
+import { format_short_date_es } from "../shared/dates.js";
 
 function as_array(value) {
   if (value === undefined || value === null) {
@@ -804,7 +805,7 @@ export async function get_bot_conversations(pool, input) {
   const conversations = [];
 
   for (const conversation of result.rows) {
-    const [message_counts, last_message, last_agent, pending_review] = await Promise.all([
+    const [message_counts, last_message, last_agent, pending_review, executed_actions] = await Promise.all([
       pool.query(
         "SELECT count(*)::int AS messages_count, max(created_at) AS last_activity FROM messages WHERE conversation_id = $1",
         [conversation.id],
@@ -839,16 +840,35 @@ export async function get_bot_conversations(pool, input) {
         `,
         [conversation.id],
       ),
+      // Interacciones que la conversación efectivamente disparó (acciones
+      // ejecutadas con éxito): un chip por action_id, las más recientes primero.
+      pool.query(
+        `
+          SELECT action_id, max(created_at) AS last_at
+          FROM action_audit_logs
+          WHERE conversation_id = $1
+            AND status = 'executed'
+          GROUP BY action_id
+          ORDER BY last_at DESC
+        `,
+        [conversation.id],
+      ),
     ]);
 
+    const last_activity = message_counts.rows[0]?.last_activity ?? conversation.last_message_at;
     const enriched = {
       ...conversation,
-      last_activity: message_counts.rows[0]?.last_activity ?? conversation.last_message_at,
+      last_activity,
+      last_activity_label: format_short_date_es(last_activity),
       messages_count: message_counts.rows[0]?.messages_count ?? 0,
       pending_review_count: pending_review.rows[0]?.pending_review_count ?? 0,
       last_intent: last_message.rows[0]?.parsed_intent ?? null,
       last_agent: last_agent.rows[0]?.agent_key ?? null,
       last_message: last_message.rows[0]?.text_body ?? null,
+      interactions: executed_actions.rows.map((row) => ({
+        action_id: row.action_id,
+        label: get_action(row.action_id)?.nombre ?? row.action_id,
+      })),
     };
     enriched.summary = present_conversation_summary(enriched);
     conversations.push(enriched);

@@ -8,3 +8,4 @@ coverage/
 package-lock.json
 .storage/
 .claude/settings.local.json
+.claude/skills/
