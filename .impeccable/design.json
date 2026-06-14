@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-14T00:00:00Z",
+  "title": "Design System: YoAyudo",
+  "extensions": {
+    "colorMeta": {
+      "warm-paper": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#f6f4ee", "tonalRamp": ["#2b2922", "#4a4738", "#6b6755", "#8e8a76", "#b2ad9a", "#d6d1c3", "#eeeae0", "#faf8f3"] },
+      "counter-white": { "role": "neutral", "displayName": "Counter White", "canonical": "#ffffff" },
+      "sand": { "role": "neutral", "displayName": "Sand", "canonical": "#f0ede4" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#1a1a16", "tonalRamp": ["#1a1a16", "#2c2c25", "#444439", "#6c6f64", "#97968a", "#c1beb1", "#e1ded2", "#f6f4ee"] },
+      "olive-muted": { "role": "neutral", "displayName": "Olive Muted", "canonical": "#6c6f64", "tonalRamp": ["#23241f", "#363830", "#4c4e44", "#6c6f64", "#8e9085", "#b1b2a8", "#d3d4cc", "#eeefea"] },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e7e2d6" },
+      "hairline-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "#d8d2c4" },
+      "petrol-emerald": { "role": "primary", "displayName": "Petrol Emerald", "canonical": "#0f6a5a", "tonalRamp": ["#05231d", "#073a31", "#0a4a3f", "#0f6a5a", "#2a8a78", "#5fae9d", "#a7d5ca", "#e4f1ea"] },
+      "deep-pine": { "role": "primary", "displayName": "Deep Pine", "canonical": "#0a4a3f" },
+      "mint-mist": { "role": "primary", "displayName": "Mint Mist", "canonical": "#e4f1ea", "tonalRamp": ["#0a4a3f", "#0f6a5a", "#2a8a78", "#5fae9d", "#8ec7ba", "#b9dcd2", "#d6ebe3", "#e4f1ea"] },
+      "amber-bg": { "role": "tertiary", "displayName": "Amber (Paused/Pending)", "canonical": "#f6e7c6" },
+      "amber-ink": { "role": "tertiary", "displayName": "Amber Ink", "canonical": "#8a6116" },
+      "clay-bg": { "role": "tertiary", "displayName": "Clay (Archived)", "canonical": "#ecdcdc" },
+      "clay-ink": { "role": "tertiary", "displayName": "Clay Ink", "canonical": "#8c4a42" },
+      "sky-bg": { "role": "tertiary", "displayName": "Sky (In Progress)", "canonical": "#d8e6f5" },
+      "sky-ink": { "role": "tertiary", "displayName": "Sky Ink", "canonical": "#2b5582" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Page Title", "purpose": "The single h1 per page (.page-header h1)." },
+      "headline": { "displayName": "Section Header", "purpose": "Panel and card headers (.panel h2, .card h2)." },
+      "metric": { "displayName": "Metric Number", "purpose": "The big number in a metric tile (.metric strong)." },
+      "body": { "displayName": "Body", "purpose": "Default reading text; cap measure at 65-75ch." },
+      "label": { "displayName": "Label / Eyebrow", "purpose": "Uppercase entity/scope labels only (.page-eyebrow, .panel-subhead)." },
+      "mono": { "displayName": "Mono", "purpose": "IDs, codes, raw JSON — inspector only." }
+    },
+    "shadows": [
+      { "name": "shadow-xs", "value": "0 1px 2px rgba(26,26,18,0.05)", "purpose": "Buttons and the sticky topbar at rest." },
+      { "name": "shadow-sm", "value": "0 1px 3px rgba(26,26,18,0.06), 0 1px 2px rgba(26,26,18,0.04)", "purpose": "Standard lift for primary surfaces (panel, metric, card, inspector-panel, tabs)." },
+      { "name": "shadow-md", "value": "0 12px 32px rgba(26,26,18,0.09), 0 3px 8px rgba(26,26,18,0.05)", "purpose": "Raised / hover and floating affordances." },
+      { "name": "shadow-popup", "value": "0 18px 48px rgba(0,0,0,0.22)", "purpose": "Modals only, over a blurred backdrop." }
+    ],
+    "motion": [
+      { "name": "transition-control", "value": "background 140ms ease, box-shadow 140ms ease, transform 80ms ease", "purpose": "Button and control state feedback." },
+      { "name": "transition-nav", "value": "background 120ms ease, color 120ms ease", "purpose": "Topbar nav pill hover." },
+      { "name": "popup-enter", "value": "200ms cubic-bezier(0.2, 0.8, 0.2, 1)", "purpose": "Modal panel entrance (paired with a 160ms backdrop fade)." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "780px", "purpose": "Identity and operative grids collapse to a single column." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default action button; the bare <button> is the primary.",
+      "html": "<button class=\"ds-btn-primary\">Agregar bot</button>",
+      "css": ".ds-btn-primary{background:var(--accent,#0f6a5a);color:#fff;border:0;border-radius:9px;padding:9px 14px;font:inherit;font-weight:650;box-shadow:0 1px 2px rgba(26,26,18,.05);cursor:pointer;transition:background 140ms ease,box-shadow 140ms ease,transform 80ms ease}.ds-btn-primary:hover{background:var(--accent-dark,#0a4a3f);box-shadow:0 1px 3px rgba(26,26,18,.06),0 1px 2px rgba(26,26,18,.04)}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(15,106,90,.24)}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Non-primary action; sand fill with a hairline border.",
+      "html": "<button class=\"ds-btn-secondary\">Cancelar</button>",
+      "css": ".ds-btn-secondary{background:var(--surface-strong,#f0ede4);color:var(--text,#1a1a16);border:1px solid var(--line,#e7e2d6);border-radius:9px;padding:9px 14px;font:inherit;font-weight:650;cursor:pointer;transition:background 140ms ease}.ds-btn-secondary:hover{background:#e5e3dc}.ds-btn-secondary:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(15,106,90,.24)}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text field with the accent-halo focus ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Nombre del bot\">",
+      "css": ".ds-input{background:#fff;color:var(--text,#1a1a16);border:1px solid var(--line,#e7e2d6);border-radius:7px;padding:9px 10px;font:inherit;width:100%}.ds-input::placeholder{color:var(--muted,#6c6f64)}.ds-input:focus-visible{outline:none;border-color:var(--accent,#0f6a5a);box-shadow:0 0 0 3px rgba(15,106,90,.24)}"
+    },
+    {
+      "name": "Metric Tile",
+      "kind": "card",
+      "refersTo": "metric",
+      "description": "Compact tile: muted label over a big honest number. A count or a link, never a hero band.",
+      "html": "<div class=\"ds-metric\"><span class=\"ds-metric-label\">Ventas de hoy</span><strong class=\"ds-metric-value\">$8,500</strong></div>",
+      "css": ".ds-metric{background:#fff;border:1px solid var(--line,#e7e2d6);border-radius:8px;padding:12px 18px;box-shadow:0 1px 3px rgba(26,26,18,.06),0 1px 2px rgba(26,26,18,.04)}.ds-metric-label{display:block;color:var(--muted,#6c6f64);font-size:13px;margin-bottom:4px}.ds-metric-value{font-size:24px;font-weight:700;letter-spacing:-.01em;color:var(--text,#1a1a16)}"
+    },
+    {
+      "name": "Status Segmented Toggle",
+      "kind": "custom",
+      "refersTo": "status-toggle",
+      "description": "Signature control: a pill track where the current state is filled with its earthen tint; the others POST a change on click.",
+      "html": "<div class=\"ds-status-toggle\"><button class=\"ds-status-opt is-current is-active\">Activo</button><button class=\"ds-status-opt\">Pausado</button><button class=\"ds-status-opt\">Archivado</button></div>",
+      "css": ".ds-status-toggle{display:inline-flex;gap:2px;background:var(--surface-strong,#f0ede4);border:1px solid var(--line,#e7e2d6);border-radius:999px;padding:2px}.ds-status-opt{background:transparent;border:0;border-radius:999px;color:var(--muted,#6c6f64);font-size:12px;font-weight:600;line-height:1;padding:6px 10px;cursor:pointer;white-space:nowrap}.ds-status-opt:hover{background:#fff;color:var(--text,#1a1a16)}.ds-status-opt.is-current{cursor:default}.ds-status-opt.is-current.is-active{background:var(--accent-soft,#e4f1ea);color:var(--accent-dark,#0a4a3f)}"
+    },
+    {
+      "name": "Pill Tabs",
+      "kind": "nav",
+      "refersTo": "tab-active",
+      "description": "Signature tab pattern (Tab_Navigator.js): pill track, active tab filled Deep Pine.",
+      "html": "<div class=\"ds-tabs\"><button class=\"ds-tab is-active\">Conversaciones</button><button class=\"ds-tab\">Bots</button><button class=\"ds-tab\">Canales</button></div>",
+      "css": ".ds-tabs{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--line,#e7e2d6);border-radius:12px;padding:6px}.ds-tab{background:transparent;border:0;border-radius:8px;color:var(--muted,#6c6f64);font:inherit;font-weight:650;min-height:40px;padding:8px 14px;cursor:pointer}.ds-tab:hover{background:var(--surface-strong,#f0ede4);color:var(--text,#1a1a16)}.ds-tab.is-active{background:var(--accent-dark,#0a4a3f);color:#fff}"
+    },
+    {
+      "name": "Nav Link",
+      "kind": "nav",
+      "refersTo": "nav-link-active",
+      "description": "Topbar link; active state is a Mint Mist pill with Deep Pine text.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link is-active\">Dashboard</a><a class=\"ds-nav-link\">Inspector</a><a class=\"ds-nav-link\">Review</a></nav>",
+      "css": ".ds-nav{display:inline-flex;gap:2px}.ds-nav-link{color:var(--muted,#6c6f64);font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;transition:background 120ms ease,color 120ms ease}.ds-nav-link:hover{background:var(--surface-strong,#f0ede4);color:var(--text,#1a1a16)}.ds-nav-link.is-active{background:var(--accent-soft,#e4f1ea);color:var(--accent-dark,#0a4a3f);font-weight:700}"
+    }
+  ],
+  "narrative": {
+    "northStar": "El Mostrador Cálido (The Warm Counter)",
+    "overview": "YoAyudo is the calm wooden counter of a small shop, rendered as software. The owner stands at it, glances down, and reads exactly how the day is going — sales, cash, open tasks, what the bot handled over WhatsApp — without studying anything. Everything that matters is within arm's reach; nothing shouts. The surface is warm paper (#f6f4ee), the ink is a soft near-black (#1a1a16), and a single petrol-emerald (#0f6a5a) marks the few things you can act on. It is the opposite of a control room: no banks of instruments, no gauges blinking for attention, no jargon. Depth comes from soft layered shadows rather than hard 1px boxes. The accent is rationed: emerald belongs to primary actions and live states, never to decoration or navigation. Two audiences share the system but not the same dial: the business owner gets the plain, generous, owner-first surface that is the product being sold; the platform operator gets denser inspector/admin tooling behind the same tokens. When the two conflict, the owner's clarity wins.",
+    "keyCharacteristics": [
+      "Warm-paper canvas, soft near-black ink, one rationed petrol-emerald accent.",
+      "Layered soft shadows for depth; nested elements go flat (no card-in-card).",
+      "Plain Spanish (es-MX) business language; engine internals stay in the inspector.",
+      "Honest states only: real activity or a clear empty state — never fake numbers.",
+      "Owner-first calm over operator density when the two pull apart."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Petrol-emerald is reserved for primary actions and live states. Navigation, decoration, and chrome use neutrals — never the accent. If emerald is everywhere, it means nothing.", "section": "colors" },
+      { "name": "The Earthen-Status Rule", "body": "Status color is always a muted earthen pair (tinted bg + same-hue darker ink), never saturated ink on white. Status must also carry a word or icon, never color alone.", "section": "colors" },
+      { "name": "The Legibility Rule", "body": "Olive Muted (#6c6f64) is for labels and secondary text, not body copy on tinted surfaces. If a muted value lands near a paper/sand tint and contrast is borderline, push it toward Ink. Washed-out gray-on-cream is the failure mode; refuse it.", "section": "colors" },
+      { "name": "The Brand-Weight Rule", "body": "The wordmark YoAyudo is the heaviest type in the product (800, -0.01em). Nothing else competes at that weight.", "section": "typography" },
+      { "name": "The Eyebrow-With-A-Job Rule", "body": "The uppercase tracked label is allowed only when it names entity type or scope (Negocio, Cuenta, panel subhead). It is forbidden as a decorative kicker above every section.", "section": "typography" },
+      { "name": "The Flat-Nest Rule", "body": "A surface lifts once. Rows and cards inside a lifted panel are flat. Two stacked shadows = nested cards = forbidden.", "section": "elevation" },
+      { "name": "The Frosted-Topbar Exception", "body": "The only sanctioned glass is the sticky topbar: near-opaque warm fill rgba(250,249,245,0.94) with a faint blur(6px). Glassmorphism is not a general material.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the accent rationed — Petrol Emerald only on primary actions and live states (the One Accent Rule).",
+      "Do lift primary surfaces once with shadow-sm and keep nested rows flat (the Flat-Nest Rule).",
+      "Do translate engine internals into plain Spanish business language (Venta registrada, Tarea abierta, Caja inicial del día).",
+      "Do show honest states: real activity or a clear empty state, and only render an operational panel when a bot actually declares that capability.",
+      "Do carry status as an earthen tint pair plus a word/icon, never color alone.",
+      "Do reuse the core components — button, .status-toggle, .tabs, Popup.js, +breadcrumb — instead of inventing new chrome.",
+      "Do keep the :root tokens in dashboard.css as the single source of truth; never hardcode a hex."
+    ],
+    "donts": [
+      "Don't build the owner's surface like an airplane cockpit — nada de tableros de avión, no debe ser UI complejo. Progressive disclosure over a wall of controls.",
+      "Don't ship decorative or vanity dashboards: no chart-junk, no placeholder metrics, no three $0 tiles.",
+      "Don't leak raw technology into the owner's view — no raw payloads, processing events, or JSON. That lives only in the inspector.",
+      "Don't overwhelm with enterprise density: don't cram every control onto one screen.",
+      "Don't use border-left/border-right > 1px as a colored accent stripe; use a full border or a tinted background instead.",
+      "Don't use gradient text or decorative glassmorphism; the only sanctioned frost is the topbar.",
+      "Don't set body or placeholder text in faint gray on a tinted surface.",
+      "Don't add a decorative uppercase eyebrow above every section; the tracked label is allowed only when it names entity type or scope.",
+      "Don't nest cards inside cards, or stack two shadows on one element."
+    ]
+  }
+}

@@ -29,7 +29,6 @@ block content
         thead
           tr
             th.conv-sender Contacto
-            th Teléfono
             th Último mensaje
             th Interacciones
             th Mensajes
@@ -41,7 +40,8 @@ block content
             tr
               td.conv-sender
                 a(href=(bot && bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))= conversation.display_name || phone(conversation.whatsapp_phone)
-              td= phone(conversation.whatsapp_phone)
+                if conversation.display_name
+                  div.meta= phone(conversation.whatsapp_phone)
               td= conversation.last_message || "-"
               td
                 if conversation.interactions && conversation.interactions.length

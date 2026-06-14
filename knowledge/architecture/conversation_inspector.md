@@ -58,7 +58,7 @@ Todas las paginas del flujo (account dashboard, editor de bot, conversaciones, c
 
 ## Lista De Conversaciones Por Bot
 
-`GET /inspector/bots/:bot_id/conversations` (`inspector/conversations.pug`, datos en `get_bot_conversations`). Tabla **en español** con columnas: **Contacto** (link al visor; `.conv-sender` con `min-width` para que el nombre no se parta), **Teléfono** (`phone()`), **Último mensaje**, **Interacciones**, **Mensajes**, **Revisión**, **Última actividad**, **Estado**. Decisiones de UX:
+`GET /inspector/bots/:bot_id/conversations` (`inspector/conversations.pug`, datos en `get_bot_conversations`). Tabla **en español** con columnas: **Contacto** (link al visor + el teléfono `phone()` como `.meta` debajo del nombre — Contacto y Teléfono son una sola columna; `.conv-sender` con `min-width`), **Último mensaje**, **Interacciones**, **Mensajes**, **Revisión**, **Última actividad**, **Estado**. Decisiones de UX:
 - **Interacciones** = las acciones que la conversación **ejecutó** (`action_audit_logs` `status='executed'`, distinct `action_id`, recientes primero), una por chip (`.conv-tag`) con la etiqueta humana (`get_action(action_id).nombre`). Reemplaza las viejas columnas `last_intent`/`last_agent` (crudas, poco útiles): muestra qué hizo la conversación (Registrar venta, Crear tarea, Cierre del día…).
 - **Última actividad** = fecha corta `format_short_date_es` ("9 jun"; agrega año solo si no es el actual) — no el `Date` crudo.
 - **Estado** = `summary.status_label` en español (Abierta/Cerrada/…), no el valor crudo en inglés.
