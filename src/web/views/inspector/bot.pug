@@ -106,30 +106,8 @@ block content
     const interaction_options_by_type_json = JSON.stringify(
       Object.fromEntries((Array.isArray(available_interactions) ? available_interactions : []).map((item) => [item.type, item.options || []])),
     ).replace(/</g, "\\u003c");
-    // Per-category color: { accent (border + icon), tint (icon badge background) }.
-    const interaction_colors = {
-      receive_whatsapp_message: { accent: "#1f9d6b", tint: "#e4f4ee" },
-      send_whatsapp_message: { accent: "#34b27a", tint: "#e7f6ef" },
-      consult_human: { accent: "#2f6fed", tint: "#e7effe" },
-      buscar_negocios: { accent: "#7c5cf0", tint: "#efeafe" },
-      guardar_nota: { accent: "#e0930a", tint: "#fbf0db" },
-      crear_tarea: { accent: "#e0533d", tint: "#fbe9e4" },
-      generar_resumen: { accent: "#c43d8a", tint: "#fbe8f2" },
-      responder_voz: { accent: "#0e9aa7", tint: "#e1f4f5" },
-      registrar_inicio_dia: { accent: "#0d9488", tint: "#d9f0ee" },
-      registrar_venta: { accent: "#16a34a", tint: "#e3f6e9" },
-      registrar_compra: { accent: "#ea580c", tint: "#fdeede" },
-      registrar_inventario: { accent: "#a16207", tint: "#f7eecf" },
-      registrar_cierre_dia: { accent: "#475569", tint: "#e8edf3" },
-      registrar_nota_dia: { accent: "#6b7280", tint: "#eef0f2" },
-      generar_reporte_dia: { accent: "#4f46e5", tint: "#e9e7fb" },
-    };
-    const interaction_color = (type) => interaction_colors[type] || { accent: "#116a5b", tint: "#e4f4ef" };
-    const interaction_card_style = (type) => {
-      const color = interaction_color(type);
-      return `--ix-accent: ${color.accent}; --ix-tint: ${color.tint};`;
-    };
-    const interaction_colors_json = JSON.stringify(interaction_colors).replace(/</g, "\\u003c");
+    // Las tarjetas de interacción usan el único acento de la marca (sin color por categoría):
+    // el icono ya distingue cada interacción. Ver DESIGN.md (One Accent Rule).
     const available_interactions_json = JSON.stringify(
       (Array.isArray(available_interactions) ? available_interactions : []).map((item) => ({
         type: item.type,
@@ -159,6 +137,7 @@ block content
       const show_account_context = account_scope || !is_system_bot;
       const bot_account_url = bot.account_id ? `/dashboard/accounts/${bot.account_id}` : "/dashboard";
       const type_chip_label = is_system_bot ? "Sistema" : "Personalizado";
+      const editor_self_path = account_scope ? `/inspector/bots/${bot.id}/business/account` : `/inspector/bots/${bot.id}`;
     if show_account_context
       +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: bot.account_name || "Cuenta", href: bot_account_url }, { label: bot_name }])
     else
@@ -225,6 +204,53 @@ block content
           button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
         .popup__body.popup__body--frame
           iframe#knowledge_center_frame(data-src=`/inspector/accounts/${bot.account_id}/knowledge`, title="Knowledge Center")
+
+    //- Popup agnóstico (window.Popup): agregar o editar un canal (WhatsApp / Instagram).
+    //- Cada tab postea a POST /inspector/bots/:id/channels (reusa el upsert+assign del
+    //- autosave) y regresa al editor en la pestaña Canales (?tab=canales).
+    #channel_popup.popup-overlay(
+      data-popup-overlay,
+      data-popup-overlay-close="true",
+      data-channel-popup,
+      data-autosave-ignore
+    )
+      .popup.popup--md.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title(data-channel-popup-title) Agregar canal
+            .popup__subtitle Conecta el canal por donde te escriben tus clientes.
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
+        .popup__body
+          .channel-popup-tab-shell.wamy-tabs
+            #channel-popup-tabs.tabs(data-initial-tab="whatsapp", role="tablist", aria-label="Tipo de canal")
+              button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true") WhatsApp
+              button.tab(type="button", data-section="instagram", role="tab", aria-selected="false") Instagram
+          .tab-section(data-parent-tab="channel-popup-tabs", data-section="whatsapp")
+            form.popup-form(method="post", action=`/inspector/bots/${bot.id}/channels`)
+              input(type="hidden", name="channel_type", value="whatsapp")
+              input(type="hidden", name="return_to", value=editor_self_path)
+              label(for="channel_wa_display") Número de WhatsApp
+              input#channel_wa_display(type="tel", name="whatsapp_display_phone_number", placeholder="+52 55 1234 5678", required, autocomplete="off")
+              p.field-hint El número con lada que ven tus clientes.
+              label(for="channel_wa_meta") ID del número en Meta
+              input#channel_wa_meta(type="text", name="whatsapp_phone_number_id", placeholder="1234567890", required, autocomplete="off")
+              p.field-hint En Meta WhatsApp Manager → Configuración de la API (phone_number_id).
+              .form-actions
+                button.secondary-button(type="button", data-popup-close) Cancelar
+                button(type="submit") Guardar canal
+          .tab-section(data-parent-tab="channel-popup-tabs", data-section="instagram", hidden)
+            form.popup-form(method="post", action=`/inspector/bots/${bot.id}/channels`)
+              input(type="hidden", name="channel_type", value="instagram")
+              input(type="hidden", name="return_to", value=editor_self_path)
+              label(for="channel_ig_user") Usuario de Instagram
+              input#channel_ig_user(type="text", name="instagram_username", placeholder="@tunegocio", required, autocomplete="off")
+              p.field-hint El @usuario que ven tus clientes.
+              label(for="channel_ig_meta") ID de la cuenta en Meta
+              input#channel_ig_meta(type="text", name="instagram_account_id", placeholder="17841400000000000", required, autocomplete="off")
+              p.field-hint En Meta → Instagram (Instagram Business Account ID).
+              .form-actions
+                button.secondary-button(type="button", data-popup-close) Cancelar
+                button(type="submit") Guardar canal
 
     form(method="post", action=`/inspector/bots/${bot.id}`, id="bot-editor")
       div.bot-editor-tab-shell.wamy-tabs
@@ -339,11 +365,11 @@ block content
             div
               h3.panel-subhead Knowledge para probar
               p.meta Fuentes de la cuenta oficial de YoAyudo, solo para probar este bot. Al clonarlo a una cuenta no se copia ninguna.
-            a#open_knowledge_center.button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
+            a#open_knowledge_center.button.secondary-button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
         else
           div.section-title
             +section_head("book", "Knowledge", "Fuentes de conocimiento que el agente puede usar para responder.")
-            a#open_knowledge_center.button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
+            a#open_knowledge_center.button.secondary-button(href=`/inspector/accounts/${bot.account_id}/knowledge`) Ir a Knowledge Center
         //- Picker y botón siempre presentes (deshabilitados si no hay nada que
         //- asignar): el popup del Knowledge Center los repobla al cerrarse.
         div.inline-add-row
@@ -399,111 +425,43 @@ block content
                 input(type="hidden", name="knowledge_source_ids", value=knowledge_id)
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="canales", hidden)
-        +section_head("broadcast", "Canales soportados", "Conecta los canales por donde te escriben tus clientes.")
-        if supported_channel_rows.length
-          each channel in supported_channel_rows
-            if channel.channel === "whatsapp"
-              div.channel-config
-                div.channel-header
-                  div.channel-title
-                    span.channel-icon.channel-icon--whatsapp(aria-hidden="true") WA
-                    div
-                      h3= channel.label
-                      p.meta El número por donde tus clientes le escriben a este agente.
-                  if whatsapp_channel_rows.length
-                    span.channel-status.is-connected Conectado
-                  else
-                    span.channel-status.is-idle Sin conectar
-                div.form-grid
-                  div
-                    label(for="whatsapp_display_phone_number") Número de WhatsApp
-                    input#whatsapp_display_phone_number(
-                      type="tel",
-                      name="whatsapp_display_phone_number",
-                      value=primary_whatsapp_channel.display_phone_number || "",
-                      placeholder="+52 55 1234 5678"
-                    )
-                    p.field-hint El número con lada que ven tus clientes.
-                  div
-                    label(for="whatsapp_phone_number_id") ID del número en Meta
-                    input#whatsapp_phone_number_id(
-                      type="text",
-                      name="whatsapp_phone_number_id",
-                      value=primary_whatsapp_channel.phone_number_id || "",
-                      placeholder="1234567890"
-                    )
-                    p.field-hint En Meta WhatsApp Manager → Configuración de la API (phone_number_id).
-                if whatsapp_channel_rows.length
-                  div.table-wrap
-                    table
-                      thead
-                        tr
-                          th Número
-                          th ID Meta
-                          th Estado
-                      tbody
-                        each whatsapp_channel in whatsapp_channel_rows
-                          tr
-                            td= whatsapp_channel.display_phone_number || "Sin número"
-                            td= whatsapp_channel.phone_number_id
-                            td
-                              span.status= whatsapp_channel.status
-                else
-                  p.channel-hint Llena ambos campos para conectar el número. Los cambios se guardan automáticamente.
-            else if channel.channel === "instagram"
-              div.channel-config
-                div.channel-header
-                  div.channel-title
-                    span.channel-icon.channel-icon--instagram(aria-hidden="true")
-                      svg.channel-glyph(viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke-width="2", stroke-linecap="round", stroke-linejoin="round")
-                        rect(x="3.5", y="3.5", width="17", height="17", rx="5")
-                        circle(cx="12", cy="12", r="4")
-                        circle(cx="17.2", cy="6.8", r="1.1", fill="currentColor", stroke="none")
-                    div
-                      h3= channel.label
-                      p.meta La cuenta de Instagram por donde tus clientes le escriben a este agente.
-                  if instagram_channel_rows.length
-                    span.channel-status.is-connected Conectado
-                  else
-                    span.channel-status.is-idle Sin conectar
-                div.form-grid
-                  div
-                    label(for="instagram_username") Usuario de Instagram
-                    input#instagram_username(
-                      type="text",
-                      name="instagram_username",
-                      value=primary_instagram_channel.username || "",
-                      placeholder="@tunegocio"
-                    )
-                    p.field-hint El @usuario que ven tus clientes.
-                  div
-                    label(for="instagram_account_id") ID de la cuenta en Meta
-                    input#instagram_account_id(
-                      type="text",
-                      name="instagram_account_id",
-                      value=primary_instagram_channel.external_account_id || "",
-                      placeholder="17841400000000000"
-                    )
-                    p.field-hint En Meta → Instagram (Instagram Business Account ID).
-                if instagram_channel_rows.length
-                  div.table-wrap
-                    table
-                      thead
-                        tr
-                          th Usuario
-                          th ID Meta
-                          th Estado
-                      tbody
-                        each instagram_channel in instagram_channel_rows
-                          tr
-                            td= instagram_channel.username ? `@${instagram_channel.username}` : "Sin usuario"
-                            td= instagram_channel.external_account_id
-                            td
-                              span.status= instagram_channel.status
-                else
-                  p.channel-hint Llena ambos campos para conectar la cuenta. Los cambios se guardan automáticamente.
+        div.section-title
+          +section_head("broadcast", "Canales", "Conecta los canales por donde te escriben tus clientes.")
+          button#open_add_channel.button(type="button") Agregar canal
+        if whatsapp_channel_rows.length || instagram_channel_rows.length
+          div.channel-list
+            each whatsapp_channel in whatsapp_channel_rows
+              div.channel-row
+                span.channel-icon.channel-icon--whatsapp(aria-hidden="true") WA
+                div.channel-row__main
+                  div.channel-row__title= whatsapp_channel.display_phone_number || "Sin número"
+                  div.channel-row__meta WhatsApp · ID Meta: #{whatsapp_channel.phone_number_id}
+                span(class=`channel-status ${whatsapp_channel.status === "active" ? "is-connected" : "is-idle"}`)= whatsapp_channel.status === "active" ? "Conectado" : (whatsapp_channel.status || "Sin conectar")
+                button.secondary-button.channel-edit(
+                  type="button",
+                  data-channel-type="whatsapp",
+                  data-display=whatsapp_channel.display_phone_number || "",
+                  data-meta-id=whatsapp_channel.phone_number_id || ""
+                ) Editar
+            each instagram_channel in instagram_channel_rows
+              div.channel-row
+                span.channel-icon.channel-icon--instagram(aria-hidden="true")
+                  svg.channel-glyph(viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke-width="2", stroke-linecap="round", stroke-linejoin="round")
+                    rect(x="3.5", y="3.5", width="17", height="17", rx="5")
+                    circle(cx="12", cy="12", r="4")
+                    circle(cx="17.2", cy="6.8", r="1.1", fill="currentColor", stroke="none")
+                div.channel-row__main
+                  div.channel-row__title= instagram_channel.username ? `@${instagram_channel.username}` : "Sin usuario"
+                  div.channel-row__meta Instagram · ID Meta: #{instagram_channel.external_account_id}
+                span(class=`channel-status ${instagram_channel.status === "active" ? "is-connected" : "is-idle"}`)= instagram_channel.status === "active" ? "Conectado" : (instagram_channel.status || "Sin conectar")
+                button.secondary-button.channel-edit(
+                  type="button",
+                  data-channel-type="instagram",
+                  data-username=instagram_channel.username || "",
+                  data-meta-id=instagram_channel.external_account_id || ""
+                ) Editar
         else
-          div.empty Ningún canal soportado disponible.
+          div.empty Aún no hay canales conectados. Usa "Agregar canal" para conectar WhatsApp o Instagram.
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="interacciones", hidden)
         +section_head("bolt", "Interacciones", "Lo que el agente puede hacer y cómo. Cada interacción tiene su propio prompt que define cuándo y cómo usarla.")
@@ -522,7 +480,6 @@ block content
                 data-label=system_interaction.label || interaction.label,
                 data-description=system_interaction.description || "",
                 data-placeholder=system_interaction.instructions_placeholder || "",
-                style=interaction_card_style(system_interaction.type),
                 class=(interaction.enabled === false ? "is-disabled" : "")
               )
                 input(type="hidden", name="interaction_type", value=system_interaction.type)
@@ -668,7 +625,6 @@ block content
       const interactionIconSvgs = !{interaction_icon_svgs_json};
       const interactionTrashSvg = !{editor_trash_svg_json};
       const interactionChevronSvg = !{editor_chevron_svg_json};
-      const interactionColors = !{interaction_colors_json};
       const interactionOptionsByType = !{interaction_options_by_type_json};
       const availableInteractions = !{available_interactions_json};
       const interactionPickerList = document.getElementById("interaction_picker_list");
@@ -775,10 +731,9 @@ block content
         interactionPickerList.innerHTML = addable
           .map((item) => {
             const iconSvg = interactionIconSvgs[item.type] || "";
-            const color = interactionColors[item.type] || { accent: "#116a5b", tint: "#e4f4ef" };
             const search = `${item.label} ${item.description || ""}`.toLowerCase();
             return `
-              <label class="interaction-pick" data-search="${escapeHtml(search)}" style="--ix-accent: ${color.accent}; --ix-tint: ${color.tint};">
+              <label class="interaction-pick" data-search="${escapeHtml(search)}">
                 <input type="checkbox" class="interaction-pick-input"
                   data-type="${escapeHtml(item.type)}"
                   data-label="${escapeHtml(item.label)}"
@@ -861,9 +816,6 @@ block content
         card.dataset.description = description || "";
         card.dataset.placeholder = placeholder || "";
         const iconSvg = interactionIconSvgs[type] || "";
-        const color = interactionColors[type] || { accent: "#116a5b", tint: "#e4f4ef" };
-        card.style.setProperty("--ix-accent", color.accent);
-        card.style.setProperty("--ix-tint", color.tint);
         const humanField =
           type === "consult_human"
             ? renderHumanGroupSelect()
@@ -1189,7 +1141,7 @@ block content
         const rows = items
           .map((event) => `
             <div class="interaction-trace-row is-${interactionStatusClass(event.status)}">
-              <span class="interaction-trace-label">${escapeHtml(event.label || event.interaction_type)}</span>
+              <span class="interaction-trace-label"><span class="trace-dot" aria-hidden="true"></span>${escapeHtml(event.label || event.interaction_type)}</span>
               <span class="interaction-trace-status">${escapeHtml(event.status)}</span>
               ${event.reason ? `<p class="interaction-trace-reason">${escapeHtml(event.reason)}</p>` : ""}
               ${event.output?.response ? `<p class="interaction-trace-output">${escapeHtml(event.output.response)}</p>` : ""}
@@ -1198,7 +1150,7 @@ block content
         return `<section class="test-result-section">
           <div class="interaction-trace-head">
             <h3>Interacciones</h3>
-            <span class="interaction-fired-count ${fired.length > 1 ? "is-multi" : ""}">${fired.length > 1 ? "⚡ " : ""}${countLabel}</span>
+            <span class="interaction-fired-count ${fired.length > 1 ? "is-multi" : ""}">${countLabel}</span>
           </div>
           ${items.length ? `<div class="interaction-trace">${rows}</div>` : '<p class="meta">Sin interacciones.</p>'}
         </section>`;
@@ -1230,38 +1182,49 @@ block content
           }
 
           const result = payload.result;
-          const modelDecision = result.model_decision
-            ? `<p class="meta">AI real: ${escapeHtml(result.model_decision.provider)} · ${escapeHtml(result.model_decision.model || "modelo no reportado")} · ${escapeHtml(result.model_decision.response_id || "sin response_id")}</p><p class="meta">${escapeHtml(result.model_decision.reason || "")}</p>`
+          const aiNote = result.model_decision
+            ? `<p class="meta">Respondió con IA real (${escapeHtml(result.model_decision.provider)} · ${escapeHtml(result.model_decision.model || "modelo no reportado")}).</p>`
             : result.model_error
-              ? `<p class="meta">AI real no disponible (${escapeHtml(result.model_error.code)}). Fallback local usado: ${escapeHtml(result.model_error.message)}</p>`
+              ? '<p class="meta">IA real no disponible; se usó el fallback local de prueba.</p>'
+              : '<p class="meta">Modo de prueba con IA mock local.</p>';
+          const techDetail = result.model_decision
+            ? `<p class="meta">Proveedor: ${escapeHtml(result.model_decision.provider)} · Modelo: ${escapeHtml(result.model_decision.model || "—")} · response_id: ${escapeHtml(result.model_decision.response_id || "—")}</p>${result.model_decision.reason ? `<p class="meta">${escapeHtml(result.model_decision.reason)}</p>` : ""}`
+            : result.model_error
+              ? `<p class="meta">Error IA: ${escapeHtml(result.model_error.code)} — ${escapeHtml(result.model_error.message)}</p>`
               : '<p class="meta">AI: mock local determinístico. Configura AI_PROVIDER=openai para probar con modelo real.</p>';
           testResult.innerHTML = `
             <section class="test-result-section">
               <h3>Respuesta del bot</h3>
               <p>${escapeHtml(result.respuesta)}</p>
-              ${modelDecision}
-              <p class="meta">Prompt compilation: ${escapeHtml(result.prompt_compilation_id)}</p>
+              ${aiNote}
             </section>
             ${renderInteractionTrace(result.interaction_trace)}
-            ${renderList("Acciones pedidas", result.action_requests, (action) => `
-              <div class="trace-card">
-                <strong>${escapeHtml(action.action_id)}</strong>
-                <pre>${escapeHtml(JSON.stringify(action.input_json || {}, null, 2))}</pre>
+            <details class="test-tech">
+              <summary>Ver detalle técnico</summary>
+              <div class="test-tech-body">
+                ${techDetail}
+                <p class="meta">Prompt compilation: ${escapeHtml(result.prompt_compilation_id)}</p>
+                ${renderList("Acciones pedidas", result.action_requests, (action) => `
+                  <div class="trace-card">
+                    <strong>${escapeHtml(action.action_id)}</strong>
+                    <pre>${escapeHtml(JSON.stringify(action.input_json || {}, null, 2))}</pre>
+                  </div>
+                `)}
+                ${renderList("Resultados", result.action_results, (action) => `
+                  <div class="trace-card">
+                    <strong>${escapeHtml(action.action_id)}</strong>
+                    <span class="status">${escapeHtml(action.status)}</span>
+                    <pre>${escapeHtml(JSON.stringify(action.output || {}, null, 2))}</pre>
+                  </div>
+                `)}
+                ${renderList("Guardrails", result.guardrail_events_generados, (event) => `
+                  <div class="trace-card">
+                    <strong>${escapeHtml(event.tipo)}</strong>
+                    <p class="meta">${escapeHtml(event.descripcion)}</p>
+                  </div>
+                `)}
               </div>
-            `)}
-            ${renderList("Resultados", result.action_results, (action) => `
-              <div class="trace-card">
-                <strong>${escapeHtml(action.action_id)}</strong>
-                <span class="status">${escapeHtml(action.status)}</span>
-                <pre>${escapeHtml(JSON.stringify(action.output || {}, null, 2))}</pre>
-              </div>
-            `)}
-            ${renderList("Guardrails", result.guardrail_events_generados, (event) => `
-              <div class="trace-card">
-                <strong>${escapeHtml(event.tipo)}</strong>
-                <p class="meta">${escapeHtml(event.descripcion)}</p>
-              </div>
-            `)}
+            </details>
           `;
         } catch (error) {
           testResult.innerHTML = `<p class="meta">Error: ${error.message}</p>`;
@@ -1291,6 +1254,56 @@ block content
 
   script.
     window.TabNavigator?.render("#bot-editor-tabs");
+
+    // Channels: add/edit via popup (forms post to /inspector/bots/:id/channels and
+    // redirect back with ?tab=canales). Deep-link to a tab via ?tab=<section>.
+    (() => {
+      const botTabs = window.TabNavigator?.get("bot-editor-tabs");
+      const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      if (botTabs && requestedTab) botTabs.activate_by_section(requestedTab);
+
+      const channelPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-channel-popup]" }) : null;
+      channelPopup?.iniciar();
+      window.TabNavigator?.render("#channel-popup-tabs");
+      const channelTabs = window.TabNavigator?.get("channel-popup-tabs");
+      const titleEl = document.querySelector("[data-channel-popup-title]");
+      const waDisplay = document.getElementById("channel_wa_display");
+      const waMeta = document.getElementById("channel_wa_meta");
+      const igUser = document.getElementById("channel_ig_user");
+      const igMeta = document.getElementById("channel_ig_meta");
+
+      function openAddChannel() {
+        if (titleEl) titleEl.textContent = "Agregar canal";
+        if (waDisplay) waDisplay.value = "";
+        if (waMeta) { waMeta.value = ""; waMeta.readOnly = false; }
+        if (igUser) igUser.value = "";
+        if (igMeta) { igMeta.value = ""; igMeta.readOnly = false; }
+        channelTabs?.activate_by_section("whatsapp");
+        channelPopup?.open();
+      }
+
+      function openEditChannel(button) {
+        const type = button.dataset.channelType === "instagram" ? "instagram" : "whatsapp";
+        if (titleEl) titleEl.textContent = "Editar canal";
+        channelTabs?.activate_by_section(type);
+        if (type === "instagram") {
+          if (igUser) igUser.value = button.dataset.username || "";
+          // El ID de Meta identifica el canal: en edición queda readonly para no crear
+          // un canal nuevo por upsert. Para reemplazarlo, agrega otro.
+          if (igMeta) { igMeta.value = button.dataset.metaId || ""; igMeta.readOnly = true; }
+        } else {
+          if (waDisplay) waDisplay.value = button.dataset.display || "";
+          if (waMeta) { waMeta.value = button.dataset.metaId || ""; waMeta.readOnly = true; }
+        }
+        channelPopup?.open();
+      }
+
+      document.getElementById("open_add_channel")?.addEventListener("click", openAddChannel);
+      document.querySelector('.tab-section[data-section="canales"]')?.addEventListener("click", (event) => {
+        const editButton = event.target.closest(".channel-edit");
+        if (editButton) openEditChannel(editButton);
+      });
+    })();
 
   script
     include ../../public/js/inspector/Bot_Editor_Autosave.js

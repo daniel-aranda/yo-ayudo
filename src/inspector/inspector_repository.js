@@ -764,6 +764,21 @@ export async function update_bot_builder_view(pool, bot_id, body) {
   });
 }
 
+// Add/edit a channel (whatsapp or instagram) for a bot from a popup form body.
+// Reuses the same upsert+assign sync the autosave uses; idempotent per Meta id.
+export async function add_bot_channel_from_body(pool, bot_id, body) {
+  const bot = await get_bot_by_id(pool, bot_id);
+  if (!bot) return null;
+
+  if (String(body.channel_type ?? "whatsapp") === "instagram") {
+    await sync_instagram_channel_from_body(pool, bot, body);
+  } else {
+    await sync_whatsapp_channel_from_body(pool, bot, body);
+  }
+
+  return bot;
+}
+
 export async function get_bot_conversations(pool, input) {
   const filters = ["c.bot_id = $1"];
   const values = [input.bot_id];

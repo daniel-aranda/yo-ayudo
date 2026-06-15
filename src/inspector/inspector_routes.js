@@ -10,6 +10,7 @@ import {
   get_message_trace_view,
   get_organization_view,
   update_bot_builder_view,
+  add_bot_channel_from_body,
 } from "./inspector_repository.js";
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
 import { present_conversation_overview, present_conversation_turns } from "./inspector_presenter.js";
@@ -257,6 +258,22 @@ export function register_inspector_routes(router, dependencies = {}) {
       }
 
       response.redirect(`/inspector/bots/${bot.id}`);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/inspector/bots/:bot_id/channels", inspector_auth, async (request, response, next) => {
+    try {
+      const bot = await add_bot_channel_from_body(route_pool, route_value(request.params.bot_id), request.body ?? {});
+      if (!bot) {
+        response.status(404).send("Bot not found");
+        return;
+      }
+      const requested = String(request.body?.return_to ?? "");
+      const return_to = requested.startsWith("/inspector/bots/") ? requested : `/inspector/bots/${bot.id}`;
+      const separator = return_to.includes("?") ? "&" : "?";
+      response.redirect(`${return_to}${separator}tab=canales`);
     } catch (error) {
       next(error);
     }

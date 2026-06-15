@@ -13,6 +13,13 @@
   --accent-dark: #0a4a3f;
   --accent-soft: #e4f1ea;
   --accent-ring: rgba(15, 106, 90, 0.24);
+  /* Earthen status tints (DESIGN.md): same-hue bg + darker ink pairs. */
+  --amber-bg: #f6e7c6;
+  --amber-ink: #8a6116;
+  --clay-bg: #ecdcdc;
+  --clay-ink: #8c4a42;
+  --sky-bg: #d8e6f5;
+  --sky-ink: #2b5582;
   /* Soft, layered elevation — premium depth instead of flat 1px borders. */
   --shadow-xs: 0 1px 2px rgba(26, 26, 18, 0.05);
   --shadow-sm: 0 1px 3px rgba(26, 26, 18, 0.06), 0 1px 2px rgba(26, 26, 18, 0.04);
@@ -559,7 +566,7 @@ button:active {
 }
 
 .config-warning {
-  color: #9a3412;
+  color: var(--amber-ink);
   font-size: 13px;
   margin: 6px 0 0;
 }
@@ -753,7 +760,7 @@ button:disabled {
 }
 
 .autosave-dot {
-  background: #9ca3af;
+  background: var(--muted);
   border-radius: 999px;
   flex: none;
   height: 8px;
@@ -761,34 +768,34 @@ button:disabled {
 }
 
 .autosave-indicator.saving {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #9a3412;
+  background: var(--amber-bg);
+  border-color: var(--amber-bg);
+  color: var(--amber-ink);
 }
 
 .autosave-indicator.saving .autosave-dot {
   animation: autosave-pulse 1s ease-in-out infinite;
-  background: #ea580c;
+  background: var(--amber-ink);
 }
 
 .autosave-indicator.saved {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--accent-dark);
 }
 
 .autosave-indicator.saved .autosave-dot {
-  background: #047857;
+  background: var(--accent-dark);
 }
 
 .autosave-indicator.error {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: var(--clay-bg);
+  border-color: var(--clay-bg);
+  color: var(--clay-ink);
 }
 
 .autosave-indicator.error .autosave-dot {
-  background: #b91c1c;
+  background: var(--clay-ink);
 }
 
 .autosave-retry {
@@ -977,7 +984,7 @@ button:disabled {
 }
 
 .status-dot {
-  background: #9ca3af;
+  background: var(--muted);
   border-radius: 999px;
   flex: none;
   height: 9px;
@@ -985,15 +992,15 @@ button:disabled {
 }
 
 .status-dot.is-active {
-  background: #16a34a;
+  background: var(--accent);
 }
 
 .status-dot.is-draft {
-  background: #d97706;
+  background: var(--amber-ink);
 }
 
 .status-dot.is-archived {
-  background: #9ca3af;
+  background: var(--muted);
 }
 
 .field-with-counter {
@@ -1201,9 +1208,8 @@ td input {
 .interaction-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-left: 4px solid var(--ix-accent, var(--line));
   border-radius: 10px;
-  padding: 16px 16px 16px 18px;
+  padding: 16px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
 
@@ -1220,9 +1226,9 @@ td input {
 
 .interaction-icon {
   align-items: center;
-  background: var(--ix-tint, #e4f4ef);
+  background: var(--accent-soft);
   border-radius: 10px;
-  color: var(--ix-accent, var(--accent-dark));
+  color: var(--accent-dark);
   display: inline-flex;
   flex: none;
   height: 38px;
@@ -1293,7 +1299,6 @@ td input {
 
 .interaction-card.is-disabled {
   background: var(--surface-strong);
-  border-left-color: var(--line);
   opacity: 0.72;
 }
 
@@ -1594,6 +1599,42 @@ td input {
   border-color: var(--muted);
 }
 
+.channel-list {
+  display: grid;
+  gap: 10px;
+}
+
+/* Flat tinted row inside the white panel (no card-in-card). */
+.channel-row {
+  align-items: center;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.channel-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.channel-row__title {
+  font-weight: 650;
+}
+
+.channel-row__meta {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.channel-edit {
+  flex: none;
+  margin-top: 0;
+}
+
 .channel-header {
   align-items: start;
   display: flex;
@@ -1660,12 +1701,12 @@ td input {
 }
 
 .channel-status.is-connected {
-  background: #e4f4ef;
+  background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
 .channel-status.is-connected::before {
-  background: #16a34a;
+  background: var(--accent);
 }
 
 .channel-status.is-idle {
@@ -1674,7 +1715,7 @@ td input {
 }
 
 .channel-status.is-idle::before {
-  background: #9ca3af;
+  background: var(--muted);
 }
 
 .field-hint {
@@ -1716,6 +1757,41 @@ td input {
 .test-result-section h3 {
   font-size: 15px;
   margin: 0 0 10px;
+}
+
+/* Probar result: technical detail (ids, prompt compilation, raw JSON) is tucked
+   behind a disclosure so the bot's reply + plain-language trace lead. */
+.test-tech {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.test-tech > summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  list-style: none;
+  padding: 2px 0;
+}
+
+.test-tech > summary::-webkit-details-marker {
+  display: none;
+}
+
+.test-tech > summary::before {
+  color: var(--muted);
+  content: "▸ ";
+}
+
+.test-tech[open] > summary::before {
+  content: "▾ ";
+}
+
+.test-tech-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
 }
 
 .checkbox-line {
@@ -2097,7 +2173,6 @@ html.is-framed .topbar {
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--ix-accent, var(--accent));
   border-radius: 10px;
   color: var(--text);
   cursor: pointer;
@@ -2114,12 +2189,12 @@ html.is-framed .topbar {
 }
 
 .interaction-pick:has(.interaction-pick-input:checked) {
-  background: var(--ix-tint, #e4f4ef);
-  border-color: var(--ix-accent, var(--accent));
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .interaction-pick-input {
-  accent-color: var(--ix-accent, var(--accent));
+  accent-color: var(--accent);
   border: 0;
   border-radius: 0;
   height: 18px;
@@ -2130,9 +2205,9 @@ html.is-framed .topbar {
 
 .interaction-pick-icon {
   align-items: center;
-  background: var(--ix-tint, #e4f4ef);
+  background: var(--accent-soft);
   border-radius: 8px;
-  color: var(--ix-accent, var(--accent));
+  color: var(--accent-dark);
   display: inline-flex;
   height: 34px;
   justify-content: center;
@@ -2181,9 +2256,9 @@ html.is-framed .topbar {
 }
 
 .interaction-fired-count.is-multi {
-  background: #e9e7fb;
+  background: var(--accent-soft);
   border-radius: 999px;
-  color: #4f46e5;
+  color: var(--accent-dark);
   padding: 2px 10px;
 }
 
@@ -2252,7 +2327,6 @@ html.is-framed .topbar {
 .interaction-trace-row {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
   border-radius: 8px;
   display: grid;
   gap: 2px 10px;
@@ -2260,20 +2334,30 @@ html.is-framed .topbar {
   padding: 8px 12px;
 }
 
-.interaction-trace-row.is-ok {
-  border-left-color: #1f9d6b;
+/* Status reads from a small leading dot (icon), not a colored side-stripe. */
+.trace-dot {
+  background: var(--line-strong);
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  margin-right: 8px;
+  vertical-align: middle;
+  width: 8px;
 }
 
-.interaction-trace-row.is-pending {
-  border-left-color: #e0930a;
+.interaction-trace-row.is-ok .trace-dot {
+  background: var(--accent);
 }
 
-.interaction-trace-row.is-blocked {
-  border-left-color: #e0533d;
+.interaction-trace-row.is-pending .trace-dot {
+  background: var(--amber-ink);
+}
+
+.interaction-trace-row.is-blocked .trace-dot {
+  background: var(--clay-ink);
 }
 
 .interaction-trace-row.is-muted {
-  border-left-color: var(--line);
   opacity: 0.7;
 }
 
