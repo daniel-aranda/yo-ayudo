@@ -235,6 +235,23 @@ export async function upsert_crm_client(pool, input) {
   return { ...row, created: true };
 }
 
+// Mueve un prospecto/cliente a una etapa BASE (drop en el tablero o select del
+// detalle). Solo acepta etapas base como destino; las custom se setean por el bot.
+export async function update_crm_client_stage(pool, { client_id, account_id, stage }) {
+  const target = String(stage ?? "").trim();
+  if (!CRM_BASE_KEYS.has(target)) {
+    return { error: "invalid_stage", message: "Etapa inválida." };
+  }
+  const result = await pool.query(
+    "UPDATE crm_clients SET pipeline_status = $3, updated_at = now() WHERE id = $1 AND account_id = $2 RETURNING id, pipeline_status",
+    [client_id, account_id, target],
+  );
+  if (!result.rows[0]) {
+    return { error: "not_found", message: "Prospecto no encontrado." };
+  }
+  return { ok: true, client: result.rows[0] };
+}
+
 export async function get_crm_client(pool, id) {
   const result = await pool.query("SELECT * FROM crm_clients WHERE id = $1 LIMIT 1", [id]);
   return result.rows[0] ?? null;
@@ -288,4 +305,85 @@ export async function list_crm_clients_for_account(pool, account_id, { limit = 1
     [account_id, limit],
   );
   return result.rows;
+}
+
+// Etapas BASE del pipeline (4, simplistas). Cada cliente guarda su etapa en
+// `pipeline_status`. Cualquier valor que NO sea una etapa base se trata como una
+// **categoría custom** que vive DENTRO de "Interesado" (no como columna aparte):
+// la columna Interesado muestra un dropdown para filtrarlas. Las custom se derivan
+// de los datos (los valores de `pipeline_status` no-base presentes en la cuenta);
+// agregar/ocultar etapas con UI persistente por cuenta es el siguiente paso.
+export const CRM_BASE_STAGES = [
+  { key: "nuevo", label: "Nuevo" },
+  { key: "interesado", label: "Interesado" },
+  { key: "ganado", label: "Ganado" },
+  { key: "perdido", label: "Perdido" },
+];
+
+// Valores legacy/sinónimos → etapa base, para que datos viejos caigan en su columna.
+const CRM_STAGE_ALIASES = {
+  cerrado_ganado: "ganado",
+  cerrado_perdido: "perdido",
+  closed_won: "ganado",
+  closed_lost: "perdido",
+  nuevo_prospecto: "nuevo",
+};
+const CRM_BASE_KEYS = new Set(CRM_BASE_STAGES.map((stage) => stage.key));
+
+function humanize_stage(key) {
+  const text = String(key ?? "").replace(/[_-]+/g, " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Sin etapa";
+}
+
+// Vista CRM por cuenta: prospectos/clientes en columnas por etapa base. Las
+// categorías custom se pliegan bajo "Interesado" (con `custom_categories` para su
+// dropdown). Las columnas base vacías se muestran para leer el pipeline completo.
+export async function get_account_crm_view(pool, account_id) {
+  const account_row = await pool.query(
+    `
+      SELECT accounts.id, accounts.name AS account_name, accounts.organization_id, organizations.name AS organization_name
+      FROM accounts
+      JOIN organizations ON organizations.id = accounts.organization_id
+      WHERE accounts.id = $1
+      LIMIT 1
+    `,
+    [account_id],
+  );
+  const account = account_row.rows[0] ?? null;
+  if (!account) {
+    return { account: null, columns: [], totals: { total: 0, prospectos: 0, clientes: 0 } };
+  }
+
+  const clients = await list_crm_clients_for_account(pool, account_id, { limit: 500 });
+  const columns = new Map(CRM_BASE_STAGES.map((stage) => [stage.key, { ...stage, clients: [] }]));
+  const custom_by_key = new Map();
+
+  for (const client of clients) {
+    const raw = String(client.pipeline_status || "nuevo");
+    const resolved = CRM_STAGE_ALIASES[raw] ?? raw;
+    if (CRM_BASE_KEYS.has(resolved)) {
+      columns.get(resolved).clients.push({ ...client, sub_category: null, sub_category_label: null });
+    } else {
+      // Categoría custom → entra a Interesado como sub-categoría filtrable.
+      const label = humanize_stage(raw);
+      columns.get("interesado").clients.push({ ...client, sub_category: raw, sub_category_label: label });
+      if (!custom_by_key.has(raw)) {
+        custom_by_key.set(raw, { key: raw, label, count: 0 });
+      }
+      custom_by_key.get(raw).count += 1;
+    }
+  }
+
+  // El dropdown de Interesado solo aplica si la cuenta tiene categorías custom.
+  columns.get("interesado").custom_categories = [...custom_by_key.values()].sort((a, b) => a.label.localeCompare(b.label));
+
+  return {
+    account,
+    columns: CRM_BASE_STAGES.map((stage) => columns.get(stage.key)),
+    totals: {
+      total: clients.length,
+      prospectos: clients.filter((client) => client.kind !== "cliente").length,
+      clientes: clients.filter((client) => client.kind === "cliente").length,
+    },
+  };
 }

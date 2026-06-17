@@ -9,6 +9,7 @@ block content
       { value: "pendiente", label: "Pendiente" },
       { value: "en_progreso", label: "En progreso" },
       { value: "hecha", label: "Hecha" },
+      { value: "cancelada", label: "Cancelada" },
     ];
     const detail_url = `${base_path}/${task.id}`;
     const default_actor = (typeof current_user !== "undefined" && current_user) ? current_user.name : "";

@@ -275,7 +275,8 @@ export async function get_account_dashboard_data(pool, input) {
           FROM processing_events
           WHERE account_id = $1
             AND status = 'error'
-        ) AS error_events_count
+        ) AS error_events_count,
+        (SELECT count(*)::int FROM crm_clients WHERE account_id = $1) AS prospects_count
     `,
     [input.account_id],
   );

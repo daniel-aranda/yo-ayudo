@@ -6,7 +6,7 @@ import { get_bots_admin_view } from "./admin_bots_service.js";
 import { get_businesses_admin_view } from "./admin_businesses_service.js";
 import { get_guardrails_admin_view } from "./admin_guardrails_service.js";
 import { get_conversations_admin_view } from "./admin_conversations_service.js";
-import { add_task_update, get_task_detail, get_tasks_admin_view, update_task_status } from "./admin_tasks_service.js";
+import { add_task_update, get_task_detail, get_tasks_admin_view, update_task_assignee, update_task_status } from "./admin_tasks_service.js";
 import { available_agent_interactions } from "../inspector/inspector_repository.js";
 import { upsert_interaction_setting } from "../interactions/interaction_settings_repository.js";
 import {
@@ -259,6 +259,23 @@ export function register_admin_routes(router, dependencies = {}) {
         return;
       }
 
+      response.redirect(request.body?.return_to || "/admin/tasks");
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Asignar/reasignar responsable de una tarea (sin tocar el estado).
+  router.post("/admin/tasks/:task_id/assign", admin_auth, async (request, response, next) => {
+    try {
+      const result = await update_task_assignee(route_pool, {
+        task_id: request.params.task_id,
+        assigned_to: request.body?.assigned_to,
+      });
+      if (result.error) {
+        response.status(result.error === "task_not_found" ? 404 : 400).send(result.message);
+        return;
+      }
       response.redirect(request.body?.return_to || "/admin/tasks");
     } catch (error) {
       next(error);

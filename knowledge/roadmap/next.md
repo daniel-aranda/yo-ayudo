@@ -12,7 +12,7 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
 
 2. Implementar mas handlers reales para las actions `stub_*`.
    - Hoy `buscar_negocios`, `crear_contacto` (CRM), `guardar_nota`, `crear_tarea`, `generar_resumen` y las operativas son ejecucion interna real.
-   - Hecho: **CRM (prospectos/clientes)** — `crear_contacto` real con resolucion de identidad y clave de negocio derivada (CURP > tel > IG), captura por inbound (`lead_capture`) y panel "Valor capturado". Ver `architecture/crm.md`. Siguiente: vista de lista CRM por cuenta y cambios de etapa explicitos (`actualizar_contacto` sigue stub; el upsert ya cubre crear/actualizar/etapa).
+   - Hecho: **CRM (prospectos/clientes)** — `crear_contacto` real con resolucion de identidad y clave de negocio derivada (CURP > tel > IG), captura por inbound (`lead_capture`), panel "Valor capturado" y **página CRM por cuenta** (`/dashboard/accounts/:id/crm`, tablero por etapa). Ver `architecture/crm.md`. El tablero usa **4 etapas base** (`CRM_BASE_STAGES`: nuevo/interesado/ganado/perdido), pliega las **categorías custom** bajo Interesado con dropdown (derivadas de los datos) y es **drag & drop** (mover columna persiste `pipeline_status`). Siguiente: **gestión de etapas por cuenta** persistente (agregar custom vacías / ocultar bases); páginas especializadas equivalentes para otras capacidades (Ventas, etc.).
    - Priorizar el resto sin venderlas como reales hasta tener handler o proveedor.
 
 3. Builder LLM de bots desde lenguaje natural.

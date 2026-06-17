@@ -554,7 +554,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       enabled: true,
       action_id: "buscar_negocios",
       instructions:
-        "Úsalo cuando alguien del equipo pida prospectos para vender YoAyudo. Busca negocios por giro y zona: toma la ciudad/zona del mensaje y, si no la dan, pregúntala antes de buscar (o usa las zonas que prospecta este negocio: CDMX — Roma Norte, Condesa, Polanco). Presenta las 3 mejores opciones (nombre, giro y por qué encajan) y pregunta a cuál llamar o visitar. Cuando elijan una, guárdala como prospecto con \"Guardar prospecto o cliente\" (nombre del negocio, teléfono y zona, fuente \"Prospección YoAyudo\") y, si lo piden, crea una tarea de seguimiento. Excluye los que ya fueron contactados.",
+        "Úsalo cuando alguien del equipo pida prospectos para vender YoAyudo. Busca negocios por giro y zona: toma la ciudad/zona del mensaje y, si no la dan, pregúntala antes de buscar (o usa las zonas que prospecta este negocio: CDMX — Roma Norte, Condesa, Polanco). Presenta las 3 mejores opciones en lista, una por línea con viñeta (nombre — por qué encaja), y pregunta a cuál llamar o visitar. Cuando elijan una, guárdala como prospecto con \"Guardar prospecto o cliente\" (nombre del negocio, teléfono y zona, fuente \"Prospección YoAyudo\") y, si lo piden, crea una tarea de seguimiento. Excluye los que ya fueron contactados.",
     },
     {
       key: "crear_contacto",
@@ -822,7 +822,7 @@ function lead_capture_bot_definition() {
         enabled: true,
         action_id: "buscar_negocios",
         instructions:
-          "Úsalo para prospectar. Busca negocios por giro y zona: toma la zona del mensaje y, si no la dan, pregúntala antes de buscar. Presenta las 3 mejores opciones (nombre, giro y por qué encajan) y pregunta a cuál contactar. Cuando elijan una, guárdala como prospecto con \"Guardar prospecto o cliente\" (nombre, teléfono y zona) y crea una tarea de seguimiento si lo piden. Excluye los que ya fueron contactados.",
+          "Úsalo para prospectar. Busca negocios por giro y zona: toma la zona del mensaje y, si no la dan, pregúntala antes de buscar. Presenta las 3 mejores opciones en lista, una por línea con viñeta (nombre — por qué encaja), y pregunta a cuál contactar. Cuando elijan una, guárdala como prospecto con \"Guardar prospecto o cliente\" (nombre, teléfono y zona) y crea una tarea de seguimiento si lo piden. Excluye los que ya fueron contactados.",
       },
       {
         key: "crear_contacto",
@@ -1729,7 +1729,7 @@ export async function seed_crm_demo_conversation(pool, { account_id, organizatio
     curp: "MELA900215MDFNNR07",
     phone: "5215557654321",
     kind: "cliente",
-    pipeline_status: "cerrado_ganado",
+    pipeline_status: "ganado",
     source: "referido",
     need: "Quiere ordenar el seguimiento de sus pacientes por WhatsApp.",
   });
@@ -1742,6 +1742,28 @@ export async function seed_crm_demo_conversation(pool, { account_id, organizatio
     pipeline_status: "interesado",
     source: "instagram",
     need: "Llegan pedidos por DM y se pierden; quiere capturarlos.",
+  });
+  // Dos prospectos en categorías CUSTOM: caen DENTRO de "Interesado" y activan su
+  // dropdown (Ver todos / Demo agendada / Propuesta enviada).
+  await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    display_name: "Estudio Pilar",
+    phone: "5215553334444",
+    kind: "prospecto",
+    pipeline_status: "demo_agendada",
+    source: "instagram",
+    need: "Agendó una demo para ver cómo ordenar sus citas.",
+  });
+  await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    display_name: "Clínica Bahía",
+    phone: "5215555556666",
+    kind: "prospecto",
+    pipeline_status: "propuesta_enviada",
+    source: "referido",
+    need: "Recibió propuesta; evalúa el plan para sus 3 sucursales.",
   });
 
   const contact = (
@@ -2218,7 +2240,7 @@ export async function seed_prospeccion_venta_conversation(pool, { account_id, or
     ],
   });
   await outbound(
-    "Encontré 3 restaurantes en Roma Norte que encajan para YoAyudo:\n1) La Parrilla de Don Memo — mucho pedido por WhatsApp\n2) Sushi Roma — reservas y pedidos por DM\n3) Café Cardinal — citas y catering\n¿A cuál llamo o visito?",
+    "Encontré 3 restaurantes en Roma Norte que encajan para YoAyudo:\n\n• La Parrilla de Don Memo — mucho pedido por WhatsApp\n• Sushi Roma — reservas y pedidos por DM\n• Café Cardinal — citas y catering\n\n¿A cuál llamo o visito?",
     first.id,
     2,
   );

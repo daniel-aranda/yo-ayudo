@@ -46,6 +46,9 @@ block content
       a.metric.metric--link(href="#panel-conversaciones", data-go-tab="conversaciones")
         span.label Conversaciones
         strong= stats.conversations_count || 0
+      a.metric.metric--link(href=`/dashboard/accounts/${account.id}/crm`)
+        span.label Prospectos
+        strong= stats.prospects_count || 0
       a.metric.metric--link(href=`/dashboard/accounts/${account.id}/tasks`)
         span.label Tareas abiertas
         strong= open_tasks_count || 0

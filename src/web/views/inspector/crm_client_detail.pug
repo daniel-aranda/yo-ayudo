@@ -15,9 +15,26 @@ block content
       { label: "Instagram", value: client.instagram ? `@${client.instagram}` : null },
       { label: "Email", value: client.email },
     ].filter((row) => row.value);
+    const chat_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V7a2 2 0 0 1 2-2z"/></svg>';
+    // Etapa editable (alternativa accesible al drag&drop): solo en la página del
+    // dashboard (back_href). Las 4 etapas base; si la actual es custom, la mostramos.
+    const editable_stage = typeof back_href !== "undefined" && back_href;
+    const base_stages = [
+      { value: "nuevo", label: "Nuevo" },
+      { value: "interesado", label: "Interesado" },
+      { value: "ganado", label: "Ganado" },
+      { value: "perdido", label: "Perdido" },
+    ];
+    const current_stage = String(client.pipeline_status || "nuevo");
+    const is_base_stage = base_stages.some((stage) => stage.value === current_stage);
+    const stage_action = `/dashboard/accounts/${client.account_id}/crm/${client.id}/stage`;
+    const stage_return = `/dashboard/accounts/${client.account_id}/crm/${client.id}`;
 
   //- Reusa el chrome del detalle de tarea (.task-modal*) para densidad y estilo
   //- consistentes en el popup; sin CSS nuevo.
+  //- Como página (dashboard) muestra un volver; como popup iframe (inspector) no.
+  if typeof back_href !== "undefined" && back_href
+    +breadcrumb([{ label: "Prospectos", href: back_href }, { label: client.display_name || "Prospecto" }])
   section.task-modal
     header.task-modal-head
       .task-modal-titles
@@ -27,7 +44,11 @@ block content
           if status_pretty
             |  · etapa: #{status_pretty}
         if client.conversation_id
-          a.task-modal-conv(href=(client.account_id ? `/inspector/accounts/${client.account_id}/conversations/${client.conversation_id}` : `/inspector/conversations/${client.conversation_id}`), target="_top") Ver conversación relevante →
+          a.button.secondary-button.crm-detail-conv(href=(client.account_id ? `/inspector/accounts/${client.account_id}/conversations/${client.conversation_id}` : `/inspector/conversations/${client.conversation_id}`), target="_top")
+            != chat_svg
+            |  Ver conversación con el prospecto
+        else
+          p.task-modal-conv-empty Sin conversación vinculada (se guardó manualmente o por prospección).
       .task-modal-state
         span.task-modal-state-label Clave de negocio
         strong.task-modal-title= client.client_key || "—"
@@ -63,7 +84,17 @@ block content
             dd= kind_label
           div
             dt Etapa
-            dd= status_pretty || "—"
+            if editable_stage
+              dd
+                form.crm-stage-form(method="post", action=stage_action)
+                  input(type="hidden", name="return_to", value=stage_return)
+                  select.crm-stage-select(name="stage", aria-label="Cambiar etapa")
+                    if !is_base_stage
+                      option(value=current_stage, selected) #{status_pretty} (actual)
+                    each stage in base_stages
+                      option(value=stage.value, selected=stage.value === current_stage)= stage.label
+            else
+              dd= status_pretty || "—"
           if client.source
             div
               dt Origen
@@ -84,6 +115,9 @@ block content
 
   script.
     (() => {
+      // El select de etapa guarda al elegir (postea el form de la fila).
+      document.querySelector(".crm-stage-select")?.addEventListener("change", (event) => event.target.form.submit());
+
       // Avisa al popup contenedor la altura real para que el iframe se ajuste
       // (mismo patrón que el detalle de tarea, con su propio tipo de mensaje).
       function postHeight() {

@@ -10,9 +10,11 @@ import {
   add_task_update,
   get_task_detail,
   get_tasks_admin_view,
+  update_task_assignee,
   update_task_status,
 } from "../admin/admin_tasks_service.js";
 import { get_bot_by_id } from "../bots/bot_repository.js";
+import { get_account_crm_view, get_crm_client_detail, update_crm_client_stage } from "../crm/crm_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 
@@ -197,6 +199,32 @@ export function register_dashboard_routes(router, dependencies = {}) {
   );
 
   router.post(
+    "/dashboard/accounts/:account_id/tasks/:task_id/assign",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_tasks_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe.");
+          return;
+        }
+        const result = await update_task_assignee(pool, {
+          task_id: request.params.task_id,
+          assigned_to: request.body?.assigned_to,
+          account_id: context.account_id,
+        });
+        if (result.error) {
+          response.status(result.error === "task_not_found" ? 404 : 400).send(result.message);
+          return;
+        }
+        response.redirect(request.body?.return_to || context.base_path);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
     "/dashboard/accounts/:account_id/tasks/:task_id/update",
     dashboard_auth,
     async (request, response, next) => {
@@ -218,6 +246,68 @@ export function register_dashboard_routes(router, dependencies = {}) {
           return;
         }
         response.redirect(`${context.base_path}/${request.params.task_id}`);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  // CRM a nivel cuenta: los prospectos/clientes del negocio, agrupados por etapa
+  // (base del futuro kanban). El detalle reusa la vista de prospecto del inspector,
+  // scopeado al dashboard para no sacar al usuario de su cuenta.
+  router.get(
+    "/dashboard/accounts/:account_id/crm",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const account_id = require_param(request.params.account_id, "account_id");
+        const view = await get_account_crm_view(pool, account_id);
+        if (!view.account) {
+          response.status(404).send("La cuenta no existe.");
+          return;
+        }
+        response.render("dashboard/crm", { ...view, account_id });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    "/dashboard/accounts/:account_id/crm/:client_id",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const account_id = require_param(request.params.account_id, "account_id");
+        const client = await get_crm_client_detail(pool, request.params.client_id);
+        if (!client || String(client.account_id) !== String(account_id)) {
+          response.status(404).send("Prospecto no encontrado");
+          return;
+        }
+        response.render("inspector/crm_client_detail", { client, back_href: `/dashboard/accounts/${account_id}/crm` });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  // Mover un prospecto de etapa (drop en el tablero o select del detalle).
+  router.post(
+    "/dashboard/accounts/:account_id/crm/:client_id/stage",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const account_id = require_param(request.params.account_id, "account_id");
+        const result = await update_crm_client_stage(pool, {
+          client_id: request.params.client_id,
+          account_id,
+          stage: request.body?.stage,
+        });
+        if (result.error) {
+          response.status(result.error === "not_found" ? 404 : 400).send(result.message);
+          return;
+        }
+        response.redirect(request.body?.return_to || `/dashboard/accounts/${account_id}/crm`);
       } catch (error) {
         next(error);
       }

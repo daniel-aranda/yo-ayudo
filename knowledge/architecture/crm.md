@@ -43,6 +43,7 @@ El mismo `parse_lead_fields` lo reusa `bot_engine_test_service.infer_action_requ
 
 - Interacción en el catálogo del editor (`available_agent_interactions`, `inspector_repository.js`) con `action_id: "crear_contacto"`, icono `id_card` (`bot.pug`). Se deriva a `acciones_habilitadas_json` como cualquier interacción ejecutable; el prompt compiler la inyecta sin código extra.
 - Visor de conversación: `Valor capturado` lista cada prospecto/cliente capturado (`value_summary.crm`, vía `list_crm_clients_for_conversation`) como **fila clickeable** (nombre + tipo de clave) y el chip del turno `crear_contacto` es un **combo con "Ver prospecto"** (el presenter matchea el chip a su cliente por `output_json.cliente_id`, igual que "Ver tarea" por `tarea_id`). Ambos abren el **detalle en popup iframe** (`GET /inspector/crm/:client_id` → `crm_client_detail.pug`: clave de negocio, identificadores, necesidad, etapa, origen, bot/cuenta + link "Ver conversación relevante"). Reusa el chrome `.task-modal*` y el auto-ajuste de altura por `postMessage` (tipo `yoayudo:crm-height`) — mismo patrón que el detalle de tarea, solo lectura (no recarga al cerrar).
+- **Página CRM por cuenta** (`GET /dashboard/accounts/:account_id/crm` → `dashboard/crm.pug`): la lista consolidada de prospectos/clientes en un **tablero de 4 columnas** (las etapas base; lectura, base del futuro kanban). Datos de `get_account_crm_view` (ver "Etapas": columnas base + categorías custom plegadas bajo Interesado con su `custom_categories` para el dropdown) + rollup (total/prospectos/clientes). Cada tarjeta (avatar con iniciales + nombre + clave + fuente + chip de sub-categoría custom si aplica) abre el detalle scopeado al dashboard (`GET /dashboard/accounts/:account_id/crm/:client_id`, reusa `crm_client_detail.pug` con breadcrumb de volver). El dropdown de Interesado filtra client-side por `data-subcat`. Entrada desde la métrica **"Prospectos"** del dashboard (`stats.prospects_count`). CSS `.crm-board`/`.crm-col*`/`.crm-card*`/`.crm-col__select` en `dashboard.css`.
 
 ## Seeds
 
@@ -52,8 +53,19 @@ El bot comercial (`agente-whatsapp-yoayudo`) y el de prospectos lo traen habilit
 - `seed_lead_without_name_conversation`: el lead llega por "Campaña Facebook" **sin dar su nombre**; el bot lo guarda como prospecto (clave teléfono, `display_name` null) y **pregunta el nombre**; cuando responde ("Soy Daniela Ruiz"), un segundo guardado actualiza el MISMO registro con el nombre. Prueba la guía "si no sabes el nombre completo, pídelo" (el contacto queda sin `display_name`, así el título muestra el teléfono — lead anónimo).
 - `seed_prospeccion_venta_conversation`: **prospección para VENDER YoAyudo**. Un vendedor pide prospectos con zona ("restaurantes en Roma Norte") → el bot busca (`buscar_negocios`) y propone **3 opciones** → al elegir a cuál llamar, el bot guarda ESE negocio como prospecto (`crear_contacto`, fuente "Prospección YoAyudo") y deja una tarea (`crear_tarea`). Demuestra que el flujo "buscar → top 3 → al elegir, guardar" es **orquestación por prompt** de dos interacciones existentes (no una Action nueva), y que la **zona vive en el prompt** (del mensaje o las zonas configuradas en las instrucciones de `buscar_negocios`; si falta, el bot la pregunta).
 
+## Etapas (pipeline)
+
+**4 etapas base** (`CRM_BASE_STAGES` en `crm_repository.js`): `nuevo`, `interesado`, `ganado`, `perdido`. Cada cliente guarda su etapa en `pipeline_status` (lo setea el upsert desde `status`/`estatus`/`etapa`). Valores legacy/sinónimos se mapean a una base (`CRM_STAGE_ALIASES`: `cerrado_ganado`→`ganado`, `cerrado_perdido`→`perdido`, …).
+
+**Categorías custom**: cualquier `pipeline_status` que NO sea una etapa base se trata como **categoría custom** que vive DENTRO de "Interesado" (no como columna aparte). En el tablero, la columna Interesado muestra un **dropdown** (Ver todos / cada categoría con su conteo) que filtra sus tarjetas; **solo aparece si la cuenta tiene categorías custom** (`get_account_crm_view` las deriva de los valores no-base presentes, con label humanizado, y las expone en `columns[interesado].custom_categories`; cada cliente custom lleva `sub_category`/`sub_category_label`). Así no hace falta una tabla de config para que el mecanismo funcione: una categoría custom "existe" en cuanto un cliente la usa.
+
+El tablero es **drag & drop** (`dashboard/crm.pug`, HTML5 DnD vanilla): arrastrar una tarjeta a otra columna mueve su etapa optimista y persiste vía `POST /dashboard/accounts/:account_id/crm/:client_id/stage` → `update_crm_client_stage` (solo acepta etapas base como destino; si falla, recarga). Alternativa **accesible** (no-drag): el detalle del prospecto tiene un `<select>` de etapa que postea al mismo endpoint. Mover a una etapa base limpia la sub-categoría custom.
+
 ## Pendiente / futuro
 
-- Vista de lista CRM por cuenta (hoy solo se ve por conversación; `list_crm_clients_for_account` ya existe).
+- ~~Vista de lista CRM por cuenta~~ HECHO: `GET /dashboard/accounts/:id/crm` (tablero de 4 etapas base + custom bajo Interesado con dropdown).
+- ~~Kanban con arrastre~~ HECHO: drag & drop entre columnas persiste `pipeline_status` (+ select de etapa accesible en el detalle).
+- Gestión de etapas por cuenta (agregar custom vacías / ocultar bases) con persistencia; hoy las 4 bases siempre se muestran y las custom se derivan de los datos.
+- Páginas especializadas equivalentes para otras capacidades (Ventas, etc.).
 - `actualizar_contacto` sigue siendo stub (el upsert de `crear_contacto` ya cubre crear/actualizar/cambiar etapa).
 - Constraints únicos en DB cuando el dato esté estable; extracción de campos por AI (hoy determinista).

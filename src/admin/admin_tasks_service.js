@@ -4,12 +4,13 @@
 // se escribían y nadie las veía; esta es la bandeja accionable de "qué tiene que
 // hacer un humano" con su follow-up (estado pendiente → en progreso → hecha).
 
-export const TASK_STATUSES = ["pendiente", "en_progreso", "hecha"];
+export const TASK_STATUSES = ["pendiente", "en_progreso", "hecha", "cancelada"];
 
 const STATUS_LABELS = {
   pendiente: "Pendiente",
   en_progreso: "En progreso",
   hecha: "Hecha",
+  cancelada: "Cancelada",
 };
 
 // De dónde vino la tarea (metadata_json.source), para explicar el origen en la UI.
@@ -90,8 +91,8 @@ export async function get_tasks_admin_view(pool, input = {}) {
     origin: task_origin(row.metadata_json),
   }));
 
-  // Pendiente/en progreso arriba; hechas al final (orden estable en JS, pg-mem-safe).
-  const status_weight = (s) => (s === "hecha" ? 2 : s === "en_progreso" ? 1 : 0);
+  // Pendiente/en progreso arriba; hechas/canceladas al final (orden estable en JS).
+  const status_weight = (s) => (s === "cancelada" ? 3 : s === "hecha" ? 2 : s === "en_progreso" ? 1 : 0);
   tasks.sort((a, b) => status_weight(a.status) - status_weight(b.status));
 
   const [accounts, bots] = await Promise.all([
@@ -144,6 +145,30 @@ export async function update_task_status(pool, { task_id, status, actor = null, 
   );
 
   return { task: result.rows[0] };
+}
+
+// Asigna (o reasigna/limpia) el responsable de una tarea, sin tocar el estado, y
+// lo deja en la bitácora. `assigned_to` vacío = quitar responsable.
+export async function update_task_assignee(pool, { task_id, assigned_to, account_id = null } = {}) {
+  const task = (
+    await pool.query("SELECT id, account_id, assigned_to, status FROM internal_tasks WHERE id = $1 LIMIT 1", [task_id])
+  ).rows[0];
+  if (!task || (account_id && task.account_id !== account_id)) {
+    return { error: "task_not_found", message: "La tarea no existe." };
+  }
+
+  const clean = String(assigned_to ?? "").trim() || null;
+  if (clean === (task.assigned_to ?? null)) {
+    return { ok: true, assigned_to: clean };
+  }
+
+  await pool.query("UPDATE internal_tasks SET assigned_to = $2, updated_at = now() WHERE id = $1", [task_id, clean]);
+  await pool.query(
+    "INSERT INTO task_updates (task_id, actor, note, from_status, to_status) VALUES ($1, $2, $3, $4, $4)",
+    [task_id, clean, clean ? `Asignada a ${clean}.` : "Responsable removido.", task.status],
+  );
+
+  return { ok: true, assigned_to: clean };
 }
 
 // Agrega una actualización al historial (quién atendió + qué pasó), opcionalmente

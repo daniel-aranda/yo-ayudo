@@ -23,10 +23,14 @@ import { format_money } from "../../src/shared/money.js";
 import { format_date_es, format_datetime_es } from "../../src/shared/dates.js";
 import {
   derive_client_key,
+  get_account_crm_view,
+  get_crm_client,
   list_crm_clients_for_account,
   normalize_identifiers,
+  update_crm_client_stage,
   upsert_crm_client,
 } from "../../src/crm/crm_repository.js";
+import { update_task_assignee } from "../../src/admin/admin_tasks_service.js";
 import { parse_lead_fields } from "../../src/crm/lead_text_parser.js";
 import { create_test_pool } from "../helpers/test_pool.js";
 
@@ -329,6 +333,64 @@ describe("CRM clients (prospectos y clientes)", () => {
     expect(detail.text).toContain("yoayudo:crm-height");
 
     await request(app).get("/inspector/crm/00000000-0000-0000-0000-000000000000").expect(404);
+  });
+
+  it("groups the CRM view into 4 base stages and folds custom stages under Interesado", async () => {
+    const { account_id, organization_id } = await load_context(pool);
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "A", phone: "5210000001", status: "nuevo" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "B", phone: "5210000002", status: "interesado" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "C", phone: "5210000003", status: "cerrado_ganado" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "D", phone: "5210000004", status: "demo_agendada" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "E", phone: "5210000005", status: "demo_agendada" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "F", phone: "5210000006", status: "negociacion" });
+
+    const view = await get_account_crm_view(pool, account_id);
+    const cols = Object.fromEntries(view.columns.map((c) => [c.key, c]));
+
+    // Exactamente 4 columnas base, en orden.
+    expect(view.columns.map((c) => c.key)).toEqual(["nuevo", "interesado", "ganado", "perdido"]);
+    expect(cols.nuevo.clients).toHaveLength(1);
+    expect(cols.ganado.clients).toHaveLength(1); // alias cerrado_ganado → ganado
+    expect(cols.perdido.clients).toHaveLength(0); // vacía pero presente
+
+    // Interesado: 1 base + 3 custom; el dropdown lista las 2 categorías custom.
+    expect(cols.interesado.clients).toHaveLength(4);
+    expect(cols.interesado.custom_categories.map((c) => c.key)).toEqual(["demo_agendada", "negociacion"]);
+    const demo = cols.interesado.custom_categories.find((c) => c.key === "demo_agendada");
+    expect(demo.count).toBe(2);
+    expect(demo.label).toBe("Demo agendada");
+  });
+
+  it("moves a prospect to a base stage (kanban drop) and rejects invalid stages / cross-account", async () => {
+    const { account_id, organization_id } = await load_context(pool);
+    const client = await upsert_crm_client(pool, { account_id, organization_id, display_name: "Mover", phone: "5219990001", status: "nuevo" });
+
+    const ok = await update_crm_client_stage(pool, { client_id: client.id, account_id, stage: "ganado" });
+    expect(ok.ok).toBe(true);
+    expect((await get_crm_client(pool, client.id)).pipeline_status).toBe("ganado");
+
+    expect((await update_crm_client_stage(pool, { client_id: client.id, account_id, stage: "inventado" })).error).toBe("invalid_stage");
+    expect((await update_crm_client_stage(pool, { client_id: client.id, account_id: "00000000-0000-0000-0000-000000000000", stage: "perdido" })).error).toBe("not_found");
+  });
+
+  it("assigns and clears a task responsable, logging it in the bitácora", async () => {
+    const { account_id, organization_id } = await load_context(pool);
+    const task = (
+      await pool.query(
+        "INSERT INTO internal_tasks (account_id, organization_id, titulo, status) VALUES ($1, $2, 'Seguir prospecto', 'pendiente') RETURNING id",
+        [account_id, organization_id],
+      )
+    ).rows[0];
+
+    const assigned = await update_task_assignee(pool, { task_id: task.id, assigned_to: "Ana", account_id });
+    expect(assigned.assigned_to).toBe("Ana");
+    expect((await pool.query("SELECT assigned_to FROM internal_tasks WHERE id = $1", [task.id])).rows[0].assigned_to).toBe("Ana");
+    const updates = await pool.query("SELECT note FROM task_updates WHERE task_id = $1", [task.id]);
+    expect(updates.rows.some((u) => /Asignada a Ana/.test(u.note || ""))).toBe(true);
+
+    const cleared = await update_task_assignee(pool, { task_id: task.id, assigned_to: "", account_id });
+    expect(cleared.assigned_to).toBeNull();
+    expect((await update_task_assignee(pool, { task_id: task.id, assigned_to: "X", account_id: "00000000-0000-0000-0000-000000000000" })).error).toBe("task_not_found");
   });
 
   it("parses lead identifiers from free text without leaking the CURP digits into the phone", () => {

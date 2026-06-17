@@ -2,14 +2,18 @@ extends ../layout
 
 block content
   -
+    // Fecha compacta y legible (la verbosa "13/6/2026, 11:06:00 a.m." sobraba).
     const when = (value) => {
-      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+      try { return value ? new Date(value).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : "—"; } catch (error) { return "—"; }
     };
     const status_options = [
       { value: "pendiente", label: "Pendiente" },
       { value: "en_progreso", label: "En progreso" },
       { value: "hecha", label: "Hecha" },
+      { value: "cancelada", label: "Cancelada" },
     ];
+    const chat_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V7a2 2 0 0 1 2-2z"/></svg>';
+    const check_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
     // base_path/scoped permiten reusar esta vista a nivel admin (global) y a nivel
     // cuenta (módulo de tareas de un negocio). Sin scope = admin.
     const base = (typeof base_path !== "undefined" && base_path) ? base_path : "/admin/tasks";
@@ -24,19 +28,6 @@ block content
       const qs = params.toString();
       return `${base}${qs ? `?${qs}` : ""}`;
     })();
-
-  //- Estado de la tarea como control segmentado: el actual resaltado, los otros
-  //- dos son clicks que avanzan el follow-up. Vuelve a la vista filtrada actual.
-  mixin task_status_toggle(task)
-    .status-toggle(role="group", aria-label=`Estado de ${task.titulo}`)
-      each option in status_options
-        if option.value === task.status
-          span.status-toggle-option.is-current(class=`is-${option.value}`, aria-current="true")= option.label
-        else
-          form.status-toggle-form(method="post", action=`${base}/${task.id}/status`)
-            input(type="hidden", name="status", value=option.value)
-            input(type="hidden", name="return_to", value=current_query)
-            button.status-toggle-option(type="submit", title=`Marcar como ${option.label.toLowerCase()}`)= option.label
 
   if account_scoped
     +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: business_name, href: `/dashboard/business/${business_id}` }, { label: account_name, href: `/dashboard/accounts/${account_id}` }, { label: "Tareas" }])
@@ -92,7 +83,7 @@ block content
     h2 Tareas
     if tasks && tasks.length
       .table-wrap
-        table.activity-table
+        table.activity-table.tasks-table
           thead
             tr
               th Tarea
@@ -102,7 +93,6 @@ block content
               th Bot
               th Estado
               th Responsable
-              th Vence
               th Creada
               th
           tbody
@@ -110,20 +100,28 @@ block content
               tr
                 td
                   strong= task.titulo
-                  if task.descripcion
-                    div.meta= task.descripcion
                   div.meta.task-origin= task.origin
                 td.meta= task.contact_name || task.contact_phone || "—"
                 if !account_scoped
                   td.meta= task.account_name ? `${task.organization_name || ""} · ${task.account_name}` : "—"
                 td.meta= task.bot_name || "—"
                 td
-                  +task_status_toggle(task)
-                td.meta= task.assigned_to || "Sin asignar"
-                td.meta= when(task.due_at)
-                td.meta= when(task.created_at)
+                  form.task-status(method="post", action=`${base}/${task.id}/status`)
+                    input(type="hidden", name="return_to", value=current_query)
+                    select.task-status__select(name="status", aria-label=`Estado de ${task.titulo}`)
+                      each option in status_options
+                        option(value=option.value, selected=option.value === task.status)= option.label
                 td
-                  button.button.secondary-button(type="button", data-open-task=task.id) Ver tarea
+                  form.task-assign(method="post", action=`${base}/${task.id}/assign`)
+                    input(type="hidden", name="return_to", value=current_query)
+                    input.task-assign__input(type="text", name="assigned_to", value=task.assigned_to || "", placeholder="Asignar a…", aria-label=`Responsable de ${task.titulo}`)
+                    button.icon-button.task-assign__save(type="submit", title="Guardar responsable", aria-label="Guardar responsable")!= check_svg
+                td.meta.task-created= when(task.created_at)
+                td
+                  .task-row-actions
+                    if task.conversation_id
+                      button.icon-button(type="button", data-open-conv=`/inspector/accounts/${task.account_id}/conversations/${task.conversation_id}`, title="Ver conversación que originó la tarea", aria-label="Ver conversación que originó la tarea")!= chat_svg
+                    button.button.secondary-button(type="button", data-open-task=task.id) Ver tarea
     else if filters_active
       .empty Sin tareas que coincidan con los filtros.
     else
@@ -139,6 +137,16 @@ block content
         button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
       .popup__body.popup__body--taskframe
         iframe#task_detail_frame(title="Detalle de la tarea")
+
+  //- Conversación que originó la tarea, en popup (la página real en un iframe).
+  #conv_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-conv-popup)
+    .popup.popup--full.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Conversación
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body.popup__body--frame
+        iframe#conv_frame(title="Conversación que originó la tarea")
 
   script
     include ../../public/js/core/Popup.js
@@ -156,6 +164,11 @@ block content
         });
       }
 
+      // El estado se cambia con el dropdown de la fila: al elegir, postea solo.
+      document.addEventListener("change", (event) => {
+        if (event.target.matches(".task-status__select")) event.target.form.submit();
+      });
+
       // Popup de detalle: carga {base}/:id en el iframe; al cerrar recarga la
       // bandeja para reflejar estado/responsable actualizados.
       const overlay = document.querySelector("[data-task-popup]");
@@ -164,8 +177,6 @@ block content
       taskPopup?.iniciar();
       const frame = document.getElementById("task_detail_frame");
       let opened = false;
-      // El iframe del detalle nos dice su altura real para ajustarse al contenido
-      // (sin dead space) y solo scrollear si excede el viewport.
       window.addEventListener("message", (event) => {
         if (event.data?.type !== "yoayudo:task-height" || !frame) return;
         const max = Math.round(window.innerHeight * 0.82) - 64;
@@ -185,5 +196,16 @@ block content
       });
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && opened && overlay && !overlay.hidden) reloadIfChanged();
+      });
+
+      // Popup de la conversación que originó la tarea (solo lectura → sin recarga).
+      const convFrame = document.getElementById("conv_frame");
+      const convPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-conv-popup]" }) : null;
+      convPopup?.iniciar();
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-open-conv]");
+        if (!trigger || !convPopup || !convFrame) return;
+        convFrame.src = trigger.dataset.openConv;
+        convPopup.open();
       });
     })();

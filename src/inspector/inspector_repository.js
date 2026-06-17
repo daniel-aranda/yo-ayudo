@@ -85,7 +85,7 @@ export const available_agent_interactions = [
     label: "Buscar negocios",
     description: "Permite que el agente busque negocios reales con proveedores externos (Google Places y otros).",
     instructions_placeholder:
-      "Describe cuándo y cómo prospectar: el giro y la ciudad/zona donde buscar (o pídela si no la dan en el mensaje), cómo elegir las mejores opciones (presenta el top 3), y que al elegir a cuál llamar o visitar se guarde como prospecto (Guardar prospecto o cliente) y se cree una tarea de seguimiento. Excluye los ya contactados.",
+      "Describe cuándo y cómo prospectar: el giro y la ciudad/zona donde buscar (o pídela si no la dan en el mensaje), cómo elegir las mejores opciones (presenta el top 3 en lista, una por línea), y que al elegir a cuál llamar o visitar se guarde como prospecto (Guardar prospecto o cliente) y se cree una tarea de seguimiento. Excluye los ya contactados.",
     action_id: "buscar_negocios",
     settings_schema: [
       { key: "max_results", label: "Máx. resultados por búsqueda", placeholder: "10" },

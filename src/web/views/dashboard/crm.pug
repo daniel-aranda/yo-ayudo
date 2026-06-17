@@ -1,0 +1,156 @@
+extends ../layout
+
+block content
+  -
+    const key_type_labels = { curp: "CURP", phone: "Teléfono", instagram: "Instagram", email: "Email", internal: "ID interno" };
+    const persona_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.2-5.5 7-5.5s7 1.9 7 5.5"/></svg>';
+    const iniciales = (client) => {
+      const name = String(client.display_name || "").trim();
+      if (!name) return null;
+      return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || null;
+    };
+    const total = totals.total || 0;
+
+  +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.organization_name, href: `/dashboard/business/${account.organization_id}` }, { label: account.account_name, href: `/dashboard/accounts/${account_id}` }, { label: "Prospectos" }])
+
+  section.page-header
+    p.page-eyebrow= `Cuenta · Negocio: ${account.organization_name}`
+    h1 Prospectos y clientes
+    p Tu CRM: cada prospecto o cliente que el bot guardó, organizado por etapa.
+
+  .metrics
+    article.metric
+      span.label Total
+      strong= total
+    article.metric
+      span.label Prospectos
+      strong= totals.prospectos || 0
+    article.metric
+      span.label Clientes
+      strong= totals.clientes || 0
+
+  if total
+    //- Tablero de 4 etapas base, con **drag & drop**: arrastra una tarjeta a otra
+    //- columna y se guarda su etapa (`pipeline_status`). Las categorías custom NO
+    //- son columnas: viven dentro de "Interesado" con un dropdown para filtrarlas
+    //- (solo aparece si la cuenta tiene custom). Click en la tarjeta → detalle.
+    p.crm-hint Arrastra una tarjeta a otra columna para cambiar su etapa.
+    .crm-board(data-account-id=account_id)
+      each column in columns
+        - const customs = column.custom_categories || []
+        section.crm-col(data-stage=column.key)
+          header.crm-col__head
+            span.crm-col__label= column.label
+            span.crm-col__count= column.clients.length
+          if customs.length
+            label.crm-col__filter
+              span.crm-col__filter-label Categoría
+              select.crm-col__select(data-crm-filter=column.key, aria-label=`Filtrar ${column.label} por categoría`)
+                option(value="") Ver todos
+                each cat in customs
+                  option(value=cat.key)= `${cat.label} (${cat.count})`
+          ul.crm-col__list(data-crm-list=column.key)
+            each client in column.clients
+              li(data-subcat=client.sub_category || "")
+                a.crm-card(href=`/dashboard/accounts/${account_id}/crm/${client.id}`, draggable="true", data-client-id=client.id)
+                  span.crm-card__avatar(aria-hidden="true")
+                    - const ini = iniciales(client)
+                    if ini
+                      = ini
+                    else
+                      != persona_svg
+                  .crm-card__body
+                    .crm-card__top
+                      span.crm-card__name= client.display_name || client.client_key || "Sin nombre"
+                      if client.kind === "cliente"
+                        span.crm-card__tag Cliente
+                    if client.sub_category_label
+                      span.crm-card__subcat= client.sub_category_label
+                    span.crm-card__meta= `${key_type_labels[client.client_key_type] || "Clave"}: ${client.client_key || "—"}`
+                    if client.source
+                      span.crm-card__source= client.source
+          p.crm-col__empty(hidden=column.clients.length > 0) Sin registros en esta etapa.
+  else
+    .bandeja-vacia
+      p.bandeja-vacia__titulo Aún no hay prospectos
+      p.bandeja-vacia__sub Cuando el bot guarde un prospecto o cliente (al capturar un lead o prospectar), aparecerá aquí por etapa.
+
+  script.
+    (() => {
+      // Dropdown de categorías custom (dentro de Interesado): filtra las tarjetas
+      // de esa columna por sub-categoría sin recargar.
+      document.querySelectorAll("[data-crm-filter]").forEach((select) => {
+        const list = document.querySelector(`[data-crm-list="${select.getAttribute("data-crm-filter")}"]`);
+        if (!list) return;
+        select.addEventListener("change", () => {
+          const value = select.value;
+          list.querySelectorAll("li").forEach((item) => {
+            item.hidden = value ? item.getAttribute("data-subcat") !== value : false;
+          });
+        });
+      });
+
+      // Drag & drop entre columnas: mueve la tarjeta y persiste la etapa (optimista;
+      // si el POST falla, recarga para volver a la verdad del server).
+      const board = document.querySelector(".crm-board");
+      if (!board) return;
+      const accountId = board.dataset.accountId;
+      let dragged = null;
+
+      const recount = () => board.querySelectorAll(".crm-col").forEach((col) => {
+        const n = col.querySelectorAll(".crm-card").length;
+        const count = col.querySelector(".crm-col__count");
+        if (count) count.textContent = String(n);
+        const empty = col.querySelector(".crm-col__empty");
+        if (empty) empty.hidden = n > 0;
+      });
+
+      board.querySelectorAll(".crm-card").forEach((card) => {
+        card.addEventListener("dragstart", (event) => {
+          dragged = card;
+          card.classList.add("is-dragging");
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", card.dataset.clientId || "");
+        });
+        card.addEventListener("dragend", () => {
+          card.classList.remove("is-dragging");
+          board.querySelectorAll(".crm-col.is-drop-target").forEach((c) => c.classList.remove("is-drop-target"));
+          dragged = null;
+        });
+      });
+
+      board.querySelectorAll(".crm-col").forEach((col) => {
+        col.addEventListener("dragover", (event) => {
+          if (!dragged) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          col.classList.add("is-drop-target");
+        });
+        col.addEventListener("dragleave", (event) => {
+          if (!col.contains(event.relatedTarget)) col.classList.remove("is-drop-target");
+        });
+        col.addEventListener("drop", async (event) => {
+          event.preventDefault();
+          col.classList.remove("is-drop-target");
+          if (!dragged || dragged.closest(".crm-col") === col) return;
+          const card = dragged;
+          const item = card.closest("li");
+          const list = col.querySelector(".crm-col__list");
+          // Mover a una etapa base: limpia la sub-categoría custom.
+          item.removeAttribute("data-subcat");
+          card.querySelector(".crm-card__subcat")?.remove();
+          list.appendChild(item);
+          recount();
+          try {
+            const res = await fetch(`/dashboard/accounts/${accountId}/crm/${card.dataset.clientId}/stage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ stage: col.dataset.stage }),
+            });
+            if (!res.ok) throw new Error("stage update failed");
+          } catch (error) {
+            window.location.reload();
+          }
+        });
+      });
+    })();

@@ -711,6 +711,313 @@ button:active {
   margin: 0;
 }
 
+/* ===== Tablero CRM por etapa (dashboard/crm.pug) — columnas = etapas =====
+   Lectura (click → detalle); base del futuro kanban (mismo agrupado por etapa). */
+.crm-board {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.crm-col {
+  background: var(--surface-strong);
+  border-radius: 0.75rem;
+  display: flex;
+  flex: 0 0 17rem;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+}
+
+.crm-col__head {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.crm-col__label {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.crm-col__count {
+  background: var(--surface);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  padding: 0.05rem 0.45rem;
+}
+
+.crm-col__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.crm-col__empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0;
+  padding: 0.15rem;
+}
+
+/* Drag & drop del tablero CRM. */
+.crm-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0 0 0.6rem;
+}
+
+.crm-card {
+  cursor: grab;
+}
+
+.crm-card.is-dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
+
+.crm-col.is-drop-target {
+  background: var(--accent-soft);
+  outline: 2px dashed var(--accent);
+  outline-offset: -3px;
+}
+
+/* Detalle del prospecto: botón "Ver conversación" + select de etapa editable. */
+.crm-detail-conv {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.crm-detail-conv .ui-icon {
+  height: 1rem;
+  width: 1rem;
+}
+
+.task-modal-conv-empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0;
+}
+
+.crm-stage-select {
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  font-size: 0.82rem;
+  padding: 0.2rem 0.4rem;
+  max-width: 100%;
+}
+
+.crm-stage-select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.crm-card {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: inherit;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.crm-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.crm-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.crm-card__avatar {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-dark);
+  display: inline-flex;
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.crm-card__avatar .ui-icon {
+  height: 1rem;
+  width: 1rem;
+}
+
+.crm-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.crm-card__top {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.crm-card__name {
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-card__tag {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-dark);
+  flex: none;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.05rem 0.4rem;
+}
+
+.crm-card__meta {
+  color: var(--muted);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-card__source {
+  color: var(--muted);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dropdown de categorías custom (dentro de la columna Interesado). */
+.crm-col__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.crm-col__filter-label {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.crm-col__select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  width: 100%;
+}
+
+.crm-col__select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+/* Sub-categoría custom: en su propia línea (no compite con el nombre por ancho). */
+.crm-card__subcat {
+  align-self: flex-start;
+  background: var(--sky-bg);
+  border-radius: 999px;
+  color: var(--sky-ink);
+  font-size: 0.62rem;
+  font-weight: 700;
+  margin-top: 0.05rem;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.05rem 0.4rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Bandeja de tareas: fila compacta (estado dropdown + asignar inline) ===== */
+.tasks-table td {
+  vertical-align: top;
+}
+
+.task-status__select {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  max-width: 9.5rem;
+  padding: 0.3rem 0.5rem;
+  width: 100%;
+}
+
+.task-status__select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.task-assign {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.task-assign__input {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  max-width: 8.5rem;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+}
+
+.task-assign__input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.task-assign__save {
+  flex: none;
+}
+
+.task-created {
+  white-space: nowrap;
+}
+
+.task-row-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
 /* Mobile: el lado derecho baja bajo el cuerpo, en fila y alineado a la izquierda. */
 @media (max-width: 40rem) {
   .conversacion-card {
@@ -2005,6 +2312,14 @@ td input {
   gap: 12px;
 }
 
+/* El input de búsqueda crece para llenar el espacio del panel (con tope), en vez
+   de quedar angosto al ancho por defecto. */
+.filters input {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 42rem;
+}
+
 .inspector-layout {
   align-items: start;
   display: grid;
@@ -2802,6 +3117,9 @@ html.is-framed .topbar {
 .msg-text {
   line-height: 1.5;
   margin: 0;
+  /* Preserva los saltos de línea del mensaje (listas, viñetas) como en WhatsApp,
+     sin colapsarlos en un párrafo corrido. */
+  white-space: pre-wrap;
 }
 
 /* The action label(s) the agent fired, connected to the user message above with
@@ -3421,6 +3739,11 @@ button.status-toggle-option:hover {
   color: var(--accent-dark);
 }
 
+.status-toggle-option.is-current.is-cancelada {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
 /* Origen de la tarea (Interacción del bot / Capability gap) en la bandeja. */
 .task-origin {
   font-size: 0.75rem;
@@ -3500,6 +3823,11 @@ button.status-toggle-option:hover {
 .task-pill.is-hecha {
   background: var(--accent-soft);
   color: var(--accent-dark);
+}
+
+.task-pill.is-cancelada {
+  background: var(--surface-strong);
+  color: var(--muted);
 }
 
 /* Lista de conversaciones del inspector: Contacto con más aire y las
