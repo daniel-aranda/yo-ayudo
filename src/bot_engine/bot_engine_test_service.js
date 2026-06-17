@@ -1,6 +1,7 @@
 import { action_execution_service } from "../actions/action_execution_service.js";
 import { get_action } from "../actions/action_registry.js";
 import { create_model_provider } from "../ai/provider_factory.js";
+import { parse_lead_fields } from "../crm/lead_text_parser.js";
 import { bot_configuration_service } from "./bot_configuration_service.js";
 import { prompt_compiler } from "./prompt_compiler.js";
 
@@ -66,6 +67,26 @@ function infer_action_requests_from_message(message) {
       input_json: {
         contexto: { mensaje: text },
         formato: "bullets",
+      },
+    });
+  }
+
+  // Note: substring match, so avoid keywords that live inside other words
+  // ("prospecta" ⊂ "prospectar" — a search verb, not a CRM save).
+  if (
+    includes_any(text, ["prospecto", "nuevo cliente", "nueva clienta", "lead", "curp", "registra al", "registra a ", "guarda el contacto", "guardar contacto"])
+  ) {
+    const fields = parse_lead_fields(text);
+    requests.push({
+      action_id: "crear_contacto",
+      input_json: {
+        nombre: fields.display_name ?? undefined,
+        curp: fields.curp ?? undefined,
+        telefono: fields.phone ?? undefined,
+        instagram: fields.instagram ?? undefined,
+        email: fields.email ?? undefined,
+        kind: includes_any(text, ["nuevo cliente", "nueva clienta", "ya es cliente", "es cliente"]) ? "cliente" : "prospecto",
+        nota: text,
       },
     });
   }

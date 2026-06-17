@@ -49,7 +49,7 @@ Datos demo esperados:
 - Organization: `YoAyudo Demo`
 - Account: `YoAyudo Ventas`
 - Bot configurable: `agente-whatsapp-yoayudo`
-- Actions reales habilitadas: `buscar_negocios`, `guardar_nota`, `crear_tarea`, `generar_resumen`
+- Actions reales habilitadas: `buscar_negocios`, `crear_contacto` (CRM), `guardar_nota`, `crear_tarea`, `generar_resumen`
 - Actions futuras/stub visibles pero no productivas: `programar_llamada`, `llamar_y_conectar`, `extraer_datos_de_imagen`, `enviar_email`
 
 ## Prueba Rápida Por Script

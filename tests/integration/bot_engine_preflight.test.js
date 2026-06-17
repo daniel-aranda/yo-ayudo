@@ -89,10 +89,11 @@ describe("bot engine founder preflight", () => {
 
     expect(test_response.body.result.prompt_compilation_id).toBeTruthy();
     expect(test_response.body.result.action_requests.map((action) => action.action_id)).toEqual(
-      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen", "programar_llamada"]),
+      expect.arrayContaining(["crear_contacto", "guardar_nota", "crear_tarea", "generar_resumen", "programar_llamada"]),
     );
+    // "Registra este prospecto" now also captures the prospect in the CRM.
     expect(test_response.body.result.actions_ejecutadas.map((action) => action.action_id)).toEqual(
-      expect.arrayContaining(["guardar_nota", "crear_tarea", "generar_resumen"]),
+      expect.arrayContaining(["crear_contacto", "guardar_nota", "crear_tarea", "generar_resumen"]),
     );
     expect(test_response.body.result.actions_ejecutadas.find((action) => action.action_id === "generar_resumen").output.resumen)
       .toContain("Clínica Dental Sonrisa");
@@ -106,7 +107,9 @@ describe("bot engine founder preflight", () => {
 
     expect(notes.rows).toHaveLength(1);
     expect(tasks.rows).toHaveLength(1);
-    expect(audit_logs.body.logs.filter((log) => log.status === "executed")).toHaveLength(3);
+    // guardar_nota + crear_tarea + generar_resumen + crear_contacto.
+    expect(audit_logs.body.logs.filter((log) => log.status === "executed")).toHaveLength(4);
+    expect(audit_logs.body.logs.some((log) => log.action_id === "crear_contacto" && log.status === "executed")).toBe(true);
     expect(audit_logs.body.logs.some((log) => log.action_id === "programar_llamada" && log.status === "blocked")).toBe(true);
   });
 
@@ -243,7 +246,7 @@ describe("bot engine founder preflight", () => {
       .send({ enabled: true })
       .expect(200);
     await request(app)
-      .post(`/internal/bots/${bot.id}/actions/crear_contacto`)
+      .post(`/internal/bots/${bot.id}/actions/crear_recordatorio`)
       .send({ enabled: true })
       .expect(200);
 
@@ -300,8 +303,8 @@ describe("bot engine founder preflight", () => {
         modo_test: true,
         action_requests: [
           {
-            action_id: "crear_contacto",
-            input_json: { nombre: "Prospecto Demo", telefono: "555" },
+            action_id: "crear_recordatorio",
+            input_json: { titulo: "Recordatorio demo", fecha: "2026-07-01" },
           },
         ],
       })

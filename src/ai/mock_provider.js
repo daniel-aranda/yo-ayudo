@@ -1,3 +1,5 @@
+import { parse_lead_fields } from "../crm/lead_text_parser.js";
+
 function normalize_text(text) {
   return text
     .trim()
@@ -109,6 +111,14 @@ export class mock_provider {
       { intent: "daily_note", confidence: 0.86, pattern: /sobro|sobrante|falto|faltante|merma|nota/, reason: "daily note keyword" },
       { intent: "daily_close", confidence: 0.94, pattern: /cerramos|cierre|cerrar dia/, reason: "daily close keyword" },
       { intent: "report_request", confidence: 0.9, pattern: /reporte|resumen|como vamos|como salio/, reason: "report keyword" },
+      // CRM lead/prospect capture. Keywords are deliberately CRM-specific (not a
+      // bare "registra"/"cliente") so they don't steal operational messages.
+      {
+        intent: "lead_capture",
+        confidence: 0.9,
+        pattern: /\bprospecto\b|\bprospecta\b|nuevo cliente|nueva clienta|\blead\b|\bcurp\b|dar de alta|registra(?:r)?\s+a(?:l)?\s|guarda(?:r)?\s+(?:el|al)\s+contacto/,
+        reason: "crm lead keyword",
+      },
       { intent: "human_help", confidence: 0.92, pattern: /ayuda|humano|persona|soporte/, reason: "human help keyword" },
     ];
 
@@ -303,6 +313,31 @@ export class mock_provider {
       confidence: 0.84,
       needs_review: false,
       missing_fields: [],
+    };
+  }
+
+  async extract_lead_capture(input) {
+    const fields = parse_lead_fields(input.text);
+    const has_identifier = Boolean(
+      fields.curp || fields.phone || fields.instagram || fields.email || fields.display_name,
+    );
+    const kind = /\bcliente\b|\bclienta\b/.test(normalize_text(input.text)) ? "cliente" : "prospecto";
+
+    return {
+      intent: "lead_capture",
+      data: {
+        display_name: fields.display_name ?? undefined,
+        curp: fields.curp ?? undefined,
+        phone: fields.phone ?? undefined,
+        instagram: fields.instagram ?? undefined,
+        email: fields.email ?? undefined,
+        kind,
+        source: "whatsapp",
+        free_comment: input.text,
+      },
+      confidence: has_identifier ? 0.9 : 0.4,
+      needs_review: !has_identifier,
+      missing_fields: has_identifier ? [] : ["identificador"],
     };
   }
 

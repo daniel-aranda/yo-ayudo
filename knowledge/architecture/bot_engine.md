@@ -71,6 +71,8 @@ El inbound corre por `execute_action` (auditado) y soporta **multi-ejecucion** (
 
 Ejemplo: "abrimos con 1500, vendimos 3200 y compre 5 kg pastor por 600" -> `registrar_inicio_dia` + `registrar_venta` + `registrar_compra` (3 interacciones, una respuesta combinada). Un mensaje de una sola operacion produce un segmento = texto completo, identico al comportamiento anterior.
 
+El mismo pipeline cubre **CRM**: el intent `lead_capture` (`INTENT_TO_OPERATION_ACTION.lead_capture = crear_contacto`) guarda un prospecto/cliente desde un WhatsApp/IG (p. ej. "registra al prospecto Juan, su CURP es ..."). Detalle en `architecture/crm.md`.
+
 Hecho: el inbound ya selecciona intenciones/acciones por AI (opt-in por bot, fallback deterministico). Pendiente: usar el **Prompt Compiler completo** en el inbound (hoy solo `test_message` compila prompt) y extraccion de campos por AI (hoy determinista).
 
 ### Como se deciden las acciones (en `test_message`)

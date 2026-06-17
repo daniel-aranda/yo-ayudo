@@ -56,7 +56,8 @@ La direccion actual es Bot Engine configurable:
 - `prompt_compiler` para prompt final auditable.
 - Action Registry en codigo.
 - Action Executor con validacion de schema, permiso por bot, riesgo, confirmacion, audit log y guardrails.
-- Actions con handler real: `buscar_negocios` (prospeccion via Google Places), `guardar_nota`, `crear_tarea`, `generar_resumen`. El resto del registry son stubs `stub_*` de roadmap.
+- Actions con handler real: `buscar_negocios` (prospeccion via Google Places), `crear_contacto` (CRM), `guardar_nota`, `crear_tarea`, `generar_resumen`. El resto del registry son stubs `stub_*` de roadmap.
+- **CRM (prospectos/clientes)**: `crear_contacto` es accion real de upsert con resolucion de identidad. Tabla `crm_clients` (migracion `0018`) con id interno estable + identificadores (`curp`/`phone`/`instagram`/`email`) y clave de negocio derivada (`client_key`/`client_key_type`) por prioridad CURP > telefono > instagram > email > id. Repo `src/crm/crm_repository.js` (dedupe en JS), parser compartido `src/crm/lead_text_parser.js`. Captura por inbound con el intent `lead_capture` (mock `classify_intents`/`extract_lead_capture`, `INTENT_TO_OPERATION_ACTION.lead_capture = crear_contacto`); si falta telefono lo hereda del remitente y enlaza el contacto/conversacion. Interaccion "Guardar prospecto o cliente" en el editor (icono `id_card`) y panel "Valor capturado" del visor de conversacion (`value_summary.crm`) con **filas clickeables** + chip de turno **"Ver prospecto"** que abren el detalle en popup iframe (`GET /inspector/crm/:client_id` → `crm_client_detail.pug`, mismo patron que "Ver tarea"). La instrucción de la interacción indica **pedir el nombre completo** si detecta un prospecto y no lo conoce (guarda igual con `display_name` null; un guardado posterior con el nombre actualiza el mismo registro). Seeds: bot comercial y de prospectos la traen habilitada + conversaciones demo dev-only `seed_crm_demo_conversation` (operador registra prospecto), `seed_inbound_lead_conversation` (el **lead es el remitente**, llega por campaña preguntando, el bot lo captura y deja tarea), `seed_lead_without_name_conversation` (el lead llega **sin nombre**, el bot lo pregunta y al recibirlo actualiza el mismo prospecto) y `seed_prospeccion_venta_conversation` (**prospección para vender YoAyudo**: un vendedor pide prospectos por zona, el bot propone 3 con `buscar_negocios` y al elegir guarda ese negocio como prospecto con `crear_contacto` + tarea). Ver `architecture/crm.md`.
 - Capacidades unificadas como interacciones: el editor ya no tiene una lista separada de "Acciones del bot". Todo se configura como interacciones con prompt; las ejecutables llevan `action_id` y de ahi se deriva `acciones_habilitadas_json`. El prompt compiler inyecta el prompt de cada interaccion en "# Acciones disponibles".
 - Multi-ejecucion en el inbound real: un mensaje de WhatsApp puede disparar varias interacciones. `classify_intents` detecta multiples categorias de operacion y segmenta el texto; `route_and_dispatch_operations` (en `message_processor.js`) ejecuta cada una via `execute_action` (auditada) y `build_multi_reply` combina la respuesta. Mensajes de una sola operacion se comportan igual que antes. Ver `architecture/bot_engine.md`.
 - Clasificacion de intenciones por AI en el inbound, **on por default para todos los bots** (no opt-in; el selector de Modelo IA ya implica AI): `openai_provider.classify_intents` (override) llama al modelo para multi-intent de lenguaje libre. `message_processor` siempre pide AI; el provider decide capacidad (OpenAI con key → AI; mock o sin key → keywords). En error de AI degrada a deterministico y registra el fallo en `ai_calls`. `use_ai_classification` es control interno AI/fallback (el reintento lo pone en false), no config de bot. Extraccion de campos sigue determinista.
@@ -89,7 +90,7 @@ La direccion actual es Bot Engine configurable:
 - Interaction settings (capa system-level, migracion `0013`, tabla `interaction_settings`, `src/interactions/interaction_settings_repository.js`): habilitar/deshabilitar una interaccion a nivel plataforma y configurar su proveedor (ej. `responder_voz` -> modelo/voz de ElevenLabs). El `action_execution_service` **bloquea** (con guardrail `interaccion_deshabilitada`) cualquier accion cuya interaccion este deshabilitada, sin importar la config por bot; la config fluye al handler (`context.interaction_config`). Es la tercera capa: catalogo estatico (codigo) -> settings system-level -> config por bot (`definition_json.interactions`).
 - Dashboard server-rendered. El panel operativo de cuenta es capability-driven (deriva en vivo de `acciones_habilitadas_json` de los bots; sin cache), single-day scoped (todo el panel y la tabla de compras al mismo `business_day_id`) y state-driven (sin cards $0: "Caja final" solo si cerrado, desglose solo si hay datos). Ver `architecture/frontend.md`.
 - Review queue.
-- Tests unitarios e integracion del pipeline, router, memory, inspector, auth, clasificacion por AI, guardrails admin, auto-aprendizaje y Bot Engine comercial. **137 tests / 29 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/review_queue.test.js` (scope + auto-learn) y, en `operational_dashboard.test.js`, el scope account-only del top nav y el redirect legacy `/dashboard/business/:b/accounts/:a[/...]` → `/dashboard/accounts/:a`.
+- Tests unitarios e integracion del pipeline, router, memory, inspector, auth, clasificacion por AI, guardrails admin, auto-aprendizaje y Bot Engine comercial. **149 tests / 30 archivos, todos verdes** (Vitest sobre pg-mem). Incluye `tests/integration/crm_clients.test.js` (identidad/clave de negocio, dedupe cross-canal, ciclo lead→cliente, captura sin nombre→completar nombre, ejecución por test-message e inbound, guardrail, value_summary, chip "Ver prospecto" y render del detalle CRM). Incluye `tests/integration/review_queue.test.js` (scope + auto-learn) y, en `operational_dashboard.test.js`, el scope account-only del top nav y el redirect legacy `/dashboard/business/:b/accounts/:a[/...]` → `/dashboard/accounts/:a`.
 
 ## Migraciones
 
@@ -104,6 +105,8 @@ Migraciones SQL explicitas aplicadas en orden por `npm run db:migrate` (registra
 - `0014_instagram_channels.sql`: Instagram como canal de primera clase, espejo de WhatsApp — `instagram_accounts` (org/account, `external_account_id` UNIQUE, `username`) + `instagram_account_bot_assignments` (bot↔cuenta, `UNIQUE(instagram_account_id, active_key)`). Repo `src/channels/instagram/instagram_account_repository.js` (`upsert_instagram_account`, `assign_bot_to_instagram_account`). El bot semilla principal queda asignado a una cuenta IG (`@yoayudo.ventas`); la pestaña Canales lo edita/guarda igual que WhatsApp (`sync_instagram_channel_from_body`).
 - `0015_agent_runs_routing_columns.sql`: re-aplica idempotente (`ADD COLUMN IF NOT EXISTS`) las columnas de decisión de ruteo en `agent_runs` (`selected_agent_*`, `routing_reason`, `routing_confidence`, `routing_candidates_json`, `used_context_summary_json`, `handoff_*`). Están en `0001` vía ALTER, pero DBs que aplicaron un `0001` viejo (antes de esas columnas) nunca las recibieron y no re-corren `0001`; sin ellas `create_agent_run` falla. Brinca DBs frescas/pg-mem (ya las tienen).
 - `0016_users_auth.sql`: login en la tabla `users` legacy — agrega `organization_id` (FK a organizations), `password_hash` (scrypt, formato `scrypt:salt:hash`) e `is_platform_owner`. La unicidad de email se valida en `src/auth/user_repository.js` (emails normalizados a minúsculas), no en DB.
+- `0017_task_activity.sql`: `internal_tasks.assigned_to` + tabla `task_updates` (seguimiento de tareas: quién atendió y qué pasó).
+- `0018_crm_clients.sql`: tabla `crm_clients` para CRM (prospectos/clientes). Id interno estable + identificadores (`curp`/`phone`/`instagram`/`email`), clave de negocio derivada (`client_key`/`client_key_type`), `kind`/`pipeline_status` y links opcionales a contact/bot/conversation. Indices por identificador para resolucion; dedupe en JS (sin unicos parciales, pg-mem-safe). Ver `architecture/crm.md`.
 
 El modelo de datos ya no tiene `tenant` ni `branch`: organization (negocio) -> account (cuenta) -> bot.
 
@@ -137,6 +140,7 @@ Dashboard/review/inspector:
 - `GET /inspector/bots/:bot_id/conversations`
 - `GET /inspector/accounts/:account_id/conversations/:conversation_id` (visor scopeado a la cuenta; la URL plana `GET /inspector/conversations/:conversation_id` redirige a la canónica)
 - `GET /inspector/messages/:message_id`
+- `GET /inspector/crm/:client_id` (detalle de prospecto/cliente CRM; popup iframe desde el visor de conversación)
 
 Admin:
 
@@ -217,7 +221,7 @@ No hay clases ni branches de codigo para estos templates.
 - S3 productivo probado sin credenciales reales.
 - Vector DB real.
 - Generacion PDF de propuesta.
-- Handlers reales para la mayoria de actions; hoy solo `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen` tienen ejecución real. El resto son stubs.
+- Handlers reales para la mayoria de actions; hoy `buscar_negocios`, `crear_contacto` (CRM), `guardar_nota`, `crear_tarea`, `generar_resumen` y las operativas (`registrar_*`/`generar_reporte_dia`) tienen ejecución real. El resto son stubs.
 
 ## Riesgos Tecnicos
 
@@ -230,8 +234,8 @@ No hay clases ni branches de codigo para estos templates.
 
 ## Comandos Verificados
 
-- `npm test`: OK, 29 archivos, 137 tests (Vitest).
-- `npm run db:migrate`: aplica las migraciones `0001`–`0016` en orden.
+- `npm test`: OK, 30 archivos, 149 tests (Vitest).
+- `npm run db:migrate`: aplica las migraciones `0001`–`0018` en orden.
 
 Comandos locales disponibles:
 

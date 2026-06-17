@@ -37,7 +37,7 @@ Catalogo de acciones disponibles en codigo. Declara metadata, schemas, permisos,
 Lo que un bot puede hacer, configurado en el editor. Es la superficie de configuracion unica del bot: ya no existe una lista separada de "Acciones del bot". Cada interaccion tiene su propio prompt (instrucciones). Hay dos tipos:
 
 - De comportamiento: recibir mensajes de WhatsApp, enviar mensajes de WhatsApp, consultar humano.
-- Ejecutables: llevan un `action_id` y conectan con una Action del engine. Hoy las reales son `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen`.
+- Ejecutables: llevan un `action_id` y conectan con una Action del engine. Hoy las reales son `buscar_negocios`, `crear_contacto` (CRM: guardar prospecto/cliente), `guardar_nota`, `crear_tarea` y `generar_resumen`, más las operativas (`registrar_*`/`generar_reporte_dia`).
 
 Al guardar, `acciones_habilitadas_json` se deriva de las interacciones habilitadas con `action_id`, y el prompt compiler inyecta el prompt de cada interaccion en el prompt final.
 

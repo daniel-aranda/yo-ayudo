@@ -30,6 +30,7 @@ Entrada y estado:
 Arquitectura (`knowledge/architecture/`):
 - `bot_engine.md` — motor de bots: ciclo de ejecucion, pipeline inbound real (multi-ejecucion) vs `test_message`, prompt compiler.
 - `actions.md` — Action Registry + Action Executor (validacion, riesgo, audit, guardrails).
+- `crm.md` — CRM (prospectos/clientes): identidad + clave de negocio derivada (CURP > tel > IG), action `crear_contacto`, intent inbound `lead_capture`.
 - `conversation_inspector.md` — inspector interno: rutas, trace de mensaje, interacciones disparadas, processing events.
 - `frontend.md` — UI server-rendered (Pug + CSS + JS minimo): editor de bot, componentes core (`Popup`, `Tab_Navigator`), autosave.
 - `database.md` — esquema y migraciones (organization -> account -> bot; sin tenant/branch).

@@ -478,83 +478,268 @@ button:active {
 
 /* Conversation inbox: each row reads as a real conversation — contact title +
    latest-message preview on the left, time + status on the right. */
-.conv-list {
+/* ===== Bandeja de conversaciones (mixin conversation_list) — inbox operativo =====
+   Usada idéntica en el dashboard de cuenta y en el editor de bot. */
+.bandeja-conversaciones {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.conv-row {
-  align-items: center;
+/* Buscador de la lista de conversaciones. */
+.conv-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.conv-search {
+  width: 100%;
+}
+
+.conv-search:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+/* Toda la tarjeta es el área clickeable (abre la conversación). */
+.conversacion-card {
+  align-items: start;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0.75rem;
   color: inherit;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  padding: 12px 14px;
-  text-decoration: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
-}
-
-.conv-row:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-xs);
-}
-
-.conv-row__main {
   display: grid;
-  gap: 3px;
+  gap: 0 0.875rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.875rem 1rem;
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.conversacion-card:hover {
+  background: #faf8f3;
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.conversacion-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+/* Avatar / iniciales — tinte sutil por tipo para escanear, sin gritar. */
+.conversacion-card__avatar {
+  align-items: center;
+  align-self: start;
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  height: 2.5rem;
+  justify-content: center;
+  letter-spacing: 0.01em;
+  width: 2.5rem;
+}
+
+.conversacion-card__avatar .ui-icon {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.conversacion-card__avatar.es-seguimiento {
+  background: var(--amber-bg);
+  color: var(--amber-ink);
+}
+
+.conversacion-card__avatar.es-prospecto {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.conversacion-card__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   min-width: 0;
 }
 
-.conv-row__head {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.conv-row__title {
+.conversacion-card__nombre {
   color: var(--text);
+  font-size: 1rem;
   font-weight: 650;
-}
-
-.conv-row__phone {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.conv-row__preview {
-  color: var(--muted);
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.conv-row__aside {
-  align-items: flex-end;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  gap: 6px;
-}
-
-.conv-row__time {
+.conversacion-card__meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.conv-row__pills {
+.conversacion-card__mensaje {
+  color: var(--text);
+  display: -webkit-box;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0.35rem 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.conversacion-card__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.conversacion-chip {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+
+/* Seguimiento humano (crear_tarea / consultar humano): más peso, ámbar de atención. */
+.conversacion-chip.es-seguimiento {
+  background: var(--amber-bg);
+  color: var(--amber-ink);
+  font-weight: 700;
+}
+
+.conversacion-chip.es-extra {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+}
+
+/* Lado derecho: tiempo · estado · chevron. Baja bajo el cuerpo en mobile. */
+.conversacion-card__lado {
+  align-items: flex-end;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.conversacion-card__tiempo {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.conversacion-estado {
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  padding: 0.12rem 0.5rem;
+  white-space: nowrap;
+}
+
+.conversacion-estado.es-abierta {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.conversacion-estado.es-cerrada {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+.conversacion-estado.es-atencion {
+  background: var(--amber-bg);
+  color: var(--amber-ink);
+}
+
+.conversacion-estado.es-error {
+  background: var(--clay-bg);
+  color: var(--clay-ink);
+}
+
+.conversacion-card__abrir {
+  color: var(--line-strong);
+  display: inline-flex;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.conversacion-card__abrir .ui-icon {
+  height: 1.1rem;
+  width: 1.1rem;
+}
+
+.conversacion-card:hover .conversacion-card__abrir,
+.conversacion-card:focus-visible .conversacion-card__abrir {
+  color: var(--accent);
+  transform: translateX(0.15rem);
+}
+
+/* Empty state compacto que enseña la interfaz. */
+.bandeja-vacia {
+  background: var(--surface-strong);
+  border: 1px dashed var(--line-strong);
+  border-radius: 0.75rem;
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+}
+
+.bandeja-vacia__titulo {
+  color: var(--text);
+  font-weight: 650;
+  margin: 0 0 0.25rem;
+}
+
+.bandeja-vacia__sub {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* Mobile: el lado derecho baja bajo el cuerpo, en fila y alineado a la izquierda. */
+@media (max-width: 40rem) {
+  .conversacion-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .conversacion-card__lado {
+    align-items: center;
+    flex-direction: row;
+    gap: 0.5rem;
+    grid-column: 1 / -1;
+    margin-top: 0.6rem;
+  }
+
+  .conversacion-card__abrir {
+    margin-left: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversacion-card,
+  .conversacion-card__abrir {
+    transition: none;
+  }
+
+  .conversacion-card:hover .conversacion-card__abrir,
+  .conversacion-card:focus-visible .conversacion-card__abrir {
+    transform: none;
+  }
 }
 
 .empty {
@@ -1174,6 +1359,10 @@ td input {
 .ordered-config-list,
 .interaction-grid {
   display: grid;
+  /* minmax(0, 1fr): acota la columna al ancho disponible para que el contenido
+     (descripciones largas) envuelva. Sin esto, la columna implícita 'auto' se
+     dimensiona al max-content de la tarjeta más ancha y desborda el panel. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 

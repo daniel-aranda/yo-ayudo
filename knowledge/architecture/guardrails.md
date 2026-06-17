@@ -40,7 +40,7 @@ Un capability gap ocurre cuando el bot o modelo intenta usar una capacidad que:
 - requiere permisos o confirmacion.
 - no puede validar input.
 
-Las capacidades ejecutables se configuran como interacciones (cada una con su prompt). El `acciones_habilitadas_json` del bot se deriva de las interacciones habilitadas que llevan un `action_id`. Hoy las 4 reales son `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen`; las demas siguen como stub.
+Las capacidades ejecutables se configuran como interacciones (cada una con su prompt). El `acciones_habilitadas_json` del bot se deriva de las interacciones habilitadas que llevan un `action_id`. Hoy las reales son `buscar_negocios`, `crear_contacto` (CRM), `guardar_nota`, `crear_tarea` y `generar_resumen`, más las operativas (`registrar_*`/`generar_reporte_dia`); las demas siguen como stub.
 
 Estos eventos son backlog de producto. Muestran que capacidades piden los clientes y que deberia construirse despues.
 

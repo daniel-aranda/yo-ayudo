@@ -13,6 +13,7 @@ import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { hash_password } from "../auth/password_service.js";
 import { memory_document_service } from "../memory/memory_document_service.js";
+import { upsert_crm_client } from "../crm/crm_repository.js";
 
 const yoayudo_sales_knowledge = `
 # YoAyudo - Knowledge para vendedores
@@ -553,7 +554,16 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
       enabled: true,
       action_id: "buscar_negocios",
       instructions:
-        "Úsalo para prospectar clientes potenciales. Busca negocios por giro y zona, prioriza (cherry-pick) los que mejor encajen con el perfil ideal, y excluye los que ya fueron contactados antes de proponerlos. Guarda los prospectos relevantes como nota para darles seguimiento.",
+        "Úsalo cuando alguien del equipo pida prospectos para vender YoAyudo. Busca negocios por giro y zona: toma la ciudad/zona del mensaje y, si no la dan, pregúntala antes de buscar (o usa las zonas que prospecta este negocio: CDMX — Roma Norte, Condesa, Polanco). Presenta las 3 mejores opciones (nombre, giro y por qué encajan) y pregunta a cuál llamar o visitar. Cuando elijan una, guárdala como prospecto con \"Guardar prospecto o cliente\" (nombre del negocio, teléfono y zona, fuente \"Prospección YoAyudo\") y, si lo piden, crea una tarea de seguimiento. Excluye los que ya fueron contactados.",
+    },
+    {
+      key: "crear_contacto",
+      type: "crear_contacto",
+      label: "Guardar prospecto o cliente",
+      enabled: true,
+      action_id: "crear_contacto",
+      instructions:
+        "Guarda cada prospecto o cliente en el CRM. Captura nombre e identificadores (CURP, teléfono o Instagram; la clave de negocio se deriva en ese orden) y la necesidad. Si detectas un prospecto y aún no sabes su nombre completo, pídeselo de forma amable antes de seguir. Marca como cliente al cerrar; si vuelve a escribir, actualiza el mismo registro.",
     },
     {
       key: "guardar_nota",
@@ -690,6 +700,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
     knowledge_base_ids_json: input.knowledge_source_ids ?? [],
     acciones_habilitadas_json: [
       "buscar_negocios",
+      "crear_contacto",
       "guardar_nota",
       "crear_tarea",
       "generar_resumen",
@@ -703,6 +714,7 @@ async function upsert_yoayudo_commercial_operator_bot(pool, input) {
     ],
     enabled_actions_json: [
       "buscar_negocios",
+      "crear_contacto",
       "guardar_nota",
       "crear_tarea",
       "generar_resumen",
@@ -810,7 +822,16 @@ function lead_capture_bot_definition() {
         enabled: true,
         action_id: "buscar_negocios",
         instructions:
-          "Úsalo para prospectar. Busca negocios por giro y zona, prioriza (cherry-pick) los que mejor encajen con el cliente ideal y excluye los que ya fueron contactados. Guarda los prospectos relevantes para darles seguimiento.",
+          "Úsalo para prospectar. Busca negocios por giro y zona: toma la zona del mensaje y, si no la dan, pregúntala antes de buscar. Presenta las 3 mejores opciones (nombre, giro y por qué encajan) y pregunta a cuál contactar. Cuando elijan una, guárdala como prospecto con \"Guardar prospecto o cliente\" (nombre, teléfono y zona) y crea una tarea de seguimiento si lo piden. Excluye los que ya fueron contactados.",
+      },
+      {
+        key: "crear_contacto",
+        type: "crear_contacto",
+        label: "Guardar prospecto o cliente",
+        enabled: true,
+        action_id: "crear_contacto",
+        instructions:
+          "Registra cada prospecto en el CRM con su nombre y los identificadores que tengas (CURP, teléfono o Instagram; la clave de negocio sale en ese orden). Si detectas un prospecto y no conoces su nombre completo, pídeselo de forma amable antes de continuar. Marca como cliente cuando cierre. Si vuelve a escribir, actualiza el mismo registro.",
       },
       {
         key: "guardar_nota",
@@ -1694,6 +1715,564 @@ export async function seed_routed_demo_conversation(pool, { account_id, organiza
   }
 }
 
+// Demo CRM: prospectos/clientes de ejemplo + una conversación donde un mensaje de
+// WhatsApp disparó "Guardar prospecto o cliente" (crear_contacto). Muestra la
+// resolución de identidad por clave de negocio (CURP > teléfono > Instagram) y el
+// panel "Valor capturado". Dev-only + idempotente (no corre en el fixture de tests).
+export async function seed_crm_demo_conversation(pool, { account_id, organization_id, bot_id }) {
+  // Standalone CRM records (no conversation) so the CRM has data on first run.
+  // Each shows a different derived client_key_type.
+  await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    display_name: "Laura Méndez",
+    curp: "MELA900215MDFNNR07",
+    phone: "5215557654321",
+    kind: "cliente",
+    pipeline_status: "cerrado_ganado",
+    source: "referido",
+    need: "Quiere ordenar el seguimiento de sus pacientes por WhatsApp.",
+  });
+  await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    display_name: "Boutique Aurora",
+    instagram: "boutique.aurora",
+    kind: "prospecto",
+    pipeline_status: "interesado",
+    source: "instagram",
+    need: "Llegan pedidos por DM y se pierden; quiere capturarlos.",
+  });
+
+  const contact = (
+    await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
+        VALUES ($1, $2, '5215550000333', 'Prospecto WhatsApp', 'prospecto', '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()
+        RETURNING id
+      `,
+      [account_id, organization_id],
+    )
+  ).rows[0];
+
+  const existing = await pool.query(
+    "SELECT id FROM conversations WHERE account_id = $1 AND bot_id = $2 AND contact_id = $3 LIMIT 1",
+    [account_id, bot_id, contact.id],
+  );
+  if (existing.rows.length) {
+    return;
+  }
+
+  const base = new Date("2026-06-06T18:00:00.000Z").getTime();
+  const at = (minutes) => new Date(base + minutes * 60000).toISOString();
+  const conversation = (
+    await pool.query(
+      `
+        INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at, created_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', $5, $6)
+        RETURNING id
+      `,
+      [account_id, organization_id, bot_id, contact.id, at(6), at(0)],
+    )
+  ).rows[0];
+
+  const inbound = (
+    await pool.query(
+      `
+        INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, message_type, raw_payload_json, text_body, parsed_intent, confidence, processing_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', 'text', '{}'::jsonb, $6, 'lead_capture', 0.9, 'processed', $7)
+        RETURNING id
+      `,
+      [
+        account_id,
+        organization_id,
+        bot_id,
+        conversation.id,
+        contact.id,
+        "Hola, registra al prospecto Carlos Ibáñez, su CURP es IABC910320HDFBRR05. Quiere automatizar la atención de su taller.",
+        at(5),
+      ],
+    )
+  ).rows[0];
+
+  const client = await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    contact_id: contact.id,
+    display_name: "Carlos Ibáñez",
+    curp: "IABC910320HDFBRR05",
+    phone: "5215550000333",
+    kind: "prospecto",
+    pipeline_status: "nuevo",
+    source: "whatsapp",
+    need: "Automatizar la atención de su taller.",
+  });
+
+  await create_action_audit_log(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    message_id: inbound.id,
+    action_id: "crear_contacto",
+    status: "executed",
+    input_json: { nombre: "Carlos Ibáñez", curp: "IABC910320HDFBRR05" },
+    output_json: {
+      mensaje: "Prospecto registrado: Carlos Ibáñez.",
+      cliente_id: client.id,
+      client_key: client.client_key,
+      client_key_type: client.client_key_type,
+    },
+    actor_type: "bot",
+  });
+
+  await pool.query(
+    `
+      INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, reply_to_message_id, message_type, raw_payload_json, text_body, processing_status, created_at)
+      VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, 'text', '{}'::jsonb, $7, 'sent', $8)
+    `,
+    [
+      account_id,
+      organization_id,
+      bot_id,
+      conversation.id,
+      contact.id,
+      inbound.id,
+      "Prospecto registrado: Carlos Ibáñez. Lo guardé con su CURP como clave.",
+      at(6),
+    ],
+  );
+}
+
+// Demo CRM realista: el REMITENTE es el lead (no un operador). Llega por una
+// campaña de Instagram, pregunta algo, el bot lo guarda como prospecto (clave =
+// su teléfono) y, al pedir una llamada, deja una tarea de seguimiento. Muestra el
+// flujo de captura inbound de punta a punta. Dev-only + idempotente.
+export async function seed_inbound_lead_conversation(pool, { account_id, organization_id, bot_id }) {
+  const contact = (
+    await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
+        VALUES ($1, $2, '5215550000444', 'Mariana Lozano', 'prospecto', '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()
+        RETURNING id
+      `,
+      [account_id, organization_id],
+    )
+  ).rows[0];
+
+  const existing = await pool.query(
+    "SELECT id FROM conversations WHERE account_id = $1 AND bot_id = $2 AND contact_id = $3 LIMIT 1",
+    [account_id, bot_id, contact.id],
+  );
+  if (existing.rows.length) {
+    return;
+  }
+
+  const base = new Date("2026-06-11T17:30:00.000Z").getTime();
+  const at = (minutes) => new Date(base + minutes * 60000).toISOString();
+  const conversation = (
+    await pool.query(
+      `
+        INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at, created_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', $5, $6)
+        RETURNING id
+      `,
+      [account_id, organization_id, bot_id, contact.id, at(12), at(0)],
+    )
+  ).rows[0];
+
+  // Helpers locales para no repetir los INSERT de mensajes.
+  const inbound = async (text, minute, parsed_intent, confidence) =>
+    (
+      await pool.query(
+        `
+          INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, message_type, raw_payload_json, text_body, parsed_intent, confidence, processing_status, created_at)
+          VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', 'text', '{}'::jsonb, $6, $7, $8, 'processed', $9)
+          RETURNING id
+        `,
+        [account_id, organization_id, bot_id, conversation.id, contact.id, text, parsed_intent, confidence.toFixed(4), at(minute)],
+      )
+    ).rows[0];
+  const outbound = async (text, reply_to, minute) =>
+    pool.query(
+      `
+        INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, reply_to_message_id, message_type, raw_payload_json, text_body, processing_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, 'text', '{}'::jsonb, $7, 'sent', $8)
+      `,
+      [account_id, organization_id, bot_id, conversation.id, contact.id, reply_to, text, at(minute)],
+    );
+
+  // Turno 1: el lead llega por la campaña y pregunta. El bot lo guarda como
+  // prospecto (clave = su teléfono, ya que escribió por WhatsApp) y responde.
+  const first = await inbound(
+    "Hola, vi su anuncio en Instagram sobre ordenar las ventas y citas por WhatsApp. Tengo una clínica dental y me interesa. ¿Cómo funciona y cuánto cuesta? Soy Mariana Lozano.",
+    2,
+    "lead_capture",
+    0.9,
+  );
+  const lead = await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    contact_id: contact.id,
+    display_name: "Mariana Lozano",
+    // Escribió por WhatsApp: el teléfono del remitente es la clave (igual que lo
+    // haría el handler real al heredarlo). Guardamos también su Instagram.
+    phone: "5215550000444",
+    instagram: "clinica.sonrisa.lozano",
+    kind: "prospecto",
+    pipeline_status: "nuevo",
+    source: "Campaña Instagram",
+    need: "Automatizar ventas y citas de su clínica dental.",
+  });
+  await create_action_audit_log(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    message_id: first.id,
+    action_id: "crear_contacto",
+    status: "executed",
+    input_json: { nombre: "Mariana Lozano", source: "Campaña Instagram", instagram: "clinica.sonrisa.lozano" },
+    output_json: {
+      mensaje: "Prospecto registrado: Mariana Lozano.",
+      cliente_id: lead.id,
+      client_key: lead.client_key,
+      client_key_type: lead.client_key_type,
+    },
+    actor_type: "bot",
+  });
+  await outbound(
+    "¡Hola Mariana! 🦷 Gracias por escribir. Con YoAyudo tu clínica captura a cada paciente que llega por WhatsApp o Instagram, les da seguimiento y agenda sin que se te pierda ninguno. El plan depende del volumen. ¿Cuántos pacientes nuevos te escriben por semana?",
+    first.id,
+    3,
+  );
+
+  // Turno 2: el lead pide una llamada → el bot deja una tarea de seguimiento real.
+  const second = await inbound("Unos 40 por semana. ¿Me pueden llamar mañana para explicarme bien?", 10, "human_help", 0.86);
+  await pool.query(
+    `
+      INSERT INTO internal_tasks (
+        organization_id, account_id, bot_id, conversation_id, message_id,
+        titulo, descripcion, status, metadata_json, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendiente', $8::jsonb, $9, $9)
+    `,
+    [
+      organization_id,
+      account_id,
+      bot_id,
+      conversation.id,
+      second.id,
+      "Llamar a Mariana Lozano (clínica dental)",
+      "Lead de Campaña Instagram; ~40 pacientes nuevos/semana. Pidió llamada para mañana.",
+      JSON.stringify({ source: "bot_engine_action", action_id: "crear_tarea", seed: "inbound_lead" }),
+      at(10),
+    ],
+  );
+  await create_action_audit_log(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    message_id: second.id,
+    action_id: "crear_tarea",
+    status: "executed",
+    input_json: { titulo: "Llamar a Mariana Lozano (clínica dental)" },
+    output_json: { mensaje: "Tarea de seguimiento creada." },
+    actor_type: "bot",
+  });
+  await outbound("¡Claro! Dejé el seguimiento para llamarte mañana. ¿En qué horario te queda mejor?", second.id, 11);
+}
+
+// Demo CRM: el lead llega SIN dar su nombre. El bot lo guarda como prospecto
+// (clave = su teléfono) y, como no conoce el nombre, lo PREGUNTA; cuando el lead
+// responde, el bot actualiza el MISMO registro agregando el nombre (resuelto por
+// teléfono). Prueba la guía "si no sabes el nombre completo, pídelo". Dev-only.
+export async function seed_lead_without_name_conversation(pool, { account_id, organization_id, bot_id }) {
+  // Contacto sin display_name: la identidad de WhatsApp es desconocida; el nombre
+  // se captura en el CRM al preguntarlo (por eso el título muestra el teléfono).
+  const contact = (
+    await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
+        VALUES ($1, $2, '5215550000555', NULL, 'prospecto', '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET role_label = 'prospecto', updated_at = now()
+        RETURNING id
+      `,
+      [account_id, organization_id],
+    )
+  ).rows[0];
+
+  const existing = await pool.query(
+    "SELECT id FROM conversations WHERE account_id = $1 AND bot_id = $2 AND contact_id = $3 LIMIT 1",
+    [account_id, bot_id, contact.id],
+  );
+  if (existing.rows.length) {
+    return;
+  }
+
+  const base = new Date("2026-06-12T19:00:00.000Z").getTime();
+  const at = (minutes) => new Date(base + minutes * 60000).toISOString();
+  const conversation = (
+    await pool.query(
+      `
+        INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at, created_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', $5, $6)
+        RETURNING id
+      `,
+      [account_id, organization_id, bot_id, contact.id, at(7), at(0)],
+    )
+  ).rows[0];
+
+  const inbound = async (text, minute) =>
+    (
+      await pool.query(
+        `
+          INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, message_type, raw_payload_json, text_body, parsed_intent, confidence, processing_status, created_at)
+          VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', 'text', '{}'::jsonb, $6, 'lead_capture', '0.9000', 'processed', $7)
+          RETURNING id
+        `,
+        [account_id, organization_id, bot_id, conversation.id, contact.id, text, at(minute)],
+      )
+    ).rows[0];
+  const outbound = async (text, reply_to, minute) =>
+    pool.query(
+      `
+        INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, reply_to_message_id, message_type, raw_payload_json, text_body, processing_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, 'text', '{}'::jsonb, $7, 'sent', $8)
+      `,
+      [account_id, organization_id, bot_id, conversation.id, contact.id, reply_to, text, at(minute)],
+    );
+  const audit = async (message_id, input_json, output_json) =>
+    create_action_audit_log(pool, {
+      organization_id,
+      account_id,
+      bot_id,
+      conversation_id: conversation.id,
+      message_id,
+      action_id: "crear_contacto",
+      status: "executed",
+      input_json,
+      output_json,
+      actor_type: "bot",
+    });
+
+  // Turno 1: llega sin nombre → se guarda el prospecto (clave teléfono) y el bot
+  // PREGUNTA el nombre.
+  const first = await inbound(
+    "Hola, vi su anuncio en Facebook. Tengo una estética y quiero ordenar mis citas por WhatsApp. ¿Cuánto cuesta?",
+    1,
+  );
+  const lead = await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    contact_id: contact.id,
+    phone: "5215550000555",
+    kind: "prospecto",
+    pipeline_status: "nuevo",
+    source: "Campaña Facebook",
+    need: "Ordenar las citas de su estética.",
+  });
+  await audit(
+    first.id,
+    { source: "Campaña Facebook" },
+    {
+      mensaje: "Prospecto registrado (sin nombre todavía).",
+      cliente_id: lead.id,
+      client_key: lead.client_key,
+      client_key_type: lead.client_key_type,
+    },
+  );
+  await outbound(
+    "¡Hola! Con gusto te explico. Para darte seguimiento y que no se pierda tu solicitud, ¿me compartes tu nombre completo, por favor?",
+    first.id,
+    2,
+  );
+
+  // Turno 2: da su nombre → se actualiza el MISMO prospecto (resuelto por teléfono).
+  const second = await inbound("Soy Daniela Ruiz", 5);
+  const updated = await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    contact_id: contact.id,
+    phone: "5215550000555",
+    display_name: "Daniela Ruiz",
+  });
+  await audit(
+    second.id,
+    { nombre: "Daniela Ruiz" },
+    {
+      mensaje: "Prospecto actualizado: Daniela Ruiz.",
+      cliente_id: updated.id,
+      client_key: updated.client_key,
+      client_key_type: updated.client_key_type,
+    },
+  );
+  await outbound(
+    "¡Gracias, Daniela! Ya quedó registrado tu interés. Una asesora te contacta con los planes para tu estética. 🙌",
+    second.id,
+    6,
+  );
+}
+
+// Demo: prospección para VENDER YoAyudo. Un vendedor del equipo pide prospectos,
+// el bot busca (buscar_negocios) y presenta 3 opciones; al elegir a cuál llamar,
+// el bot guarda ESE negocio como prospecto (crear_contacto) y deja una tarea. La
+// zona sale del mensaje del vendedor (Roma Norte) — el resto, del prompt del bot.
+// Dev-only + idempotente. El audit de buscar_negocios es ilustrativo (sin proveedor
+// real configurado devolvería pending_provider; aquí mostramos la UX con proveedor).
+export async function seed_prospeccion_venta_conversation(pool, { account_id, organization_id, bot_id }) {
+  const contact = (
+    await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, role_label, metadata_json)
+        VALUES ($1, $2, '5215550000777', 'Vendedor YoAyudo', 'vendedor', '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()
+        RETURNING id
+      `,
+      [account_id, organization_id],
+    )
+  ).rows[0];
+
+  const existing = await pool.query(
+    "SELECT id FROM conversations WHERE account_id = $1 AND bot_id = $2 AND contact_id = $3 LIMIT 1",
+    [account_id, bot_id, contact.id],
+  );
+  if (existing.rows.length) {
+    return;
+  }
+
+  const base = new Date("2026-06-13T17:00:00.000Z").getTime();
+  const at = (minutes) => new Date(base + minutes * 60000).toISOString();
+  const conversation = (
+    await pool.query(
+      `
+        INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at, created_at)
+        VALUES ($1, $2, $3, $4, 'whatsapp', 'open', $5, $6)
+        RETURNING id
+      `,
+      [account_id, organization_id, bot_id, contact.id, at(8), at(0)],
+    )
+  ).rows[0];
+
+  const inbound = async (text, minute, intent) =>
+    (
+      await pool.query(
+        `
+          INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, message_type, raw_payload_json, text_body, parsed_intent, confidence, processing_status, created_at)
+          VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', 'text', '{}'::jsonb, $6, $7, '0.9000', 'processed', $8)
+          RETURNING id
+        `,
+        [account_id, organization_id, bot_id, conversation.id, contact.id, text, intent, at(minute)],
+      )
+    ).rows[0];
+  const outbound = async (text, reply_to, minute) =>
+    pool.query(
+      `
+        INSERT INTO messages (account_id, organization_id, bot_id, conversation_id, contact_id, channel, direction, reply_to_message_id, message_type, raw_payload_json, text_body, processing_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, 'text', '{}'::jsonb, $7, 'sent', $8)
+      `,
+      [account_id, organization_id, bot_id, conversation.id, contact.id, reply_to, text, at(minute)],
+    );
+  const audit = async (message_id, action_id, output_json) =>
+    create_action_audit_log(pool, {
+      organization_id,
+      account_id,
+      bot_id,
+      conversation_id: conversation.id,
+      message_id,
+      action_id,
+      status: "executed",
+      input_json: { source: "seed_prospeccion_venta" },
+      output_json,
+      actor_type: "bot",
+    });
+
+  // Turno 1: el vendedor pide prospectos (con zona) → el bot busca y propone 3.
+  const first = await inbound(
+    "Necesito prospectos para vender YoAyudo. Búscame restaurantes en Roma Norte, CDMX.",
+    1,
+    "unknown",
+  );
+  await audit(first.id, "buscar_negocios", {
+    mensaje: "3 negocios encontrados en Roma Norte.",
+    proveedores_usados: ["google_places"],
+    negocios: [
+      { nombre: "La Parrilla de Don Memo", giro: "restaurante", zona: "Roma Norte" },
+      { nombre: "Sushi Roma", giro: "restaurante", zona: "Roma Norte" },
+      { nombre: "Café Cardinal", giro: "cafetería", zona: "Roma Norte" },
+    ],
+  });
+  await outbound(
+    "Encontré 3 restaurantes en Roma Norte que encajan para YoAyudo:\n1) La Parrilla de Don Memo — mucho pedido por WhatsApp\n2) Sushi Roma — reservas y pedidos por DM\n3) Café Cardinal — citas y catering\n¿A cuál llamo o visito?",
+    first.id,
+    2,
+  );
+
+  // Turno 2: el vendedor elige uno → el bot lo guarda como prospecto + tarea.
+  const second = await inbound("Llámale a La Parrilla de Don Memo.", 6, "lead_capture");
+  const prospecto = await upsert_crm_client(pool, {
+    organization_id,
+    account_id,
+    bot_id,
+    conversation_id: conversation.id,
+    contact_id: contact.id,
+    display_name: "La Parrilla de Don Memo",
+    phone: "5215559876543",
+    kind: "prospecto",
+    pipeline_status: "nuevo",
+    source: "Prospección YoAyudo",
+    need: "Vender YoAyudo: ordenar pedidos y reservas por WhatsApp.",
+    metadata_json: { zona: "Roma Norte", giro: "restaurante" },
+  });
+  await audit(second.id, "crear_contacto", {
+    mensaje: "Prospecto registrado: La Parrilla de Don Memo.",
+    cliente_id: prospecto.id,
+    client_key: prospecto.client_key,
+    client_key_type: prospecto.client_key_type,
+  });
+  await pool.query(
+    `
+      INSERT INTO internal_tasks (
+        organization_id, account_id, bot_id, conversation_id, message_id,
+        titulo, descripcion, status, metadata_json, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendiente', $8::jsonb, $9, $9)
+    `,
+    [
+      organization_id,
+      account_id,
+      bot_id,
+      conversation.id,
+      second.id,
+      "Llamar a La Parrilla de Don Memo (vender YoAyudo)",
+      "Prospecto de Prospección YoAyudo en Roma Norte. Llamar para ofrecer ordenar pedidos y reservas por WhatsApp.",
+      JSON.stringify({ source: "bot_engine_action", action_id: "crear_tarea", seed: "prospeccion_venta" }),
+      at(6),
+    ],
+  );
+  await audit(second.id, "crear_tarea", { mensaje: "Tarea de seguimiento creada." });
+  await outbound(
+    "¡Listo! Guardé a La Parrilla de Don Memo como prospecto y dejé una tarea para llamarle. 📞",
+    second.id,
+    7,
+  );
+}
+
 // Usuarios de desarrollo para AUTH_ENABLED: el owner de la plataforma (ve todo)
 // y un usuario del negocio demo (solo ve su dashboard). Idempotente por email.
 async function seed_auth_users(pool, { organization_id }) {
@@ -1769,8 +2348,8 @@ export async function seed_development_data(pool) {
     instrucciones_operativas: prospect_bot_definition.behavior.operating_instructions,
     tono: prospect_bot_definition.behavior.tone,
     reglas_guardrail_json: prospect_bot_definition.behavior.constraints.split("\n"),
-    acciones_habilitadas_json: ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
-    enabled_actions_json: ["buscar_negocios", "guardar_nota", "crear_tarea", "generar_resumen"],
+    acciones_habilitadas_json: ["buscar_negocios", "crear_contacto", "guardar_nota", "crear_tarea", "generar_resumen"],
+    enabled_actions_json: ["buscar_negocios", "crear_contacto", "guardar_nota", "crear_tarea", "generar_resumen"],
     settings_json: { source: "seed" },
   });
   const custom_whatsapp_phone_number = await upsert_whatsapp_phone_number(pool, {
@@ -1883,6 +2462,26 @@ if (is_entrypoint(import.meta.url)) {
         bot_id: result.yoayudo_commercial_bot_id,
       });
       await seed_routed_demo_conversation(seed_pool, {
+        account_id: result.account_id,
+        organization_id: result.organization_id,
+        bot_id: result.yoayudo_commercial_bot_id,
+      });
+      await seed_crm_demo_conversation(seed_pool, {
+        account_id: result.account_id,
+        organization_id: result.organization_id,
+        bot_id: result.yoayudo_commercial_bot_id,
+      });
+      await seed_inbound_lead_conversation(seed_pool, {
+        account_id: result.account_id,
+        organization_id: result.organization_id,
+        bot_id: result.yoayudo_commercial_bot_id,
+      });
+      await seed_lead_without_name_conversation(seed_pool, {
+        account_id: result.account_id,
+        organization_id: result.organization_id,
+        bot_id: result.yoayudo_commercial_bot_id,
+      });
+      await seed_prospeccion_venta_conversation(seed_pool, {
         account_id: result.account_id,
         organization_id: result.organization_id,
         bot_id: result.yoayudo_commercial_bot_id,

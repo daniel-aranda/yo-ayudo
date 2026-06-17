@@ -3,6 +3,7 @@ import {
   daily_note_schema,
   day_start_schema,
   inventory_snapshot_schema,
+  lead_capture_schema,
   purchase_schema,
   sales_update_schema,
 } from "./operation_schemas.js";
@@ -52,6 +53,8 @@ export class message_intent_parser {
         return validate_extraction(await this.provider.extract_daily_close({ text }), daily_close_schema);
       case "daily_note":
         return validate_extraction(await this.provider.extract_daily_note({ text }), daily_note_schema);
+      case "lead_capture":
+        return validate_extraction(await this.provider.extract_lead_capture({ text }), lead_capture_schema);
       case "report_request":
       case "human_help":
         return {

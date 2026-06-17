@@ -268,7 +268,7 @@ describe("Conversation Inspector", () => {
     expect(bot_page.text).toContain("Probar bot");
     expect(bot_page.text).toContain("Mensaje de prueba");
     expect(bot_page.text).toContain("run_bot_test");
-    expect(bot_page.text).toContain("Canales soportados");
+    expect(bot_page.text).toContain("Canales");
     expect(bot_page.text).toContain("WhatsApp");
     expect(bot_page.text).toContain("whatsapp_display_phone_number");
     expect(bot_page.text).toContain("ai_model_selection");

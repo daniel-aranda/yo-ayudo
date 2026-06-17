@@ -123,26 +123,7 @@ block content
     .tab-section(data-parent-tab="account-tabs", data-section="conversaciones")
       section.panel#panel-conversaciones
         h2 Conversaciones recientes
-        if conversations && conversations.length
-          table
-            thead
-              tr
-                th Contacto
-                th Bot
-                th Último mensaje
-                th Estado
-            tbody
-              each conversation in conversations
-                tr
-                  td
-                    a(href=`/inspector/accounts/${account.id}/conversations/${conversation.id}`)= conversation.display_name || phone(conversation.whatsapp_phone)
-                    div.meta= phone(conversation.whatsapp_phone)
-                  td= conversation.bot_name || "sin bot"
-                  td= conversation.last_message || "-"
-                  td
-                    span.status= conversation.status
-        else
-          .empty Sin conversaciones.
+        +conversation_list(conversations, { account_id: account.id, show_bot: true })
 
     .tab-section(data-parent-tab="account-tabs", data-section="bots", hidden)
       section.panel#panel-bots

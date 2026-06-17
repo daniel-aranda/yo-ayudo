@@ -23,6 +23,10 @@ export function build_reply(parsed, result) {
       return "Inventario registrado.";
     case "daily_note":
       return "Nota del día registrada.";
+    case "lead_capture":
+      return typeof result.metadata?.mensaje === "string"
+        ? result.metadata.mensaje
+        : `${parsed.data?.kind === "cliente" ? "Cliente" : "Prospecto"} registrado.`;
     case "report_request":
       return typeof result.metadata?.summary_text === "string"
         ? result.metadata.summary_text

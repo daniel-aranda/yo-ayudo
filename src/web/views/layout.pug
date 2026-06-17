@@ -11,6 +11,108 @@ mixin breadcrumb(items)
         else
           span.breadcrumb-current= item.label
 
+//- Bandeja de conversaciones unificada (dashboard de cuenta y editor de bot se ven
+//- idénticos). Inbox operativo escaneable: avatar + nombre/teléfono/bot · mensaje +
+//- chips de interacciones (humanizados, máx 2 + "+N", prioridad, seguimiento ámbar)
+//- · tiempo + estado + chevron. Toda la tarjeta es el área clickeable.
+//- Cada conversación trae `summary` (present_conversation_summary) e `interactions`.
+//- opts: { account_id (para el href), show_bot }. Buscador client-side al pie.
+mixin conversation_list(conversations, opts)
+  -
+    const cl = opts || {};
+    // Etiquetas humanas cortas por acción: privilegian al dueño, no el nombre técnico.
+    const etiqueta_chip = {
+      crear_tarea: "Requiere seguimiento",
+      consult_human: "Requiere seguimiento",
+      registrar_venta: "Venta",
+      registrar_inicio_dia: "Caja inicial",
+      registrar_cierre_dia: "Cierre del día",
+      registrar_compra: "Compra",
+      registrar_inventario: "Inventario",
+      registrar_nota_dia: "Nota del día",
+      generar_reporte_dia: "Reporte del día",
+      crear_contacto: "Prospecto",
+      guardar_nota: "Nota",
+      generar_resumen: "Resumen",
+      buscar_negocios: "Prospección",
+    };
+    // Prioridad de chip (menor = primero). El seguimiento humano manda.
+    const prioridad_chip = {
+      crear_tarea: 1, consult_human: 1, registrar_venta: 3, registrar_inicio_dia: 4,
+      registrar_compra: 5, crear_contacto: 6, generar_resumen: 7,
+    };
+    const tono_estado = { ok: "es-abierta", idle: "es-cerrada", warn: "es-atencion", error: "es-error" };
+    const chevron_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    const persona_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.2-5.5 7-5.5s7 1.9 7 5.5"/></svg>';
+    const cl_href = (c) => cl.account_id ? `/inspector/accounts/${cl.account_id}/conversations/${c.id}` : `/inspector/conversations/${c.id}`;
+    // Iniciales del contacto (solo si hay nombre: subtitle presente ⇒ title es nombre).
+    const iniciales = (c) => {
+      const s = c.summary || {};
+      if (!s.subtitle) return null;
+      const parts = String(s.title || "").trim().split(/\s+/).filter(Boolean).slice(0, 2);
+      return parts.map((w) => w[0]).join("").toUpperCase() || null;
+    };
+    // Chips ordenados por prioridad, sin duplicar, máx 2 + "+N".
+    const chips_de = (c) => {
+      const seen = new Set();
+      const norm = [];
+      for (const ix of (Array.isArray(c.interactions) ? c.interactions : [])) {
+        if (!ix || !ix.action_id || seen.has(ix.action_id)) continue;
+        seen.add(ix.action_id);
+        norm.push({
+          label: etiqueta_chip[ix.action_id] || ix.label || ix.action_id,
+          seguimiento: ix.action_id === "crear_tarea" || ix.action_id === "consult_human",
+          prioridad: prioridad_chip[ix.action_id] ?? 50,
+        });
+      }
+      norm.sort((a, b) => a.prioridad - b.prioridad);
+      return { visibles: norm.slice(0, 2), extra: Math.max(0, norm.length - 2), seguimiento: norm.some((x) => x.seguimiento) };
+    };
+    // Tinte sutil del avatar por tipo (escaneo): seguimiento ⇒ ámbar, prospecto ⇒ mint.
+    const tipo_avatar = (c, chips) => {
+      const ids = (Array.isArray(c.interactions) ? c.interactions : []).map((i) => i.action_id);
+      if (chips.seguimiento) return "es-seguimiento";
+      if (ids.includes("crear_contacto")) return "es-prospecto";
+      return "es-neutral";
+    };
+    const cl_text = (c) => [c.summary && c.summary.title, c.summary && c.summary.subtitle, c.summary && c.summary.preview, cl.show_bot ? c.bot_name : "", ...((c.interactions || []).map((i) => etiqueta_chip[i.action_id] || i.label))].filter(Boolean).join(" ").toLowerCase();
+  if conversations && conversations.length
+    .conv-toolbar
+      input.conv-search(type="search", data-conv-search, placeholder="Buscar contacto, mensaje o interacción…", aria-label="Buscar conversaciones")
+    ul.bandeja-conversaciones(data-conv-list)
+      each conversation in conversations
+        - const s = conversation.summary || {};
+        - const chips = chips_de(conversation);
+        - const ini = iniciales(conversation);
+        - const meta_partes = [s.subtitle, cl.show_bot ? conversation.bot_name : null].filter(Boolean);
+        li(data-conv-text=cl_text(conversation))
+          a.conversacion-card(href=cl_href(conversation), aria-label=`Abrir conversación con ${s.title || "contacto"}`)
+            span.conversacion-card__avatar(class=tipo_avatar(conversation, chips), aria-hidden="true")
+              if ini
+                = ini
+              else
+                != persona_svg
+            .conversacion-card__cuerpo
+              span.conversacion-card__nombre= s.title
+              if meta_partes.length
+                p.conversacion-card__meta= meta_partes.join(" · ")
+              p.conversacion-card__mensaje= s.preview
+              if chips.visibles.length
+                .conversacion-card__chips
+                  each chip in chips.visibles
+                    span.conversacion-chip(class=chip.seguimiento ? "es-seguimiento" : "")= chip.label
+                  if chips.extra > 0
+                    span.conversacion-chip.es-extra= `+${chips.extra}`
+            .conversacion-card__lado
+              span.conversacion-card__tiempo= s.relative_time
+              span.conversacion-estado(class=tono_estado[s.status_tone] || "es-cerrada")= s.status_label
+              span.conversacion-card__abrir(aria-hidden="true")!= chevron_svg
+    p.empty(data-conv-empty, hidden) Sin conversaciones que coincidan con la búsqueda.
+  else
+    .bandeja-vacia
+      p.bandeja-vacia__titulo Sin conversaciones recientes
+      p.bandeja-vacia__sub Cuando tus clientes escriban por WhatsApp, aparecerán aquí.
+
 doctype html
 html(lang="es")
   head
@@ -52,3 +154,24 @@ html(lang="es")
             button.secondary-button(type="submit") Salir
     main.container
       block content
+    //- Filtro client-side de la lista de conversaciones (mixin conversation_list).
+    //- Corre en toda página; no hace nada si no hay buscador.
+    script.
+      (() => {
+        document.querySelectorAll("[data-conv-search]").forEach((input) => {
+          const scope = input.closest("section, .tab-section") || document;
+          const list = scope.querySelector("[data-conv-list]");
+          const empty = scope.querySelector("[data-conv-empty]");
+          if (!list) return;
+          input.addEventListener("input", () => {
+            const q = input.value.trim().toLowerCase();
+            let visible = 0;
+            list.querySelectorAll("li").forEach((li) => {
+              const match = !q || (li.getAttribute("data-conv-text") || "").includes(q);
+              li.hidden = !match;
+              if (match) visible += 1;
+            });
+            if (empty) empty.hidden = visible > 0;
+          });
+        });
+      })();

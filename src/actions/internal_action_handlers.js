@@ -3,6 +3,7 @@ import { synthesize_voice_reply } from "../voice/elevenlabs_voice_service.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { operational_action_handlers } from "./operational_action_handlers.js";
 import { safe_record_integration_event } from "../integrations/integration_event_repository.js";
+import { upsert_crm_client } from "../crm/crm_repository.js";
 
 function event_identity(context) {
   return {
@@ -142,6 +143,61 @@ async function generar_resumen(_pool, context) {
     output: {
       resumen: summary,
       bullets,
+    },
+  };
+}
+
+// Real CRM capability: save a prospect or client. Identity resolution + the
+// derived business key (CURP > phone > instagram > email) live in crm_repository.
+// When captured mid-conversation and no phone is given, inherit the WhatsApp/IG
+// sender's number and link the contact, so the lead is keyed on a real identifier
+// even if the message only carried the name.
+async function crear_contacto(pool, context) {
+  const input = context.input_json ?? {};
+  let contact_id = context.contact_id ?? null;
+  let conversation_contact = null;
+
+  if (!contact_id && context.conversation_id) {
+    const result = await pool.query(
+      `
+        SELECT c.id, c.whatsapp_phone
+        FROM conversations cv
+        JOIN contacts c ON c.id = cv.contact_id
+        WHERE cv.id = $1
+        LIMIT 1
+      `,
+      [context.conversation_id],
+    );
+    conversation_contact = result.rows[0] ?? null;
+    contact_id = conversation_contact?.id ?? null;
+  }
+
+  const client = await upsert_crm_client(pool, {
+    ...input,
+    organization_id: context.organization_id ?? null,
+    account_id: context.account_id ?? null,
+    bot_id: context.bot_id ?? null,
+    conversation_id: context.conversation_id ?? null,
+    contact_id,
+    phone: input.phone ?? input.telefono ?? input.numero ?? conversation_contact?.whatsapp_phone ?? null,
+    source: input.source ?? input.fuente ?? (context.conversation_id ? "whatsapp" : null),
+  });
+
+  const label = client.kind === "cliente" ? "Cliente" : "Prospecto";
+  const verb = client.created ? "registrado" : "actualizado";
+  const who = client.display_name ?? client.client_key ?? "sin nombre";
+
+  return {
+    status: "executed",
+    confirmation_required: false,
+    output: {
+      mensaje: `${label} ${verb}: ${who}.`,
+      cliente_id: client.id,
+      client_key: client.client_key,
+      client_key_type: client.client_key_type,
+      kind: client.kind,
+      pipeline_status: client.pipeline_status,
+      creado: client.created,
     },
   };
 }
@@ -306,6 +362,7 @@ async function responder_con_voz(pool, context) {
 const handlers = {
   guardar_nota,
   crear_tarea,
+  crear_contacto,
   generar_resumen,
   buscar_negocios,
   responder_con_voz,

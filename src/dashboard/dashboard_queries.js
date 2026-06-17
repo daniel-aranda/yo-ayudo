@@ -1,3 +1,6 @@
+import { get_action } from "../actions/action_registry.js";
+import { present_conversation_summary } from "../inspector/inspector_presenter.js";
+
 export async function get_dashboard_home(pool) {
   const businesses = await pool.query(
     `
@@ -325,13 +328,38 @@ export async function get_account_dashboard_data(pool, input) {
     };
   }
 
+  // Enriquece cada conversación igual que el inspector (get_bot_conversations):
+  // último mensaje + interacciones ejecutadas (chips) + summary, para que el
+  // panel del dashboard y el del bot se vean idénticos (mismo componente).
   const conversation_rows = [];
   for (const conversation of conversations.rows) {
-    const last_message = await pool.query(
-      "SELECT text_body FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1",
-      [conversation.id],
-    );
-    conversation_rows.push({ ...conversation, last_message: last_message.rows[0]?.text_body ?? null });
+    const [last_message, executed_actions] = await Promise.all([
+      pool.query(
+        "SELECT text_body, parsed_intent FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1",
+        [conversation.id],
+      ),
+      pool.query(
+        `
+          SELECT action_id, max(created_at) AS last_at
+          FROM action_audit_logs
+          WHERE conversation_id = $1 AND status = 'executed'
+          GROUP BY action_id
+          ORDER BY last_at DESC
+        `,
+        [conversation.id],
+      ),
+    ]);
+    const enriched = {
+      ...conversation,
+      last_message: last_message.rows[0]?.text_body ?? null,
+      last_intent: last_message.rows[0]?.parsed_intent ?? null,
+      interactions: executed_actions.rows.map((row) => ({
+        action_id: row.action_id,
+        label: get_action(row.action_id)?.nombre ?? row.action_id,
+      })),
+    };
+    enriched.summary = present_conversation_summary(enriched);
+    conversation_rows.push(enriched);
   }
 
   // Capability-driven dashboard: only surface operational sections the account's

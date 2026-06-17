@@ -1,0 +1,104 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+    };
+    const key_type_labels = { curp: "CURP", phone: "Teléfono", instagram: "Instagram", email: "Email", internal: "ID interno" };
+    const kind_label = client.kind === "cliente" ? "Cliente" : "Prospecto";
+    const status_pretty = String(client.pipeline_status || "").replace(/_/g, " ");
+    const key_type_label = key_type_labels[client.client_key_type] || client.client_key_type || "—";
+    const identifiers = [
+      { label: "CURP", value: client.curp },
+      { label: "Teléfono", value: client.phone },
+      { label: "Instagram", value: client.instagram ? `@${client.instagram}` : null },
+      { label: "Email", value: client.email },
+    ].filter((row) => row.value);
+
+  //- Reusa el chrome del detalle de tarea (.task-modal*) para densidad y estilo
+  //- consistentes en el popup; sin CSS nuevo.
+  section.task-modal
+    header.task-modal-head
+      .task-modal-titles
+        h1.task-modal-title= client.display_name || client.client_key || "Prospecto sin nombre"
+        p.task-modal-desc
+          span(class=`task-pill is-${client.kind === "cliente" ? "hecha" : "pendiente"}`)= kind_label
+          if status_pretty
+            |  · etapa: #{status_pretty}
+        if client.conversation_id
+          a.task-modal-conv(href=(client.account_id ? `/inspector/accounts/${client.account_id}/conversations/${client.conversation_id}` : `/inspector/conversations/${client.conversation_id}`), target="_top") Ver conversación relevante →
+      .task-modal-state
+        span.task-modal-state-label Clave de negocio
+        strong.task-modal-title= client.client_key || "—"
+        span.task-event-status= key_type_label
+
+    .task-modal-grid
+      section.task-modal-main
+        .task-section-head
+          h2 Identificadores
+        if identifiers.length
+          dl.task-meta
+            each row in identifiers
+              div
+                dt= row.label
+                dd= row.value
+        else
+          p.task-empty
+            strong Sin identificadores.
+            |  Solo se conoce por su id interno.
+        if client.need
+          .task-section-head
+            h2 Necesidad
+          p.task-modal-desc= client.need
+        if client.notes
+          .task-section-head
+            h2 Notas
+          p.task-modal-desc= client.notes
+
+      aside.task-modal-side
+        dl.task-meta
+          div
+            dt Tipo
+            dd= kind_label
+          div
+            dt Etapa
+            dd= status_pretty || "—"
+          if client.source
+            div
+              dt Origen
+              dd= client.source
+          if client.assigned_to
+            div
+              dt Responsable
+              dd= client.assigned_to
+          div
+            dt Bot · cuenta
+            dd= client.account_name ? `${client.bot_name ? `${client.bot_name} · ` : ""}${client.account_name}` : (client.bot_name || "—")
+          div
+            dt Creado
+            dd= when(client.created_at)
+          div
+            dt Actualizado
+            dd= when(client.updated_at)
+
+  script.
+    (() => {
+      // Avisa al popup contenedor la altura real para que el iframe se ajuste
+      // (mismo patrón que el detalle de tarea, con su propio tipo de mensaje).
+      function postHeight() {
+        try {
+          const container = document.querySelector("main.container");
+          const height = container
+            ? Math.ceil(container.getBoundingClientRect().bottom + 2)
+            : document.documentElement.scrollHeight;
+          window.parent?.postMessage({ type: "yoayudo:crm-height", height }, "*");
+        } catch (error) {
+          /* standalone: no parent listener */
+        }
+      }
+      window.addEventListener("resize", postHeight);
+      postHeight();
+      requestAnimationFrame(postHeight);
+      setTimeout(postHeight, 200);
+    })();

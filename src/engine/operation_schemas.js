@@ -60,3 +60,23 @@ export const daily_note_schema = z.object({
   surplus_notes: z.string().optional(),
   free_comment: z.string().optional(),
 });
+
+// Lead/prospect capture. Loose by design (CRM data trickles in), but it must
+// carry at least one identifier or a name — otherwise there is nothing to save
+// and the message goes to review instead of creating an empty record.
+export const lead_capture_schema = z
+  .object({
+    display_name: z.string().optional(),
+    curp: z.string().optional(),
+    phone: z.string().optional(),
+    instagram: z.string().optional(),
+    email: z.string().optional(),
+    kind: z.string().optional(),
+    pipeline_status: z.string().optional(),
+    source: z.string().optional(),
+    need: z.string().optional(),
+    free_comment: z.string().optional(),
+  })
+  .refine((data) => Boolean(data.display_name || data.curp || data.phone || data.instagram || data.email), {
+    message: "Sin identificador ni nombre del prospecto.",
+  });

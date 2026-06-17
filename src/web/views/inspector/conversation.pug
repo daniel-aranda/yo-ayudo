@@ -16,6 +16,9 @@ block content
     const purchases_count = Number(value.purchases?.count || 0);
     const inventory_count = Number(value.inventory?.count || 0);
     const notes_count = Array.isArray(value.notes) ? value.notes.length : 0;
+    const crm_clients = Array.isArray(value.crm) ? value.crm : [];
+    const crm_count = crm_clients.length;
+    const client_key_type_labels = { curp: "CURP", phone: "Teléfono", instagram: "Instagram", email: "Email", internal: "ID interno" };
     const purchase_items = Array.isArray(value.purchases?.items) ? value.purchases.items : [];
     const latest_purchase = purchase_items[0] || null;
     const has_opening_cash = value.opening_cash !== undefined && value.opening_cash !== null;
@@ -109,6 +112,10 @@ block content
                               span.turn-action-combo
                                 button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
                                 button.turn-task-button(type="button", data-open-task=action.task.id, aria-label=`Abrir tarea derivada: ${action.task.titulo}`) Ver tarea
+                            else if action.client
+                              span.turn-action-combo
+                                button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
+                                button.turn-task-button(type="button", data-open-client=action.client.id, aria-label=`Abrir prospecto: ${action.client.display_name}`) Ver prospecto
                             else
                               button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
                         else
@@ -170,6 +177,18 @@ block content
           section.inspector-panel.conv-value-panel
             h2 Valor capturado
             ul.conv-value-list
+              if crm_count
+                li.conv-value-row.conv-value-row--stack
+                  span.conv-value-label= crm_count === 1 ? "Prospecto / cliente" : "Prospectos / clientes"
+                  //- Cada prospecto/cliente abre su detalle en popup (igual que Tareas).
+                  ul.conv-tasks
+                    each client in crm_clients
+                      li
+                        button.conv-task-row(type="button", data-open-client=client.id)
+                          .conv-task-line
+                            span.conv-task-title= client.display_name || client.client_key
+                            span(class=`task-pill is-${client.kind === "cliente" ? "hecha" : "pendiente"}`)= `${client.kind === "cliente" ? "Cliente" : "Prospecto"} · ${client_key_type_labels[client.client_key_type] || client.client_key_type}`
+                          span.conv-task-cta Ver prospecto →
               if task_count
                 li.conv-value-row
                   span.conv-value-label Tareas
@@ -242,6 +261,16 @@ block content
       .popup__body.popup__body--taskframe
         iframe#task_detail_frame(title="Detalle de la tarea")
 
+  //- Detalle del prospecto/cliente en popup, mismo patrón que el de tarea.
+  #crm_detail_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-client-popup)
+    .popup.popup--lg.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Prospecto / cliente
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body.popup__body--taskframe
+        iframe#crm_detail_frame(title="Detalle del prospecto")
+
   script
     include ../../public/js/core/Popup.js
 
@@ -271,6 +300,26 @@ block content
       });
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && opened && overlay && !overlay.hidden) reloadIfChanged();
+      });
+    })();
+
+  script.
+    (() => {
+      // Popup del prospecto/cliente (solo lectura → no recarga al cerrar).
+      const crmPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-client-popup]" }) : null;
+      crmPopup?.iniciar();
+      const frame = document.getElementById("crm_detail_frame");
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== "yoayudo:crm-height" || !frame) return;
+        const max = Math.round(window.innerHeight * 0.82) - 64;
+        frame.style.height = `${Math.min(event.data.height, max)}px`;
+      });
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-open-client]");
+        if (!trigger || !crmPopup || !frame) return;
+        frame.style.height = "320px";
+        frame.src = `/inspector/crm/${trigger.dataset.openClient}`;
+        crmPopup.open();
       });
     })();
 

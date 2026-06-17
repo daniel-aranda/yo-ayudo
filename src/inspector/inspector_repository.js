@@ -9,6 +9,7 @@ import {
   upsert_instagram_account,
 } from "../channels/instagram/instagram_account_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
+import { list_crm_clients_for_conversation } from "../crm/crm_repository.js";
 import { present_conversation_summary } from "./inspector_presenter.js";
 import { format_short_date_es } from "../shared/dates.js";
 
@@ -84,7 +85,7 @@ export const available_agent_interactions = [
     label: "Buscar negocios",
     description: "Permite que el agente busque negocios reales con proveedores externos (Google Places y otros).",
     instructions_placeholder:
-      "Describe para qué y cómo buscar negocios. Ej: prospección de clientes, cómo elegir los mejores (cherry-pick), y cómo guardar o excluir los que ya contactaste.",
+      "Describe cuándo y cómo prospectar: el giro y la ciudad/zona donde buscar (o pídela si no la dan en el mensaje), cómo elegir las mejores opciones (presenta el top 3), y que al elegir a cuál llamar o visitar se guarde como prospecto (Guardar prospecto o cliente) y se cree una tarea de seguimiento. Excluye los ya contactados.",
     action_id: "buscar_negocios",
     settings_schema: [
       { key: "max_results", label: "Máx. resultados por búsqueda", placeholder: "10" },
@@ -107,6 +108,16 @@ export const available_agent_interactions = [
     instructions_placeholder:
       "Describe cuándo crear una tarea de seguimiento y qué debe incluir (responsable, fecha límite, contexto).",
     action_id: "crear_tarea",
+  },
+  {
+    type: "crear_contacto",
+    key: "crear_contacto",
+    label: "Guardar prospecto o cliente",
+    description:
+      "Guarda un prospecto o cliente en el CRM. La identidad se resuelve por CURP, teléfono o Instagram (en ese orden) y el registro conserva un id estable aunque se actualice.",
+    instructions_placeholder:
+      "Describe cuándo registrar un prospecto o cliente, qué datos capturar (nombre, CURP, teléfono, Instagram, necesidad) y cuándo marcarlo como cliente en vez de prospecto. Si detectas un prospecto y no sabes su nombre completo, pídeselo de forma amable antes de continuar.",
+    action_id: "crear_contacto",
   },
   {
     type: "generar_resumen",
@@ -936,7 +947,7 @@ function latest_action_value(rows, action_id, ...keys) {
 
 async function get_conversation_value_summary(pool, conversation_id) {
   const message_filter = "SELECT id FROM messages WHERE conversation_id = $1";
-  const [sales, latest_sale, purchases, purchase_items, inventory, notes, action_logs] = await Promise.all([
+  const [sales, latest_sale, purchases, purchase_items, inventory, notes, action_logs, crm_clients] = await Promise.all([
     pool.query(
       `
         SELECT count(*)::int AS count, max(created_at) AS last_at
@@ -1002,6 +1013,7 @@ async function get_conversation_value_summary(pool, conversation_id) {
       `,
       [conversation_id],
     ),
+    list_crm_clients_for_conversation(pool, conversation_id),
   ]);
 
   const logs = action_logs.rows;
@@ -1029,6 +1041,7 @@ async function get_conversation_value_summary(pool, conversation_id) {
       count: inventory.rows[0]?.count ?? 0,
     },
     notes: notes.rows,
+    crm: crm_clients,
     opening_cash: latest_action_value(logs, "registrar_inicio_dia", "opening_cash"),
     closing_cash: latest_action_value(logs, "registrar_cierre_dia", "closing_cash", "cash_on_hand", "final_cash"),
     latest_summary,
@@ -1039,6 +1052,7 @@ async function get_conversation_value_summary(pool, conversation_id) {
       summary.purchases.count ||
       summary.inventory.count ||
       summary.notes.length ||
+      summary.crm.length ||
       summary.opening_cash != null ||
       summary.closing_cash != null ||
       summary.latest_summary,

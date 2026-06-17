@@ -11,7 +11,8 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
    - Falta: usar el **Prompt Compiler completo** en el inbound (hoy solo `test_message` compila prompt) y **extraccion de campos por AI** (hoy los `extract_*` son deterministicos; AI decide la intencion, no los montos).
 
 2. Implementar mas handlers reales para las actions `stub_*`.
-   - Hoy solo `buscar_negocios`, `guardar_nota`, `crear_tarea` y `generar_resumen` son ejecucion interna real.
+   - Hoy `buscar_negocios`, `crear_contacto` (CRM), `guardar_nota`, `crear_tarea`, `generar_resumen` y las operativas son ejecucion interna real.
+   - Hecho: **CRM (prospectos/clientes)** — `crear_contacto` real con resolucion de identidad y clave de negocio derivada (CURP > tel > IG), captura por inbound (`lead_capture`) y panel "Valor capturado". Ver `architecture/crm.md`. Siguiente: vista de lista CRM por cuenta y cambios de etapa explicitos (`actualizar_contacto` sigue stub; el upsert ya cubre crear/actualizar/etapa).
    - Priorizar el resto sin venderlas como reales hasta tener handler o proveedor.
 
 3. Builder LLM de bots desde lenguaje natural.

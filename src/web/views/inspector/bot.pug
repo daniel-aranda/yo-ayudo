@@ -4,7 +4,6 @@ block content
   -
     const definition = bot?.definition_json || {};
     const identity = definition.identity || {};
-    const conv_pill_class = { ok: "status-executed", warn: "status-pending_provider", idle: "status-blocked" };
     const behavior = definition.behavior || {};
     const interactions = Array.isArray(definition.interactions) ? definition.interactions : [];
     const ai = definition.ai || {};
@@ -87,6 +86,7 @@ block content
       buscar_negocios: "search",
       guardar_nota: "note",
       crear_tarea: "task",
+      crear_contacto: "id_card",
       generar_resumen: "summary",
       responder_voz: "mic",
       registrar_inicio_dia: "cash",
@@ -590,25 +590,7 @@ block content
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="conversaciones", hidden)
         +section_head("chat", "Conversaciones recientes", "Las conversaciones más recientes de este agente.")
-        if conversations.length
-          ul.conv-list
-            each conversation in conversations
-              li
-                a.conv-row(href=(bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))
-                  div.conv-row__main
-                    div.conv-row__head
-                      span.conv-row__title= conversation.summary.title
-                      if conversation.summary.subtitle
-                        span.conv-row__phone= conversation.summary.subtitle
-                    span.conv-row__preview= conversation.summary.preview
-                  div.conv-row__aside
-                    span.conv-row__time= conversation.summary.relative_time
-                    div.conv-row__pills
-                      if conversation.summary.needs_human
-                        span.status-pill.status-pending_provider Atención humana
-                      span(class=`status-pill ${conv_pill_class[conversation.summary.status_tone] || "status-blocked"}`)= conversation.summary.status_label
-        else
-          div.empty Sin conversaciones recientes.
+        +conversation_list(conversations, { account_id: bot.account_id, show_bot: false })
   else
     section.page-header
       h1 Agente no encontrado

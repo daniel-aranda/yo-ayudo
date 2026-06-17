@@ -262,6 +262,7 @@ const INTENT_TO_OPERATION_ACTION = {
   daily_close: "registrar_cierre_dia",
   daily_note: "registrar_nota_dia",
   report_request: "generar_reporte_dia",
+  lead_capture: "crear_contacto",
 };
 
 async function dispatch_one_operation(actions, processing_context, parsed) {

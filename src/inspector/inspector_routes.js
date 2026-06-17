@@ -15,6 +15,7 @@ import {
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
 import { present_conversation_overview, present_conversation_turns } from "./inspector_presenter.js";
 import { list_tasks_for_conversation } from "../admin/admin_tasks_service.js";
+import { get_crm_client_detail } from "../crm/crm_repository.js";
 import {
   create_knowledge_source,
   get_knowledge_source,
@@ -555,7 +556,10 @@ export function register_inspector_routes(router, dependencies = {}) {
   async function render_conversation_view(response, conversation_id) {
     const view = await get_conversation_view(route_pool, conversation_id);
     const tasks = await list_tasks_for_conversation(route_pool, conversation_id);
-    const view_turns = present_conversation_turns(view.turns, { tasks });
+    // Los prospectos/clientes capturados (de value_summary.crm) alimentan tanto el
+    // chip "Ver prospecto" del turno como las filas clickeables de "Valor capturado".
+    const clients = Array.isArray(view.value_summary?.crm) ? view.value_summary.crm : [];
+    const view_turns = present_conversation_turns(view.turns, { tasks, clients });
     // El top-nav ya queda scopeado por navigation_middleware (deriva la cuenta del
     // path /inspector/accounts/:account_id/conversations/:id).
     response.render("inspector/conversation", {
@@ -613,6 +617,21 @@ export function register_inspector_routes(router, dependencies = {}) {
         "inspector/message_trace",
         await get_message_trace_view(route_pool, route_value(request.params.message_id)),
       );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Detalle de un prospecto/cliente del CRM. Sirve standalone o dentro del popup
+  // iframe del visor de conversación (mismo patrón que el detalle de tarea).
+  router.get("/inspector/crm/:client_id", inspector_auth, async (request, response, next) => {
+    try {
+      const client = await get_crm_client_detail(route_pool, route_value(request.params.client_id));
+      if (!client) {
+        response.status(404).send("Prospecto no encontrado");
+        return;
+      }
+      response.render("inspector/crm_client_detail", { client });
     } catch (error) {
       next(error);
     }

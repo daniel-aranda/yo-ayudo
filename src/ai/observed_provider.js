@@ -115,6 +115,10 @@ export class observed_model_provider {
     return this.observe("extract_daily_note", input, () => this.provider.extract_daily_note(input));
   }
 
+  extract_lead_capture(input) {
+    return this.observe("extract_lead_capture", input, () => this.provider.extract_lead_capture(input));
+  }
+
   draft_daily_report(input) {
     return this.observe("draft_daily_report", input, () => this.provider.draft_daily_report(input));
   }

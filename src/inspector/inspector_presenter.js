@@ -175,6 +175,37 @@ function present_action_task(task) {
     : null;
 }
 
+// CRM: a crear_contacto action carries the saved client's id in its output, so
+// the turn chip can offer "Ver prospecto" (same pattern as "Ver tarea").
+function client_id_from_action_output(action) {
+  const output = object_value(action.output_json);
+  return output.cliente_id ?? output.client_id ?? null;
+}
+
+function find_client_for_action(action, { clients_by_id, used_client_ids }) {
+  if (action.action_id !== "crear_contacto") {
+    return null;
+  }
+  const client_id = client_id_from_action_output(action);
+  if (client_id) {
+    const client = clients_by_id.get(String(client_id));
+    if (client && !used_client_ids.has(String(client.id))) {
+      return client;
+    }
+  }
+  return null;
+}
+
+function present_action_client(client) {
+  return client
+    ? {
+        id: client.id,
+        display_name: client.display_name || client.client_key,
+        kind: client.kind,
+      }
+    : null;
+}
+
 function index_tasks_by_message(tasks) {
   const by_message = new Map();
   for (const task of Array.isArray(tasks) ? tasks : []) {
@@ -216,6 +247,8 @@ export function present_conversation_turns(turns, options = {}) {
   const tasks = Array.isArray(options.tasks) ? options.tasks : [];
   const tasks_by_id = new Map(tasks.map((task) => [String(task.id), task]));
   const tasks_by_message = index_tasks_by_message(tasks);
+  const clients = Array.isArray(options.clients) ? options.clients : [];
+  const clients_by_id = new Map(clients.map((client) => [String(client.id), client]));
 
   return (Array.isArray(turns) ? turns : []).map((turn) => {
     const trace = turn.incoming?.compact_trace_summary ?? null;
@@ -223,6 +256,7 @@ export function present_conversation_turns(turns, options = {}) {
     const incoming_message_id = turn.incoming?.message?.id ?? null;
     const message_tasks = incoming_message_id ? (tasks_by_message.get(String(incoming_message_id)) ?? []) : [];
     const used_task_ids = new Set();
+    const used_client_ids = new Set();
     const responses = (turn.responses ?? []).map((reply) => ({
       text: reply.message.text_body || "",
       at: reply.message.created_at,
@@ -234,12 +268,17 @@ export function present_conversation_turns(turns, options = {}) {
       if (task?.id) {
         used_task_ids.add(String(task.id));
       }
+      const client = find_client_for_action(ix, { clients_by_id, used_client_ids });
+      if (client?.id) {
+        used_client_ids.add(String(client.id));
+      }
       return {
         label: present_action_label(ix, trace, task),
         action_id: ix.action_id,
         status: ix.status,
         tone: action_tone(ix.status),
         task: present_action_task(task),
+        client: present_action_client(client),
       };
     });
     const confidence_pct =
