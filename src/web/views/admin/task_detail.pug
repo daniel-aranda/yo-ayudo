@@ -3,7 +3,7 @@ extends ../layout
 block content
   -
     const when = (value) => {
-      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+      try { return value ? new Date(value).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—"; } catch (error) { return "—"; }
     };
     const status_options = [
       { value: "pendiente", label: "Pendiente" },
@@ -39,65 +39,65 @@ block content
         span.task-modal-state-label Estado
         +state_chips()
 
-    .task-modal-grid
-      section.task-modal-main
-        .task-section-head
-          h2 Seguimiento
-          button.button.secondary-button#toggle_update(type="button", aria-expanded="false", aria-controls="task_update_form") Registrar actualización
+    //- Ficha de datos en tira horizontal compacta (no columna lateral): evita el
+    //- hueco cuando aún no hay seguimiento y deja el seguimiento a todo el ancho.
+    dl.task-facts
+      div.task-fact
+        dt Responsable
+        dd= task.assigned_to || "Sin asignar"
+      div.task-fact
+        dt Contacto
+        dd= task.contact_name || task.contact_phone || "—"
+      div.task-fact
+        dt Bot · cuenta
+        dd= task.account_name ? `${task.bot_name ? `${task.bot_name} · ` : ""}${task.account_name}` : (task.bot_name || "—")
+      div.task-fact
+        dt Creada
+        dd= when(task.created_at)
+      if task.due_at
+        div.task-fact
+          dt Vence
+          dd= when(task.due_at)
 
-        if updates && updates.length
-          ol.task-timeline
-            each update in updates
-              li.task-event
-                .task-event-head
-                  span.task-event-actor= update.actor || "Sistema"
-                  span.task-event-time= when(update.created_at)
-                if update.status_changed
-                  span.task-event-status= `${update.from_label} → ${update.to_label}`
-                if update.note
-                  p.task-event-note= update.note
-        else
-          p.task-empty
-            strong Sin actividad todavía.
-            |  Registra la primera actualización.
+    section.task-modal-main
+      .task-section-head
+        h2 Seguimiento
+        button.button.secondary-button#toggle_update(type="button", aria-expanded="false", aria-controls="task_update_form") Registrar actualización
 
-        //- Form colapsado por default; se abre con "Registrar actualización".
-        form.task-update-form#task_update_form(method="post", action=`${detail_url}/update`, hidden)
-          .task-form-row
-            .task-form-field
-              label(for="task_update_actor") Atendido por
-              input#task_update_actor(type="text", name="actor", value=default_actor, placeholder="Tu nombre")
-            .task-form-field
-              label(for="task_update_status") Cambiar estado
-              select#task_update_status(name="status")
-                option(value="") Sin cambio
-                each option in status_options
-                  option(value=option.value, selected=option.value === task.status)= option.label
+      if updates && updates.length
+        ol.task-timeline
+          each update in updates
+            li.task-event
+              .task-event-head
+                span.task-event-actor= update.actor || "Sistema"
+                span.task-event-time= when(update.created_at)
+              if update.status_changed
+                span.task-event-status= `${update.from_label} → ${update.to_label}`
+              if update.note
+                p.task-event-note= update.note
+      else
+        p.task-empty
+          strong Sin actividad todavía.
+          |  Registra la primera actualización.
+
+      //- Form colapsado por default; se abre con "Registrar actualización".
+      form.task-update-form#task_update_form(method="post", action=`${detail_url}/update`, hidden)
+        .task-form-row
           .task-form-field
-            label(for="task_update_note") Nota
-            textarea#task_update_note(name="note", rows="2", placeholder="Qué pasó: a quién contactaste, resultado, próximos pasos…")
-          .form-actions
-            button(type="submit") Guardar actualización
-            button.secondary-button#cancel_update(type="button") Cancelar
-
-      aside.task-modal-side
-        dl.task-meta
-          div
-            dt Responsable
-            dd= task.assigned_to || "Sin asignar"
-          div
-            dt Contacto
-            dd= task.contact_name || task.contact_phone || "—"
-          div
-            dt Bot · cuenta
-            dd= task.account_name ? `${task.bot_name ? `${task.bot_name} · ` : ""}${task.account_name}` : (task.bot_name || "—")
-          div
-            dt Creada
-            dd= when(task.created_at)
-          if task.due_at
-            div
-              dt Vence
-              dd= when(task.due_at)
+            label(for="task_update_actor") Atendido por
+            input#task_update_actor(type="text", name="actor", value=default_actor, placeholder="Tu nombre")
+          .task-form-field
+            label(for="task_update_status") Cambiar estado
+            select#task_update_status(name="status")
+              option(value="") Sin cambio
+              each option in status_options
+                option(value=option.value, selected=option.value === task.status)= option.label
+        .task-form-field
+          label(for="task_update_note") Nota
+          textarea#task_update_note(name="note", rows="2", placeholder="Qué pasó: a quién contactaste, resultado, próximos pasos…")
+        .form-actions
+          button(type="submit") Guardar actualización
+          button.secondary-button#cancel_update(type="button") Cancelar
 
   script.
     (() => {

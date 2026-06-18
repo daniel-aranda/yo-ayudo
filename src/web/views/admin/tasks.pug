@@ -14,6 +14,7 @@ block content
     ];
     const chat_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V7a2 2 0 0 1 2-2z"/></svg>';
     const check_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const eye_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
     // base_path/scoped permiten reusar esta vista a nivel admin (global) y a nivel
     // cuenta (módulo de tareas de un negocio). Sin scope = admin.
     const base = (typeof base_path !== "undefined" && base_path) ? base_path : "/admin/tasks";
@@ -120,8 +121,8 @@ block content
                 td
                   .task-row-actions
                     if task.conversation_id
-                      button.icon-button(type="button", data-open-conv=`/inspector/accounts/${task.account_id}/conversations/${task.conversation_id}`, title="Ver conversación que originó la tarea", aria-label="Ver conversación que originó la tarea")!= chat_svg
-                    button.button.secondary-button(type="button", data-open-task=task.id) Ver tarea
+                      button.icon-button.is-framed(type="button", data-open-conv=`/inspector/accounts/${task.account_id}/conversations/${task.conversation_id}`, title="Ver conversación que originó la tarea", aria-label="Ver conversación que originó la tarea")!= chat_svg
+                    button.icon-button.is-framed(type="button", data-open-task=task.id, title="Ver tarea", aria-label="Ver tarea")!= eye_svg
     else if filters_active
       .empty Sin tareas que coincidan con los filtros.
     else
@@ -140,13 +141,16 @@ block content
 
   //- Conversación que originó la tarea, en popup (la página real en un iframe).
   #conv_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-conv-popup)
-    .popup.popup--full.popup--default
+    .popup.popup--conversation.popup--default
       .popup__header
         .popup__header-text
-          h3.popup__title Conversación
-        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+          h3.popup__title(data-conv-title) Conversación
+        .popup__header-actions
+          span.status-badge(data-conv-status, hidden)
+          a.button.button-ghost.popup__action(data-conv-open-full, target="_blank", rel="noopener", hidden) Abrir completa ↗
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
       .popup__body.popup__body--frame
-        iframe#conv_frame(title="Conversación que originó la tarea")
+        iframe#conv_frame(title="Conversación")
 
   script
     include ../../public/js/core/Popup.js
@@ -199,12 +203,31 @@ block content
       });
 
       // Popup de la conversación que originó la tarea (solo lectura → sin recarga).
+      // Cabecera enfocada: el iframe (modo framed) nos manda quién es el contacto y
+      // el estado vía "yoayudo:conv-meta"; aquí los pintamos. "Abrir completa" lleva
+      // a la página completa en otra pestaña.
       const convFrame = document.getElementById("conv_frame");
       const convPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-conv-popup]" }) : null;
       convPopup?.iniciar();
+      const convTitle = document.querySelector("[data-conv-title]");
+      const convStatus = document.querySelector("[data-conv-status]");
+      const convOpenFull = document.querySelector("[data-conv-open-full]");
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== "yoayudo:conv-meta") return;
+        if (convTitle && event.data.name) convTitle.textContent = event.data.name;
+        if (convStatus) {
+          convStatus.className = `status-badge ${event.data.status_tone === "closed" ? "is-closed" : "is-open"}`;
+          convStatus.textContent = event.data.status_label || "";
+          convStatus.hidden = !event.data.status_label;
+        }
+      });
       document.addEventListener("click", (event) => {
         const trigger = event.target.closest("[data-open-conv]");
         if (!trigger || !convPopup || !convFrame) return;
+        // Reset de cabecera antes de cargar (no arrastrar datos de la conversación previa).
+        if (convTitle) convTitle.textContent = "Conversación";
+        if (convStatus) { convStatus.hidden = true; convStatus.textContent = ""; }
+        if (convOpenFull) { convOpenFull.href = trigger.dataset.openConv; convOpenFull.hidden = false; }
         convFrame.src = trigger.dataset.openConv;
         convPopup.open();
       });

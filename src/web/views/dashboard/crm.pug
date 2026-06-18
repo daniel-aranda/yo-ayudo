@@ -4,6 +4,7 @@ block content
   -
     const key_type_labels = { curp: "CURP", phone: "Teléfono", instagram: "Instagram", email: "Email", internal: "ID interno" };
     const persona_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.2-5.5 7-5.5s7 1.9 7 5.5"/></svg>';
+    const trophy_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0V4z"/><path d="M6 6H4v1a3 3 0 0 0 3 3M18 6h2v1a3 3 0 0 1-3 3"/></svg>';
     const iniciales = (client) => {
       const name = String(client.display_name || "").trim();
       if (!name) return null;
@@ -40,7 +41,10 @@ block content
         - const customs = column.custom_categories || []
         section.crm-col(data-stage=column.key)
           header.crm-col__head
-            span.crm-col__label= column.label
+            span.crm-col__title
+              if column.key === "ganado"
+                != trophy_svg
+              span.crm-col__label= column.label
             span.crm-col__count= column.clients.length
           if customs.length
             label.crm-col__filter
@@ -141,6 +145,11 @@ block content
           card.querySelector(".crm-card__subcat")?.remove();
           list.appendChild(item);
           recount();
+          // Celebración al mover una tarjeta a Ganado (motion = estado, no adorno).
+          if (col.dataset.stage === "ganado") {
+            card.classList.add("just-won");
+            setTimeout(() => card.classList.remove("just-won"), 700);
+          }
           try {
             const res = await fetch(`/dashboard/accounts/${accountId}/crm/${card.dataset.clientId}/stage`, {
               method: "POST",

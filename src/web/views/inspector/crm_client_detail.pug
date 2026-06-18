@@ -3,7 +3,7 @@ extends ../layout
 block content
   -
     const when = (value) => {
-      try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
+      try { return value ? new Date(value).toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—"; } catch (error) { return "—"; }
     };
     const key_type_labels = { curp: "CURP", phone: "Teléfono", instagram: "Instagram", email: "Email", internal: "ID interno" };
     const kind_label = client.kind === "cliente" ? "Cliente" : "Prospecto";
@@ -54,64 +54,64 @@ block content
         strong.task-modal-title= client.client_key || "—"
         span.task-event-status= key_type_label
 
-    .task-modal-grid
-      section.task-modal-main
-        .task-section-head
-          h2 Identificadores
-        if identifiers.length
-          dl.task-meta
-            each row in identifiers
-              div
-                dt= row.label
-                dd= row.value
+    //- Metadatos en tira horizontal compacta (mismo patrón que el detalle de
+    //- tarea): evita el grid de 2 col que dejaba hueco con pocos identificadores.
+    dl.task-facts
+      div.task-fact
+        dt Tipo
+        dd= kind_label
+      div.task-fact
+        dt Etapa
+        if editable_stage
+          dd
+            form.crm-stage-form(method="post", action=stage_action)
+              input(type="hidden", name="return_to", value=stage_return)
+              select.crm-stage-select(name="stage", aria-label="Cambiar etapa")
+                if !is_base_stage
+                  option(value=current_stage, selected) #{status_pretty} (actual)
+                each stage in base_stages
+                  option(value=stage.value, selected=stage.value === current_stage)= stage.label
         else
-          p.task-empty
-            strong Sin identificadores.
-            |  Solo se conoce por su id interno.
-        if client.need
-          .task-section-head
-            h2 Necesidad
-          p.task-modal-desc= client.need
-        if client.notes
-          .task-section-head
-            h2 Notas
-          p.task-modal-desc= client.notes
+          dd= status_pretty || "—"
+      if client.source
+        div.task-fact
+          dt Origen
+          dd= client.source
+      if client.assigned_to
+        div.task-fact
+          dt Responsable
+          dd= client.assigned_to
+      div.task-fact
+        dt Bot · cuenta
+        dd= client.account_name ? `${client.bot_name ? `${client.bot_name} · ` : ""}${client.account_name}` : (client.bot_name || "—")
+      div.task-fact
+        dt Creado
+        dd= when(client.created_at)
+      div.task-fact
+        dt Actualizado
+        dd= when(client.updated_at)
 
-      aside.task-modal-side
-        dl.task-meta
-          div
-            dt Tipo
-            dd= kind_label
-          div
-            dt Etapa
-            if editable_stage
-              dd
-                form.crm-stage-form(method="post", action=stage_action)
-                  input(type="hidden", name="return_to", value=stage_return)
-                  select.crm-stage-select(name="stage", aria-label="Cambiar etapa")
-                    if !is_base_stage
-                      option(value=current_stage, selected) #{status_pretty} (actual)
-                    each stage in base_stages
-                      option(value=stage.value, selected=stage.value === current_stage)= stage.label
-            else
-              dd= status_pretty || "—"
-          if client.source
-            div
-              dt Origen
-              dd= client.source
-          if client.assigned_to
-            div
-              dt Responsable
-              dd= client.assigned_to
-          div
-            dt Bot · cuenta
-            dd= client.account_name ? `${client.bot_name ? `${client.bot_name} · ` : ""}${client.account_name}` : (client.bot_name || "—")
-          div
-            dt Creado
-            dd= when(client.created_at)
-          div
-            dt Actualizado
-            dd= when(client.updated_at)
+    section.task-modal-main
+      .task-section-head
+        h2 Identificadores
+      if identifiers.length
+        dl.task-facts.task-facts--plain
+          each row in identifiers
+            div.task-fact
+              dt= row.label
+              dd= row.value
+      else
+        p.task-empty
+          strong Sin identificadores.
+          |  Solo se conoce por su id interno.
+      if client.need
+        .task-section-head
+          h2 Necesidad
+        p.task-modal-desc= client.need
+      if client.notes
+        .task-section-head
+          h2 Notas
+        p.task-modal-desc= client.notes
 
   script.
     (() => {

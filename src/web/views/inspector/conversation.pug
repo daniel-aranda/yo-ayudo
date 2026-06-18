@@ -8,6 +8,8 @@ block content
     const conversations_url = conversation && conversation.bot_id ? `/inspector/bots/${conversation.bot_id}/conversations` : "/inspector";
     const status_value = conversation ? (conversation.status || "open") : "open";
     const status_label = status_value === "closed" ? "Cerrada" : status_value === "open" ? "Abierta" : status_value;
+    // Identidad para la cabecera del popup (modo framed): el host la pinta.
+    const conv_meta_json = conversation ? JSON.stringify({ type: "yoayudo:conv-meta", name: contact_name, status_label: status_label, status_tone: status_value }) : "null";
     const bot_phone = conversation ? (conversation.bot_display_phone_number || conversation.bot_phone_number_id || "") : "";
     const value = value_summary || {};
     const task_count = Array.isArray(tasks) ? tasks.length : 0;
@@ -363,4 +365,15 @@ block content
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") closeDetails(null);
       });
+    })();
+
+  script.
+    (() => {
+      // En el popup de tareas este visor vive dentro de un iframe: le avisamos al
+      // host quién es el contacto y el estado para que la cabecera del popup los
+      // muestre (la cabecera de la página se oculta en modo framed). Fuera de
+      // iframe no hace nada.
+      const meta = !{conv_meta_json};
+      if (!meta || window.self === window.top) return;
+      try { window.parent.postMessage(meta, "*"); } catch (error) { /* host en otro origen */ }
     })();

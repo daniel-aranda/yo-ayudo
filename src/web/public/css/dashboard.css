@@ -962,6 +962,101 @@ button:active {
   white-space: nowrap;
 }
 
+/* ===== Temperatura del pipeline: Ganado celebra, Perdido se repliega =====
+   Nuevo e Interesado se quedan neutrales a propósito: el contraste es lo que
+   hace resaltar la victoria y replegar la pérdida. El esmeralda está racionado
+   para el estado positivo (regla de marca: verde = bueno/vivo). */
+
+.crm-col__title {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* Ganado — la victoria: columna en menta con anillo esmeralda tenue. */
+.crm-col[data-stage="ganado"] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+.crm-col[data-stage="ganado"] .crm-col__label {
+  color: var(--accent-dark);
+}
+
+.crm-col[data-stage="ganado"] .crm-col__title .ui-icon {
+  color: var(--accent-dark);
+  flex: none;
+  height: 0.95rem;
+  width: 0.95rem;
+}
+
+.crm-col[data-stage="ganado"] .crm-col__count {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.crm-col[data-stage="ganado"] .crm-card {
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--line));
+  box-shadow: var(--shadow-sm);
+}
+
+.crm-col[data-stage="ganado"] .crm-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+/* Perdido — se repliega: baja opacidad en reposo, vuelve al interactuar. */
+.crm-col[data-stage="perdido"] {
+  opacity: 0.6;
+  transition: opacity 200ms ease;
+}
+
+.crm-col[data-stage="perdido"]:hover,
+.crm-col[data-stage="perdido"]:focus-within,
+.crm-col[data-stage="perdido"].is-drop-target {
+  opacity: 1;
+}
+
+.crm-col[data-stage="perdido"] .crm-col__label {
+  color: var(--muted);
+}
+
+.crm-col[data-stage="perdido"] .crm-card__avatar {
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+
+/* Pulso de celebración al soltar una tarjeta en Ganado. */
+@keyframes crm-win-pop {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-ring);
+    transform: scale(1);
+  }
+  35% {
+    box-shadow: 0 0 0 7px var(--accent-ring);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: var(--shadow-sm);
+    transform: scale(1);
+  }
+}
+
+.crm-card.just-won {
+  animation: crm-win-pop 620ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-card.just-won {
+    animation: none;
+  }
+
+  .crm-col[data-stage="perdido"] {
+    transition: none;
+  }
+}
+
 /* ===== Bandeja de tareas: fila compacta (estado dropdown + asignar inline) ===== */
 .tasks-table td {
   vertical-align: top;
@@ -1104,9 +1199,10 @@ button:active {
 }
 
 label {
-  color: var(--muted);
+  color: var(--text);
   display: block;
   font-size: 13px;
+  font-weight: 600;
   margin-bottom: 6px;
 }
 
@@ -1138,6 +1234,13 @@ input[readonly],
 textarea[readonly] {
   background: var(--surface-strong);
   color: var(--muted);
+}
+
+/* Placeholder legible: sin regla propia caía al gris claro del navegador (~4.6:1
+   y opacidad < 1 en Firefox). Lo fijamos al muted de marca con opacidad 1. */
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 
 button:disabled {
@@ -2215,7 +2318,7 @@ td input {
 }
 
 .field-hint {
-  color: var(--muted);
+  color: color-mix(in oklab, var(--muted), var(--text) 32%);
   font-size: 12px;
   margin: 6px 0 0;
 }
@@ -2551,6 +2654,15 @@ pre {
   width: 96vw;
 }
 
+/* Popup del visor de conversación enfocado: ancho cómodo para hilo + sidebar,
+   alto pero no fullscreen (no es el visor JSON denso). */
+.popup--conversation {
+  height: min(88vh, 56rem);
+  max-height: 88vh;
+  max-width: min(64rem, 96vw);
+  width: min(64rem, 96vw);
+}
+
 .popup__header {
   align-items: flex-start;
   border-bottom: 1px solid var(--line);
@@ -2564,6 +2676,19 @@ pre {
   flex: 1;
   flex-direction: column;
   gap: 3px;
+}
+
+.popup__header-actions {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 10px;
+}
+
+.popup__action {
+  font-size: 0.8125rem;
+  padding: 5px 10px;
+  white-space: nowrap;
 }
 
 .popup__title {
@@ -2653,6 +2778,27 @@ pre {
    and drop the topbar: the host page already provides the chrome. */
 html.is-framed .topbar {
   display: none;
+}
+
+/* ============================================================
+   Conversación enfocada en popup: cuando el visor se abre dentro de un iframe
+   (html.is-framed), se quita el chrome de "app" — migas, la cabecera de página
+   (con "Volver al dashboard") y la franja de métricas del inspector — y los
+   enlaces "Ver trace completo". Se conservan el hilo y el sidebar de contexto
+   (Contacto / Valor capturado / Tareas). La identidad (quién + estado + "abrir
+   completa") la pone la cabecera del popup. En página completa nada de esto aplica.
+   ============================================================ */
+html.is-framed .breadcrumb:has(+ .conversation-header),
+html.is-framed .conversation-header,
+html.is-framed .conv-summary,
+html.is-framed .conversation-view .turn-foot {
+  display: none;
+}
+
+/* En el popup el sidebar no flota: no hay topbar de 84px que sirva de referencia. */
+html.is-framed .conversation-view .inspector-sidebar {
+  position: static;
+  top: auto;
 }
 
 /* ============================================================
@@ -3919,19 +4065,6 @@ main.container:has(.task-modal) {
   text-transform: uppercase;
 }
 
-.task-modal-grid {
-  align-items: start;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-}
-
-@media (max-width: 560px) {
-  .task-modal-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .task-section-head {
   align-items: center;
   display: flex;
@@ -3973,8 +4106,12 @@ main.container:has(.task-modal) {
 }
 
 .task-event {
-  border-left: 2px solid var(--line-strong);
-  padding: 0 0 0.1rem 0.7rem;
+  padding: 0;
+}
+
+.task-event + .task-event {
+  border-top: 1px solid var(--line);
+  padding-top: 0.6rem;
 }
 
 .task-event-head {
@@ -4065,37 +4202,47 @@ main.container:has(.task-modal) {
   padding: 0.45rem 0.9rem;
 }
 
-/* Columna derecha: ficha secundaria, bajo peso visual. */
-.task-modal-side {
+/* Tira de datos del task modal (responsable/contacto/bot/fechas): horizontal y
+   compacta. Reemplaza la columna lateral para que el seguimiento sea a todo el
+   ancho y no quede un hueco cuando aún no hay actividad. */
+.task-facts {
   background: var(--surface-strong);
   border-radius: 10px;
-  padding: 0.75rem 0.85rem;
+  display: grid;
+  gap: 0.55rem 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0;
+  padding: 0.7rem 0.9rem;
 }
 
-.task-meta {
+.task-fact {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin: 0;
+  gap: 0.1rem;
+  min-width: 0;
 }
 
-.task-meta div {
-  align-items: baseline;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-}
-
-.task-meta dt {
+.task-fact dt {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
-.task-meta dd {
-  font-size: 0.82rem;
+.task-fact dd {
+  color: var(--text);
+  font-size: 0.85rem;
   font-weight: 600;
   margin: 0;
-  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Variante sin banda: para los identificadores (van bajo su propio heading, no
+   necesitan el fondo de la tira de metadatos). */
+.task-facts--plain {
+  background: transparent;
+  padding: 0;
 }
 
 /* Fila de botones de alta por negocio (abren popups). */
@@ -4218,6 +4365,54 @@ button.help-tip:focus-visible::after {
 /* Popup "Agregar canal": tabs WhatsApp / Instagram (coming soon). */
 .add-channel-tab-shell {
   margin-bottom: 1rem;
+}
+
+/* Form de alta de canal: cada campo (label + input + hint) es un grupo, con aire
+   entre grupos — deja de leerse como una pila plana. Scoped (no toca .popup-form). */
+.channel-add-form {
+  gap: 1rem;
+}
+
+.popup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.popup-field label,
+.popup-field input,
+.popup-field select,
+.popup-field .field-hint {
+  margin: 0;
+}
+
+/* Separa la conexión opcional a un bot (routing) de las credenciales del canal. */
+.popup-field--divided {
+  border-top: 1px solid var(--line);
+  margin-top: 0.35rem;
+  padding-top: 1rem;
+}
+
+/* Dot de marca del canal en las tabs: identidad instantánea (mismos colores que
+   .channel-icon--whatsapp/--instagram). */
+.channel-dot {
+  border-radius: 999px;
+  flex: none;
+  height: 0.6rem;
+  width: 0.6rem;
+}
+
+.channel-dot--whatsapp {
+  background: #25d366;
+}
+
+.channel-dot--instagram {
+  background: radial-gradient(circle at 28% 108%, #fdf497 0%, #fdf497 8%, #fd5949 38%, #d6249f 60%, #285aeb 100%);
+}
+
+/* CTA a ancho completo: el form del popup se siente terminado. */
+.form-actions--full button {
+  width: 100%;
 }
 
 .channel-coming-soon {
@@ -4481,6 +4676,24 @@ button.help-tip:focus-visible::after {
 .icon-button .ui-icon {
   height: 18px;
   width: 18px;
+}
+
+/* Variante "enmarcada": el icon-button base es transparente sin borde (bien para
+   acciones secundarias en un row denso), pero cuando el icono ES la acción
+   principal de la fila debe leerse como botón clickeable al reposo, no solo al
+   hover. Le damos superficie + borde + sombra suave. */
+.icon-button.is-framed {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+  padding: 7px;
+}
+
+.icon-button.is-framed:hover {
+  background: var(--surface-strong);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Icon links inside tables (e.g. inspector row actions) must not inherit the

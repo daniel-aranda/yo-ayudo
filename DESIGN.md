@@ -219,7 +219,8 @@ Layered and soft, not flat. Depth is carried by warm, low-opacity shadows (tinte
 ### Inputs / Fields
 - **Style:** Counter White fill, 1px Hairline border, 7px radius, `~9–10px` padding, inherited font.
 - **Focus:** border shifts to Petrol Emerald + `0 0 0 3px` accent-ring halo (`rgba(15,106,90,0.24)`); outline removed.
-- **Readonly:** Sand fill + Olive Muted text. **Placeholder:** must clear the same legibility bar as body text — no faint gray.
+- **Readonly:** Sand fill + Olive Muted text. **Placeholder:** must clear the same legibility bar as body text — no faint gray. Enforced by a global `::placeholder { color: var(--muted); opacity: 1 }` (≈5.1:1) so it never falls back to the browser's faint default; `opacity:1` también corrige el atenuado de Firefox.
+- **Label (`<label>`):** Ink, 13px, **weight 600** — el campo se lee de un vistazo y crea jerarquía sobre el hint (NO Olive Muted: gris sobre blanco mata la legibilidad). El helper text (`.field-hint`) va un paso más oscuro que muted (`color-mix` hacia Ink, ≈7.9:1), claramente secundario pero legible.
 
 ### Cards / Panels / Metrics
 - **Corner Style:** 8px.

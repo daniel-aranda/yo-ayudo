@@ -207,24 +207,32 @@ block content
         .popup__body
           .add-channel-tab-shell.wamy-tabs
             #add-channel-tabs.tabs(data-initial-tab="whatsapp", role="tablist", aria-label="Tipo de canal")
-              button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true") WhatsApp
-              button.tab(type="button", data-section="instagram", role="tab", aria-selected="false") Instagram
+              button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true")
+                span.channel-dot.channel-dot--whatsapp(aria-hidden="true")
+                | WhatsApp
+              button.tab(type="button", data-section="instagram", role="tab", aria-selected="false")
+                span.channel-dot.channel-dot--instagram(aria-hidden="true")
+                | Instagram
           .tab-section(data-parent-tab="add-channel-tabs", data-section="whatsapp")
-            form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/channels`)
+            form.popup-form.channel-add-form(method="post", action=`/dashboard/accounts/${account.id}/channels`)
               input(type="hidden", name="channel_type", value="whatsapp")
-              label(for="channel_display_phone_number") Número de WhatsApp
-              input#channel_display_phone_number(type="tel", name="display_phone_number", placeholder="+52 55 1234 5678", required)
-              p.field-hint El número con lada que ven tus clientes.
-              label(for="channel_phone_number_id") ID del número en Meta
-              input#channel_phone_number_id(type="text", name="phone_number_id", placeholder="Phone number ID de la API de WhatsApp", required)
-              p.field-hint Lo encuentras en Meta Business → WhatsApp → Configuración de la API.
+              .popup-field
+                label(for="channel_display_phone_number") Número de WhatsApp
+                input#channel_display_phone_number(type="tel", name="display_phone_number", placeholder="+52 55 1234 5678", required)
+                p.field-hint El número con lada que ven tus clientes.
+              .popup-field
+                label(for="channel_phone_number_id") ID del número en Meta
+                input#channel_phone_number_id(type="text", name="phone_number_id", placeholder="Phone number ID de la API de WhatsApp", required)
+                p.field-hint Lo encuentras en Meta Business → WhatsApp → Configuración de la API.
               if bots && bots.length
-                label(for="channel_bot_id") Conectar a un bot (opcional)
-                select#channel_bot_id(name="bot_id")
-                  option(value="") Conectar después
-                  each bot in bots
-                    option(value=bot.id)= bot.name
-              div.form-actions
+                .popup-field.popup-field--divided
+                  label(for="channel_bot_id") Conectar a un bot (opcional)
+                  select#channel_bot_id(name="bot_id")
+                    option(value="") Conectar después
+                    each bot in bots
+                      option(value=bot.id)= bot.name
+                  p.field-hint Puedes conectarlo ahora o después desde la pestaña Bots.
+              div.form-actions.form-actions--full
                 button(type="submit") Conectar WhatsApp
           .tab-section(data-parent-tab="add-channel-tabs", data-section="instagram", hidden)
             .channel-coming-soon
