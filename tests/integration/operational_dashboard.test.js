@@ -82,13 +82,15 @@ describe("Operational dashboard", () => {
     await seed_operational_day(pool, account_id, organization_id);
 
     const app = create_dashboard_test_app(pool);
+    // Default range is "Hoy" → the single-day operational detail renders.
     const response = await request(app).get(`/dashboard/accounts/${account_id}`).expect(200);
 
-    expect(response.text).toContain("Dashboard operativo");
-    expect(response.text).toContain("Ventas del día");
-    expect(response.text).toContain("8,500"); // total_sales formatted as MXN
-    expect(response.text).toContain("pastor"); // seeded purchase
-    expect(response.text).toContain("Caja final");
+    // Métricas unificadas (sin la antigua zona amurallada "Dashboard operativo").
+    expect(response.text).toContain("Ventas"); // métrica unificada (ya no "Ventas del día")
+    expect(response.text).toContain("8,500"); // total_sales formatted as MXN (suma del rango "Hoy")
+    expect(response.text).toContain("pastor"); // seeded purchase (detalle del día)
+    expect(response.text).toContain("Caja final"); // detalle de un solo día
+    expect(response.text).not.toContain("Dashboard operativo"); // la cabecera vieja se fue
     expect(response.text).not.toContain("No hay dashboard operativo configurado");
     // T1: the operation date must be formatted in es-MX, not a raw JS Date.
     expect(response.text).not.toContain("GMT");
@@ -142,23 +144,53 @@ describe("Operational dashboard", () => {
     expect(response.text).toContain("Aún no hay actividad operativa");
   });
 
-  it("hides the operational dashboard for accounts whose bots have no operational capability", async () => {
+  it("hides the operational detail for accounts whose bots have no operational capability", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     await seed_operational_day(pool, account_id, organization_id);
+
+    const app = create_dashboard_test_app(pool);
+    // Antes de quitar las capacidades: la cuenta operativa SÍ muestra el detalle
+    // de un solo día (caja/compras). Sirve de control contra el caso negativo.
+    const operational = await request(app).get(`/dashboard/accounts/${account_id}`).expect(200);
+    expect(operational.text).toContain("Caja final");
+    expect(operational.text).toContain("Caja inicial");
+    expect(operational.text).toContain("pastor"); // tabla de compras del día
+
     // Strip operational actions: this account's bots are now commercial-only.
     await pool.query(
       `UPDATE bots SET acciones_habilitadas_json = '["buscar_negocios","guardar_nota"]'::jsonb WHERE account_id = $1`,
       [account_id],
     );
 
-    const app = create_dashboard_test_app(pool);
     const response = await request(app)
       .get(`/dashboard/accounts/${account_id}`)
       .expect(200);
 
-    // Even with operational data present, no operational bot => no operational dashboard.
-    expect(response.text).not.toContain("Dashboard operativo");
-    expect(response.text).not.toContain("Ventas del día");
+    // Even with operational data present, no operational bot => no single-day
+    // detail. Se aserta la ausencia de marcadores inequívocos (no "Ventas", que
+    // podría colisionar con el nombre de la cuenta sembrada).
+    expect(response.text).not.toContain("Caja final");
+    expect(response.text).not.toContain("Caja inicial");
+    expect(response.text).not.toContain("Desglose de ventas");
+    expect(response.text).not.toContain("pastor"); // sin tabla de compras del día
+  });
+
+  it("accumulates sales/purchases over a multi-day range without the single-day detail", async () => {
+    const { account_id, organization_id } = await account_with_bots(pool);
+    await seed_operational_day(pool, account_id, organization_id);
+
+    const app = create_dashboard_test_app(pool);
+    const response = await request(app).get(`/dashboard/accounts/${account_id}?range=7d`).expect(200);
+
+    // Las métricas unificadas siguen visibles (acumuladas sobre el rango).
+    expect(response.text).toContain("Conversaciones");
+    expect(response.text).toContain("Ventas");
+    expect(response.text).toContain("8,500"); // total_sales sumado en los últimos 7 días
+    // El preset "7 días" queda activo (Pug renderiza class antes que href).
+    expect(response.text).toContain('<a class="is-active" href="/dashboard/accounts/' + account_id + '?range=7d"');
+    // El detalle de un solo día (caja/compras) NO aplica a rangos multi-día.
+    expect(response.text).not.toContain("Caja final");
+    expect(response.text).not.toContain("pastor");
   });
 
   it("scopes the top nav to the account when one is in the URL (Inspector/Review carry it; Admin stays global)", async () => {
@@ -222,13 +254,14 @@ describe("Operational dashboard", () => {
     expect(page.text).toContain("system_bot_search");
     expect(page.text).not.toContain("system_bot_picker");
 
-    // Custom desde cero → draft del tipo custom en esta cuenta, visible en el panel.
+    // Custom desde cero → draft del tipo custom en esta cuenta; redirige directo al
+    // editor del bot recién creado (`/inspector/bots/:id`) para configurarlo.
     await request(app)
       .post(`${base}/bots`)
       .type("form")
       .send({ name: "Bot Dashboard Custom" })
       .expect(302)
-      .expect("Location", `${base}#panel-bots`);
+      .expect("Location", /^\/inspector\/bots\/[0-9a-f-]+$/);
     const custom = (await pool.query("SELECT * FROM bots WHERE slug = 'bot-dashboard-custom' LIMIT 1")).rows[0];
     expect(custom).toBeTruthy();
     expect(custom.status).toBe("draft");
@@ -238,15 +271,15 @@ describe("Operational dashboard", () => {
     expect(refreshed.text).toContain("Bot Dashboard Custom");
 
     // Desde bot de sistema → clon custom en draft, sin knowledge ni grupos de la
-    // cuenta origen (el bot de sistema seedeado vive en esta misma cuenta, así
-    // que el slug del clon se desambigua con sufijo).
+    // cuenta origen. El clon se identifica por `settings_json.cloned_from_bot_id`
+    // (su slug se deriva del nombre, no del slug origen).
     const system_bot = (
       await pool.query("SELECT id, name, slug FROM bots WHERE bot_type = 'system' AND status = 'active' LIMIT 1")
     ).rows[0];
     expect(system_bot).toBeTruthy();
     await request(app).post(`${base}/bots`).type("form").send({ source_bot_id: system_bot.id }).expect(302);
     const clone = (
-      await pool.query("SELECT * FROM bots WHERE slug = $1 AND id != $2 LIMIT 1", [`${system_bot.slug}-2`, system_bot.id])
+      await pool.query("SELECT * FROM bots WHERE settings_json->>'cloned_from_bot_id' = $1 LIMIT 1", [system_bot.id])
     ).rows[0];
     expect(clone).toBeTruthy();
     expect(clone.bot_type).toBe("custom");

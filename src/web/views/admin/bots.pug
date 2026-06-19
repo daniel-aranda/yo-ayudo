@@ -48,8 +48,11 @@ block content
     a(href="/admin/guardrails") Guardrails
 
   section.page-header
-    h1 Bots
-    p= `Bots de la plataforma y su uso · últimos ${days} días`
+    .page-header-row
+      div
+        h1 Bots
+        p= `Bots de la plataforma y su uso · últimos ${days} días`
+      button#open_create_bot(type="button") Crear bot
 
   .period-filter
     span.period-filter-label Periodo
@@ -150,6 +153,36 @@ block content
       a(href=toggle_archived_href) Ocultar archivados
     else
       a(href=toggle_archived_href)= archived_count ? `Ver archivados (${archived_count})` : "Ver archivados"
+
+  //- Crear bot de sistema: nombre + descripción → draft, se configura en el editor.
+  #create_bot_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-create-bot-popup)
+    .popup.popup--md.popup--default
+      .popup__header
+        .popup__header-text
+          h3.popup__title Crear bot de sistema
+          .popup__subtitle Un bot de plataforma, clonable a cualquier cuenta. Lo configuras en el editor.
+        button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+      .popup__body
+        form.popup-form.channel-add-form(method="post", action="/admin/bots")
+          .popup-field
+            label(for="new_bot_name") Nombre
+            input#new_bot_name(type="text", name="name", placeholder="p. ej. Bot Reservas", required)
+          .popup-field
+            label(for="new_bot_description") Descripción
+            input#new_bot_description(type="text", name="description", placeholder="Qué hace este bot")
+            p.field-hint Se crea en borrador; defines prompt, acciones y knowledge en el editor.
+          div.form-actions.form-actions--full
+            button(type="submit") Crear bot
+
+  script
+    include ../../public/js/core/Popup.js
+
+  script.
+    (() => {
+      const createBotPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-create-bot-popup]" }) : null;
+      createBotPopup?.iniciar();
+      document.getElementById("open_create_bot")?.addEventListener("click", () => createBotPopup?.open());
+    })();
 
   script.
     (() => {

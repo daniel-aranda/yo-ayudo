@@ -19,14 +19,16 @@ export function minimal_draft_definition(name) {
     identity: {
       name,
       description: "",
-      goal: "Define el objetivo de este agente.",
+      // Vac\u00edos a prop\u00f3sito: el editor los muestra como placeholder (gu\u00eda), no como
+      // valor real. El founder los llena; no queremos texto de relleno guardado.
+      goal: "",
       status: "draft",
       type: "custom",
     },
     behavior: {
       language: "es-MX",
       tone: "professional",
-      operating_instructions: "Describe c\u00f3mo debe operar este agente, qu\u00e9 debe priorizar y cu\u00e1ndo debe consultar humanos.",
+      operating_instructions: "",
     },
   };
 }
@@ -71,7 +73,7 @@ export class custom_bot_service {
         ...(source_definition.identity ?? {}),
         name: bot_name,
         description: source_definition.identity?.description ?? source_bot.description ?? "",
-        goal: source_definition.identity?.goal || "Define el objetivo de este agente.",
+        goal: source_definition.identity?.goal || "",
         status: "draft",
         type: "custom",
       },
@@ -137,6 +139,43 @@ export class custom_bot_service {
       tono: definition.behavior.tone,
       knowledge_base_ids_json: definition.knowledge_source_ids,
       reglas_guardrail_json: definition.behavior.constraints ? definition.behavior.constraints.split("\n") : [],
+    });
+  }
+
+  // Crea un bot de SISTEMA (plataforma) en draft. Igual que create_custom_bot pero
+  // bot_type/identity.type = "system": es un template clonable a cualquier cuenta.
+  // Se configura (prompt, acciones, knowledge) en el editor del inspector.
+  async create_system_bot(input) {
+    const account = await get_account_by_id(this.pool, input.account_id);
+    if (!account) {
+      throw new Error(`Account not found: ${input.account_id}`);
+    }
+    const name = String(input.name ?? "").trim();
+    if (!name) {
+      throw new Error("Bot name required");
+    }
+    const description = String(input.description ?? "").trim();
+    const base = minimal_draft_definition(name);
+    const definition = {
+      ...base,
+      identity: { ...base.identity, description, type: "system" },
+    };
+    return upsert_bot(this.pool, {
+      organization_id: account.organization_id,
+      account_id: account.id,
+      name,
+      slug: await this.unique_slug_for(account.id, name),
+      channel: "whatsapp",
+      bot_type: "system",
+      status: "draft",
+      description,
+      settings_json: { source: "admin_create_system" },
+      definition_json: definition,
+      definition_version: 1,
+      instrucciones_operativas: definition.behavior.operating_instructions,
+      tono: definition.behavior.tone,
+      knowledge_base_ids_json: [],
+      reglas_guardrail_json: [],
     });
   }
 

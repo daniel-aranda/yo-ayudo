@@ -8,7 +8,9 @@ const interaction_type_schema = z.enum(["send_whatsapp_message", "receive_whatsa
 export const bot_identity_schema = z.object({
   name: z.string().min(1),
   description: z.string().default(""),
-  goal: z.string().min(1),
+  // Vacío permitido: un bot recién creado arranca en draft sin objetivo (el editor
+  // lo muestra como placeholder y el founder lo completa). No metemos relleno.
+  goal: z.string().default(""),
   status: bot_status_schema.default("draft"),
   type: bot_type_schema.default("custom"),
 });
@@ -16,7 +18,7 @@ export const bot_identity_schema = z.object({
 export const bot_behavior_schema = z.object({
   language: z.enum(["es-MX", "en-US"]).default("es-MX"),
   tone: z.enum(["direct", "friendly", "professional", "commercial", "technical", "casual"]).default("professional"),
-  operating_instructions: z.string().min(1),
+  operating_instructions: z.string().default(""),
   constraints: z.string().default(""),
 });
 

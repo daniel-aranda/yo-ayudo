@@ -8,8 +8,22 @@
 // an existing client in the same account matching ANY provided identifier, then
 // merge — so the same person reached via different channels resolves to one record.
 
+import { rank_between } from "./lexorank.js";
+
 // Order matters: this is the key-priority list AND the identifier match order.
 export const CLIENT_KEY_PRIORITY = ["curp", "phone", "instagram", "email"];
+
+// Orden efectivo de una columna del tablero: por `pipeline_rank` ascendente; las
+// filas sin rank (aún no reordenadas) van al final, más nuevas primero. Mismo
+// criterio en SQL (backfill) y en JS (vista) para que el reorder sea consistente.
+function compare_pipeline_rank(a, b) {
+  const ra = a.pipeline_rank;
+  const rb = b.pipeline_rank;
+  if (ra && rb) return ra < rb ? -1 : ra > rb ? 1 : 0;
+  if (ra && !rb) return -1;
+  if (!ra && rb) return 1;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
 
 function clean(value) {
   const text = String(value ?? "").trim();
@@ -237,18 +251,95 @@ export async function upsert_crm_client(pool, input) {
 
 // Mueve un prospecto/cliente a una etapa BASE (drop en el tablero o select del
 // detalle). Solo acepta etapas base como destino; las custom se setean por el bot.
+// Mover de etapa SIN posición (el select accesible del detalle): cambia la columna
+// y deja la tarjeta AL FINAL de la columna destino (rank después del último).
 export async function update_crm_client_stage(pool, { client_id, account_id, stage }) {
   const target = String(stage ?? "").trim();
   if (!CRM_BASE_KEYS.has(target)) {
     return { error: "invalid_stage", message: "Etapa inválida." };
   }
+  const append_rank = rank_between(await max_rank_in_column(pool, account_id, target, client_id), "");
   const result = await pool.query(
-    "UPDATE crm_clients SET pipeline_status = $3, updated_at = now() WHERE id = $1 AND account_id = $2 RETURNING id, pipeline_status",
-    [client_id, account_id, target],
+    "UPDATE crm_clients SET pipeline_status = $3, pipeline_rank = $4, updated_at = now() WHERE id = $1 AND account_id = $2 RETURNING id, pipeline_status, pipeline_rank",
+    [client_id, account_id, target, append_rank],
   );
   if (!result.rows[0]) {
     return { error: "not_found", message: "Prospecto no encontrado." };
   }
+  return { ok: true, client: result.rows[0] };
+}
+
+// Rank más alto (último) de una columna, o '' si no hay ninguno con rank.
+async function max_rank_in_column(pool, account_id, stage, exclude_id) {
+  const result = await pool.query(
+    `SELECT pipeline_rank FROM crm_clients
+     WHERE account_id = $1 AND pipeline_status = $2 AND pipeline_rank IS NOT NULL AND id <> $3
+     ORDER BY pipeline_rank DESC LIMIT 1`,
+    [account_id, stage, exclude_id ?? "00000000-0000-0000-0000-000000000000"],
+  );
+  return result.rows[0]?.pipeline_rank ?? "";
+}
+
+// Ranks de los dos vecinos del hueco donde cae la tarjeta (deben estar en la misma
+// cuenta + etapa destino). Devuelve null para un vecino ausente o sin rank.
+async function resolve_neighbor_ranks(pool, account_id, stage, before_id, after_id) {
+  const result = await pool.query(
+    `SELECT id, pipeline_rank FROM crm_clients
+     WHERE account_id = $1 AND pipeline_status = $2 AND (id = $3 OR id = $4)`,
+    [account_id, stage, before_id ?? null, after_id ?? null],
+  );
+  const by_id = new Map(result.rows.map((row) => [row.id, row.pipeline_rank]));
+  return {
+    before_rank: before_id ? by_id.get(before_id) ?? null : null,
+    after_rank: after_id ? by_id.get(after_id) ?? null : null,
+  };
+}
+
+// Materializa ranks de toda una columna en su orden actual (excepto la tarjeta que
+// se está moviendo). Se llama solo cuando un vecino aún no tiene rank — una vez por
+// columna; después todos tienen rank y el reorder solo toca la tarjeta movida.
+async function backfill_column_ranks(pool, account_id, stage, exclude_id) {
+  const result = await pool.query(
+    `SELECT id FROM crm_clients
+     WHERE account_id = $1 AND pipeline_status = $2 AND id <> $3
+     ORDER BY COALESCE(pipeline_rank, '~') ASC, created_at DESC, id ASC`,
+    [account_id, stage, exclude_id ?? "00000000-0000-0000-0000-000000000000"],
+  );
+  let prev = "";
+  for (const row of result.rows) {
+    prev = rank_between(prev, "");
+    await pool.query("UPDATE crm_clients SET pipeline_rank = $2 WHERE id = $1", [row.id, prev]);
+  }
+}
+
+// Mover una tarjeta a una posición: cambia la etapa (columna) y le asigna un rank
+// ENTRE sus dos vecinos (`before_id` arriba, `after_id` abajo). Si un vecino aún no
+// tiene rank, primero materializa la columna y reintenta.
+export async function move_crm_client(pool, { client_id, account_id, stage, before_id, after_id }) {
+  const target = String(stage ?? "").trim();
+  if (!CRM_BASE_KEYS.has(target)) {
+    return { error: "invalid_stage", message: "Etapa inválida." };
+  }
+  const exists = await pool.query("SELECT id FROM crm_clients WHERE id = $1 AND account_id = $2 LIMIT 1", [client_id, account_id]);
+  if (!exists.rows[0]) {
+    return { error: "not_found", message: "Prospecto no encontrado." };
+  }
+
+  const before = before_id && before_id !== client_id ? before_id : null;
+  const after = after_id && after_id !== client_id ? after_id : null;
+
+  let { before_rank, after_rank } = await resolve_neighbor_ranks(pool, account_id, target, before, after);
+  // Algún vecino sin rank → materializa la columna y reintenta una vez.
+  if ((before && before_rank == null) || (after && after_rank == null)) {
+    await backfill_column_ranks(pool, account_id, target, client_id);
+    ({ before_rank, after_rank } = await resolve_neighbor_ranks(pool, account_id, target, before, after));
+  }
+
+  const new_rank = rank_between(before_rank ?? "", after_rank ?? "");
+  const result = await pool.query(
+    "UPDATE crm_clients SET pipeline_status = $3, pipeline_rank = $4, updated_at = now() WHERE id = $1 AND account_id = $2 RETURNING id, pipeline_status, pipeline_rank",
+    [client_id, account_id, target, new_rank],
+  );
   return { ok: true, client: result.rows[0] };
 }
 
@@ -376,6 +467,11 @@ export async function get_account_crm_view(pool, account_id) {
 
   // El dropdown de Interesado solo aplica si la cuenta tiene categorías custom.
   columns.get("interesado").custom_categories = [...custom_by_key.values()].sort((a, b) => a.label.localeCompare(b.label));
+
+  // Orden manual del tablero: cada columna por `pipeline_rank` (drag & drop).
+  for (const column of columns.values()) {
+    column.clients.sort(compare_pipeline_rank);
+  }
 
   return {
     account,

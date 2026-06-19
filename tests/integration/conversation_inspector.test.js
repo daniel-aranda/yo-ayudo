@@ -221,8 +221,9 @@ describe("Conversation Inspector", () => {
     `);
     const app = create_inspector_test_app(pool);
 
-    // El inspector siempre es por cuenta: /inspector sin cuenta manda a elegir una.
-    await request(app).get("/inspector").expect(302).expect("Location", "/dashboard");
+    // El inspector siempre es por cuenta: /inspector sin cuenta cae al overview
+    // cross-account de bots (/admin/bots), no al dashboard (parecía link roto).
+    await request(app).get("/inspector").expect(302).expect("Location", "/admin/bots");
     await request(app)
       .get(`/inspector/accounts/${ids.rows[0].account_id}`)
       .expect(200)
@@ -255,7 +256,8 @@ describe("Conversation Inspector", () => {
     expect(bot_page.text).toContain("Knowledge");
     expect(bot_page.text).toContain("Ir a Knowledge Center");
     expect(bot_page.text).toContain(`href="/inspector/accounts/${ids.rows[0].account_id}/knowledge"`);
-    expect(bot_page.text).toMatch(/Selecciona knowledge existente|Todo el knowledge disponible ya está asignado/);
+    expect(bot_page.text).toContain('id="open_knowledge_picker"');
+    expect(bot_page.text).toContain("data-knowledge-picker-popup");
     expect(bot_page.text).toContain("Interacciones");
     expect(bot_page.text).toContain("Grupos humanos");
     // Multi-select de grupos: checkboxes (no un dropdown de un solo valor).
@@ -357,8 +359,8 @@ describe("Conversation Inspector", () => {
     expect(scoped.text).not.toContain("scope-banner");
     expect(scoped.text).not.toContain("Ver todos los bots");
 
-    // Sin cuenta: el inspector manda a elegir una (no renderea lista global).
-    await request(app).get("/inspector").expect(302).expect("Location", "/dashboard");
+    // Sin cuenta: el inspector cae al overview cross-account de bots (/admin/bots).
+    await request(app).get("/inspector").expect(302).expect("Location", "/admin/bots");
   });
 
   it("seeds a multi-execution demo conversation (a single turn fires more than one interaction)", async () => {
@@ -918,7 +920,8 @@ describe("Conversation Inspector", () => {
     expect(page.text).toContain("Knowledge esperado");
     expect(page.text).toContain('name="expected_knowledge"');
     expect(page.text).toContain("Knowledge para probar");
-    expect(page.text).toContain('id="knowledge_source_picker"');
+    expect(page.text).toContain('id="open_knowledge_picker"');
+    expect(page.text).toContain("data-knowledge-picker-popup");
     expect(page.text).toContain("Ir a Knowledge Center");
 
     // Fuente de la cuenta oficial (donde vive el system bot) disponible para probar.

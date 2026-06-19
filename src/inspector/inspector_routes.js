@@ -148,17 +148,17 @@ export function register_inspector_routes(router, dependencies = {}) {
     limits: { fileSize: config.knowledge_upload_max_bytes },
   });
 
-  // El inspector SIEMPRE es por cuenta: no hay home global de plataforma (el
-  // overview cross-account es /admin/bots). `/inspector` sin cuenta no renderea;
-  // el ?account= legacy redirige al path canónico; sin cuenta, manda a elegir una
-  // (dashboard = chooser de negocio→cuenta).
+  // El inspector SIEMPRE es por cuenta: no hay home global de plataforma. El
+  // overview cross-account es `/admin/bots` (lista todos los bots → cada uno entra
+  // a su inspector). `/inspector` con `?account=` legacy salta al path canónico;
+  // sin cuenta cae a esa lista (NO al dashboard: eso parecía un link roto).
   router.get("/inspector", inspector_auth, async (request, response) => {
     const account_id = route_value(request.query.account);
     if (account_id) {
       response.redirect(`/inspector/accounts/${account_id}${bots_filters_query(request)}`);
       return;
     }
-    response.redirect("/dashboard");
+    response.redirect("/admin/bots");
   });
 
   router.get("/inspector/organizations", inspector_auth, async (_request, response) => {

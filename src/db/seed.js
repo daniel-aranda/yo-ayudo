@@ -335,15 +335,9 @@ async function upsert_bot_profile(pool, account_id, organization_id, solution_te
 }
 
 export async function upsert_organization(pool, { id } = {}) {
-  // Legacy: el negocio demo vivía bajo el slug 'yoayudo'. Hoy el único negocio
-  // del seed es 'yoayudo-demo'; eliminamos el 'yoayudo' viejo y su cuenta vacía
-  // para no dejar negocios fantasma en el panel (pre-launch, sin datos reales).
-  const legacy_orgs = await pool.query("SELECT id FROM organizations WHERE slug = 'yoayudo'");
-  for (const row of legacy_orgs.rows) {
-    await pool.query("DELETE FROM bots WHERE organization_id = $1", [row.id]);
-    await pool.query("DELETE FROM accounts WHERE organization_id = $1", [row.id]);
-    await pool.query("DELETE FROM organizations WHERE id = $1", [row.id]);
-  }
+  // NOTA: ya NO borramos el org slug 'yoayudo'. Un usuario mantiene ahí una cuenta
+  // real (p. ej. su bot "Supervisor de ventas"); el seed solo administra el negocio
+  // demo 'yoayudo-demo' y nunca toca los datos del usuario.
 
   // Negocio oficial estable: si ya existe por slug se conserva su id (no churn);
   // si no, se crea con el id de env (cuando viene) para que sea fijo por entorno.
@@ -447,7 +441,7 @@ async function upsert_bot(pool, input) {
     organization_id: input.organization_id,
     account_id: input.account_id,
     bot_profile_id: input.bot_profile_id,
-    name: "Bot WhatsApp YoAyudo",
+    name: "Bot Operaciones",
     slug: "bot-whatsapp-yoayudo",
     channel: "whatsapp",
     bot_type: "system",
@@ -455,7 +449,7 @@ async function upsert_bot(pool, input) {
     description: "Recibe mensajes de WhatsApp y registra ventas, compras, inventario y el cierre del día del negocio.",
     definition_json: {
       identity: {
-        name: "Bot WhatsApp YoAyudo",
+        name: "Bot Operaciones",
         description: "Recibe mensajes de WhatsApp y registra la operación diaria del negocio.",
         goal: "Registrar ventas, compras, inventario y el cierre del día a partir de mensajes de WhatsApp, y confirmar cada registro.",
         status: "active",

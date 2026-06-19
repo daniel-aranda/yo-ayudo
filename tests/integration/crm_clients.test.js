@@ -26,6 +26,7 @@ import {
   get_account_crm_view,
   get_crm_client,
   list_crm_clients_for_account,
+  move_crm_client,
   normalize_identifiers,
   update_crm_client_stage,
   upsert_crm_client,
@@ -371,6 +372,60 @@ describe("CRM clients (prospectos y clientes)", () => {
 
     expect((await update_crm_client_stage(pool, { client_id: client.id, account_id, stage: "inventado" })).error).toBe("invalid_stage");
     expect((await update_crm_client_stage(pool, { client_id: client.id, account_id: "00000000-0000-0000-0000-000000000000", stage: "perdido" })).error).toBe("not_found");
+  });
+
+  it("reordena prospectos dentro de una columna con move() y persiste el orden (LexoRank)", async () => {
+    const { account_id, organization_id } = await load_context(pool);
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "A", phone: "5211110001", status: "nuevo" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "B", phone: "5211110002", status: "nuevo" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "C", phone: "5211110003", status: "nuevo" });
+
+    const nuevo = async () => (await get_account_crm_view(pool, account_id)).columns.find((c) => c.key === "nuevo").clients;
+
+    // Estado inicial (sin ranks aún): orden determinista de la vista.
+    const initial = (await nuevo()).map((x) => x.id);
+    expect(initial).toHaveLength(3);
+
+    // Mover el último al principio (sin vecino arriba, el primero actual abajo).
+    const moved = await move_crm_client(pool, { client_id: initial[2], account_id, stage: "nuevo", before_id: "", after_id: initial[0] });
+    expect(moved.ok).toBe(true);
+
+    const after = await nuevo();
+    expect(after.map((x) => x.id)).toEqual([initial[2], initial[0], initial[1]]);
+    // El reorder materializó ranks en toda la columna y quedan estrictamente ordenados.
+    const ranks = after.map((x) => x.pipeline_rank);
+    expect(ranks.every(Boolean)).toBe(true);
+    expect([...ranks].sort()).toEqual(ranks);
+  });
+
+  it("mueve un prospecto a otra columna en una posición intermedia (etapa + rank)", async () => {
+    const { account_id, organization_id } = await load_context(pool);
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "X", phone: "5211120001", status: "interesado" });
+    await upsert_crm_client(pool, { account_id, organization_id, display_name: "Y", phone: "5211120002", status: "interesado" });
+    const z = await upsert_crm_client(pool, { account_id, organization_id, display_name: "Z", phone: "5211120003", status: "nuevo" });
+
+    const interesado = async () => (await get_account_crm_view(pool, account_id)).columns.find((c) => c.key === "interesado").clients;
+    const ids = (await interesado()).map((c) => c.id);
+    expect(ids).toHaveLength(2);
+
+    // Z (de "nuevo") cae en Interesado ENTRE los dos existentes.
+    const res = await move_crm_client(pool, { client_id: z.id, account_id, stage: "interesado", before_id: ids[0], after_id: ids[1] });
+    expect(res.ok).toBe(true);
+
+    const updated = await get_crm_client(pool, z.id);
+    expect(updated.pipeline_status).toBe("interesado");
+    expect(updated.pipeline_rank).toBeTruthy();
+
+    expect((await interesado()).map((c) => c.id)).toEqual([ids[0], z.id, ids[1]]);
+    const view = await get_account_crm_view(pool, account_id);
+    expect(view.columns.find((c) => c.key === "nuevo").clients).toHaveLength(0); // Z ya no está en nuevo
+  });
+
+  it("move() rechaza etapas inválidas y clientes de otra cuenta", async () => {
+    const { account_id, organization_id } = await load_context(pool);
+    const p = await upsert_crm_client(pool, { account_id, organization_id, display_name: "P", phone: "5211130001", status: "nuevo" });
+    expect((await move_crm_client(pool, { client_id: p.id, account_id, stage: "inventado" })).error).toBe("invalid_stage");
+    expect((await move_crm_client(pool, { client_id: p.id, account_id: "00000000-0000-0000-0000-000000000000", stage: "nuevo" })).error).toBe("not_found");
   });
 
   it("assigns and clears a task responsable, logging it in the bitácora", async () => {

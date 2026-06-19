@@ -193,7 +193,7 @@ Las acciones futuras de voz y OCR real no escriben proveedores externos todavía
 
 ### CRM
 
-- `crm_clients` (migración `0018`): prospectos y clientes. Id interno **estable** + identificadores de negocio (`curp`, `phone`, `instagram`, `email`) y **clave de negocio derivada** (`client_key` + `client_key_type`) por prioridad CURP > teléfono > instagram > email > id interno (puede mutar; el id no). Lifecycle de leads: `kind` (`prospecto`/`cliente`), `pipeline_status`. Links opcionales a `contact_id`/`bot_id`/`conversation_id`. La resolución de identidad/dedupe vive en `src/crm/crm_repository.js` (en JS, sin únicos parciales: pg-mem-safe; agregar constraints cuando el dato esté estable). La escribe la action `crear_contacto`. Ver `architecture/crm.md`.
+- `crm_clients` (migración `0018`): prospectos y clientes. Id interno **estable** + identificadores de negocio (`curp`, `phone`, `instagram`, `email`) y **clave de negocio derivada** (`client_key` + `client_key_type`) por prioridad CURP > teléfono > instagram > email > id interno (puede mutar; el id no). Lifecycle de leads: `kind` (`prospecto`/`cliente`), `pipeline_status` (columna del tablero) y `pipeline_rank` (orden manual dentro de la columna, LexoRank, migración `0019`; ver `architecture/crm.md`). Links opcionales a `contact_id`/`bot_id`/`conversation_id`. La resolución de identidad/dedupe vive en `src/crm/crm_repository.js` (en JS, sin únicos parciales: pg-mem-safe; agregar constraints cuando el dato esté estable). La escribe la action `crear_contacto`. Ver `architecture/crm.md`.
 
 `internal_notes` e `internal_tasks` son almacenamiento interno mínimo para preflight founder. Permiten que `guardar_nota` y `crear_tarea` sean acciones reales sin depender todavía de CRM, email, OCR, Twilio u otra integración externa. `internal_tasks` se gestiona en la bandeja de Tareas (`/admin/tasks` y por cuenta) con seguimiento: `assigned_to` (responsable) y `task_updates` (bitácora de quién atendió y qué pasó). Detalle de UI en `frontend.md` y `conversation_inspector.md`.
 
@@ -247,6 +247,7 @@ src/db/migrations
 0016_users_auth
 0017_task_activity   # assigned_to + task_updates (seguimiento de tareas)
 0018_crm_clients     # crm_clients: prospectos/clientes con identidad y clave de negocio derivada
+0019_crm_pipeline_rank # pipeline_rank: orden manual del tablero CRM (LexoRank, drag & drop)
 ```
 
 Las migraciones 0005 a 0011 siguen un enfoque expand-migrate-contract: agregan `account_id`/`organization_id`, migran los datos y finalmente eliminan tenant/branch (`0010_drop_tenant_branch` elimina fisicamente las tablas y columnas) hasta unificar todo en organization/account. El runner registra archivos aplicados en `schema_migrations`.

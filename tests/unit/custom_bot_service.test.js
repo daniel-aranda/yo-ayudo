@@ -86,9 +86,29 @@ describe("custom_bot_service", () => {
     const service = new custom_bot_service({ pool });
     const bots = await service.list_bots_by_account(account.rows[0].id);
 
-    expect(bots.some((bot) => bot.bot_type === "system" && bot.name === "Bot WhatsApp YoAyudo")).toBe(true);
+    expect(bots.some((bot) => bot.bot_type === "system" && bot.name === "Bot Operaciones")).toBe(true);
     expect(bots.some((bot) => bot.bot_type === "custom" && bot.name === "Agente WhatsApp YoAyudo")).toBe(true);
     expect(bots.some((bot) => bot.bot_type === "custom" && bot.name === "Agente de Prospectos")).toBe(true);
+
+    await pool.end();
+  });
+
+  it("creates a system bot in draft (platform template, editable in the inspector)", async () => {
+    const pool = await create_test_pool();
+    const account = await pool.query("SELECT * FROM accounts LIMIT 1");
+    const service = new custom_bot_service({ pool });
+
+    const bot = await service.create_system_bot({
+      account_id: account.rows[0].id,
+      name: "Bot Reservas",
+      description: "Agenda reservas por WhatsApp.",
+    });
+
+    expect(bot.bot_type).toBe("system");
+    expect(bot.status).toBe("draft");
+    expect(bot.name).toBe("Bot Reservas");
+    expect(bot.definition_json.identity.type).toBe("system");
+    expect(bot.definition_json.identity.description).toBe("Agenda reservas por WhatsApp.");
 
     await pool.end();
   });

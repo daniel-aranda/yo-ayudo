@@ -3,6 +3,7 @@ import { get_bots_admin_view } from "../admin/admin_bots_service.js";
 import { get_action } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, get_bot_with_definition, update_bot_configuration } from "../bots/bot_repository.js";
+import { compute_bot_readiness } from "../bots/bot_readiness.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import {
   assign_bot_to_instagram_account,
@@ -94,7 +95,7 @@ export const available_agent_interactions = [
   {
     type: "guardar_nota",
     key: "guardar_nota",
-    label: "Guardar nota",
+    label: "Guardar nota de la conversación",
     description: "Permite que el agente guarde una nota interna asociada al contacto o a la conversación.",
     instructions_placeholder:
       "Describe qué información vale la pena guardar como nota y en qué momento de la conversación hacerlo.",
@@ -180,7 +181,7 @@ export const available_agent_interactions = [
   {
     type: "registrar_cierre_dia",
     key: "registrar_cierre_dia",
-    label: "Cerrar el día",
+    label: "Cerrar caja y ventas del día",
     description: "Cierra el día con totales, efectivo en caja y notas de merma/faltante/sobrante.",
     instructions_placeholder:
       "Describe cómo el negocio reporta el cierre y qué validar antes de cerrar (totales, caja, mermas).",
@@ -189,7 +190,7 @@ export const available_agent_interactions = [
   {
     type: "registrar_nota_dia",
     key: "registrar_nota_dia",
-    label: "Registrar notas del día",
+    label: "Registrar merma o faltante del día",
     description: "Agrega notas operativas del día (merma, faltante, sobrante o comentario libre).",
     instructions_placeholder:
       "Describe qué notas operativas capturar durante el día.",
@@ -198,7 +199,7 @@ export const available_agent_interactions = [
   {
     type: "generar_reporte_dia",
     key: "generar_reporte_dia",
-    label: "Generar reporte del día",
+    label: "Reporte de ventas y caja del día",
     description: "Genera el reporte operativo del día (totales, métricas y alertas).",
     instructions_placeholder:
       "Describe cuándo generar el reporte del día y qué resaltar.",
@@ -680,14 +681,19 @@ export async function get_bot_view(pool, bot_id) {
     bot_id,
   ]);
 
+  const whatsapp_channels = bot_row ? await get_bot_whatsapp_channels(pool, bot_id) : [];
+  const instagram_channels = bot_row ? await get_bot_instagram_channels(pool, bot_id) : [];
+
   return {
     bot: bot_row,
     stats: stats.rows[0],
     knowledge_sources,
     available_knowledge_sources,
     supported_channels: supported_bot_channels,
-    whatsapp_channels: bot_row ? await get_bot_whatsapp_channels(pool, bot_id) : [],
-    instagram_channels: bot_row ? await get_bot_instagram_channels(pool, bot_id) : [],
+    whatsapp_channels,
+    instagram_channels,
+    // Qué le falta para operar de verdad (canal, IA, proveedores de sus acciones).
+    readiness: compute_bot_readiness(bot_row, { whatsapp_channels, instagram_channels }),
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,

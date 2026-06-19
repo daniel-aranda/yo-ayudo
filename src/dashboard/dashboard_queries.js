@@ -1,5 +1,6 @@
 import { get_action } from "../actions/action_registry.js";
 import { present_conversation_summary } from "../inspector/inspector_presenter.js";
+import { resolve_dashboard_range } from "./date_range.js";
 
 export async function get_dashboard_home(pool) {
   const businesses = await pool.query(
@@ -178,7 +179,66 @@ async function get_account_activity(pool, account_id, limit = 10) {
   return items.slice(0, limit);
 }
 
+// Clave de día (YYYY-MM-DD) de un operation_date que puede venir como Date
+// (pg-mem / node-postgres) o como string. Si ya es YYYY-MM-DD se usa tal cual;
+// si es Date se toman sus componentes LOCALES (el día calendario que el negocio
+// vivió), no UTC. Así el rango se filtra por día real en cualquier entorno.
+function operation_date_key(value) {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      return match[1];
+    }
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Suma ventas (op_business_days.total_sales) y compras (op_purchases.total_cost)
+// de los días dentro del rango [from_date, to_date]. El filtro por fecha es en
+// JS (ver nota en el llamador): comparación de claves de día YYYY-MM-DD.
+async function sum_operational_range(pool, account_id, range) {
+  const days = await pool.query(
+    "SELECT id, operation_date, total_sales FROM op_business_days WHERE account_id = $1",
+    [account_id],
+  );
+  const in_range_day_ids = new Set();
+  let sales_total = 0;
+  for (const day of days.rows) {
+    const key = operation_date_key(day.operation_date);
+    if (key >= range.from_date && key <= range.to_date) {
+      in_range_day_ids.add(day.id);
+      sales_total += Number(day.total_sales) || 0;
+    }
+  }
+
+  let purchases_total = 0;
+  if (in_range_day_ids.size > 0) {
+    const purchases = await pool.query(
+      "SELECT business_day_id, total_cost FROM op_purchases WHERE account_id = $1",
+      [account_id],
+    );
+    for (const purchase of purchases.rows) {
+      if (in_range_day_ids.has(purchase.business_day_id)) {
+        purchases_total += Number(purchase.total_cost) || 0;
+      }
+    }
+  }
+
+  return { sales_total, purchases_total };
+}
+
 export async function get_account_dashboard_data(pool, input) {
+  // Rango de fechas: las métricas de actividad/ventas/compras lo respetan; bots y
+  // canales (config, estado actual) NO. El día operativo (caja/desglose/cierre)
+  // es de un solo día y solo se calcula cuando el rango es "Hoy".
+  const range = input.range ?? resolve_dashboard_range({});
   // La cuenta basta: el negocio se deriva de ella (URL /dashboard/accounts/:id).
   const account = await pool.query(
     `
@@ -259,6 +319,10 @@ export async function get_account_dashboard_data(pool, input) {
     [input.account_id],
   );
   const activity = await get_account_activity(pool, input.account_id, 10);
+  // $1 account_id · $2 from_iso · $3 to_excl_iso (timestamps, semiabierto).
+  // bots_count/channels_count quedan FUERA del rango (config, estado actual);
+  // el resto de las cuentas (conversaciones, errores, prospectos, tareas) son
+  // del rango vía created_at.
   const stats = await pool.query(
     `
       SELECT
@@ -269,29 +333,62 @@ export async function get_account_dashboard_data(pool, input) {
           FROM conversations
           JOIN bots ON bots.id = conversations.bot_id
           WHERE bots.account_id = $1
+            AND conversations.created_at >= $2 AND conversations.created_at < $3
         ) AS conversations_count,
         (
           SELECT count(*)::int
           FROM processing_events
           WHERE account_id = $1
             AND status = 'error'
+            AND created_at >= $2 AND created_at < $3
         ) AS error_events_count,
-        (SELECT count(*)::int FROM crm_clients WHERE account_id = $1) AS prospects_count
+        (
+          SELECT count(*)::int
+          FROM crm_clients
+          WHERE account_id = $1
+            AND created_at >= $2 AND created_at < $3
+        ) AS prospects_count,
+        (
+          SELECT count(*)::int
+          FROM internal_tasks
+          WHERE account_id = $1
+            AND created_at >= $2 AND created_at < $3
+        ) AS tasks_count
     `,
-    [input.account_id],
+    [input.account_id, range.from_iso, range.to_excl_iso],
   );
 
-  const business_day_result = await pool.query(
-    `
-      SELECT *
-      FROM op_business_days
-      WHERE account_id = $1
-      ORDER BY operation_date DESC, updated_at DESC
-      LIMIT 1
-    `,
-    [input.account_id],
-  );
+  // Ventas/compras acumuladas del rango. El filtro por operation_date (columna
+  // date) se hace en JS, no en SQL: pg-mem normaliza la fecha a su parte UTC y
+  // las comparaciones de cota superior con literales de fecha fallan; en JS
+  // comparamos por clave de día (YYYY-MM-DD) y queda correcto en pg-mem y en
+  // Postgres real. Una fila por día por cuenta: el conteo es trivial.
+  const { sales_total, purchases_total } = await sum_operational_range(pool, input.account_id, range);
+  stats.rows[0].sales_total = sales_total;
+  stats.rows[0].purchases_total = purchases_total;
+
+  // El detalle del día (caja inicial/final, desglose, compras, cierre) es de un
+  // solo día: solo se calcula en "Hoy". En rangos multi-día, los totales sumados
+  // de ventas/compras ya viven en stats; aquí queda null.
+  const business_day_result = range.is_today
+    ? await pool.query(
+        `
+          SELECT *
+          FROM op_business_days
+          WHERE account_id = $1
+          ORDER BY operation_date DESC, updated_at DESC
+          LIMIT 1
+        `,
+        [input.account_id],
+      )
+    : { rows: [] };
   let operational_day = business_day_result.rows[0] ?? null;
+  // El detalle de "Hoy" solo aplica si el último día operativo ES hoy. Si el más
+  // reciente es de otra fecha, hoy no hubo operación: mostramos el estado vacío
+  // (consistente con las métricas en $0) en vez de rotular "Hoy · 9 jun 2026".
+  if (operational_day && operation_date_key(operational_day.operation_date) !== range.to_date) {
+    operational_day = null;
+  }
   if (operational_day) {
     const purchases_agg = await pool.query(
       "SELECT COALESCE(SUM(total_cost), 0) AS purchases_total, count(*)::int AS purchases_count FROM op_purchases WHERE business_day_id = $1",
@@ -393,5 +490,6 @@ export async function get_account_dashboard_data(pool, input) {
     stats: stats.rows[0] ?? {},
     capabilities,
     operational_day,
+    range,
   };
 }

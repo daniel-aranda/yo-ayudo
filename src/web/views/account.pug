@@ -35,50 +35,67 @@ block content
       else
         p Bots, canales y conversaciones de esta cuenta
 
-    //- Las tarjetas de métrica son atajos: saltan a su pestaña (Tareas es página aparte).
+    //- Filtro de rango: ventas/compras y la actividad se acumulan sobre el rango;
+    //- caja inicial/final son de un solo día (solo "Hoy"). Presets pill + rango
+    //- libre. "custom" no resalta ningún preset.
+    .period-filter
+      span.period-filter-label Periodo
+      a(href=`/dashboard/accounts/${account.id}?range=hoy`, class=(range.preset === "hoy" ? "is-active" : "")) Hoy
+      a(href=`/dashboard/accounts/${account.id}?range=7d`, class=(range.preset === "7d" ? "is-active" : "")) 7 días
+      a(href=`/dashboard/accounts/${account.id}?range=30d`, class=(range.preset === "30d" ? "is-active" : "")) 30 días
+      form.period-range-form(method="get", action=`/dashboard/accounts/${account.id}`, class=(range.preset === "custom" ? "is-active" : ""))
+        input(type="date", name="from", value=range.from_date, aria-label="Desde")
+        span.period-range-sep –
+        input(type="date", name="to", value=range.to_date, aria-label="Hasta")
+
+    //- Una sola superficie de métricas (sin segunda zona amurallada). Todas
+    //- reflejan el rango; las tarjetas son atajos a su sección (Prospectos/Tareas
+    //- son páginas aparte).
     .metrics
-      a.metric.metric--link(href="#panel-bots", data-go-tab="bots")
-        span.label Bots asignados
-        strong= stats.bots_count || 0
-      a.metric.metric--link(href="#panel-canales", data-go-tab="canales")
-        span.label Canales conectados
-        strong= stats.channels_count || 0
       a.metric.metric--link(href="#panel-conversaciones", data-go-tab="conversaciones")
         span.label Conversaciones
         strong= stats.conversations_count || 0
       a.metric.metric--link(href=`/dashboard/accounts/${account.id}/crm`)
         span.label Prospectos
         strong= stats.prospects_count || 0
+      if capabilities && capabilities.sales
+        article.metric
+          span.label Ventas
+          strong= money(stats.sales_total)
+      if capabilities && capabilities.purchases
+        article.metric
+          span.label Compras
+          strong= money(stats.purchases_total)
       a.metric.metric--link(href=`/dashboard/accounts/${account.id}/tasks`)
-        span.label Tareas abiertas
-        strong= open_tasks_count || 0
+        span.label Tareas
+        strong= stats.tasks_count || 0
       a.metric.metric--link(href="#panel-actividad", data-go-tab="actividad")
         span.label Eventos con error
         strong= stats.error_events_count || 0
+      a.metric.metric--link(href="#panel-bots", data-go-tab="bots")
+        span.label Bots asignados
+        strong= stats.bots_count || 0
+      a.metric.metric--link(href="#panel-canales", data-go-tab="canales")
+        span.label Canales conectados
+        strong= stats.channels_count || 0
 
-    if capabilities && capabilities.operational
-      section.panel
-        h2 Dashboard operativo
-        if operational_day
-          p.meta= `Día ${date(operational_day.operation_date)} · ${operational_day.is_closed ? "Cerrado" : "Abierto"}`
-          h3.panel-subhead Resumen del día
-          .metrics
-            if capabilities.sales
-              article.metric
-                span.label Ventas del día
-                strong= money(operational_day.total_sales)
-            if capabilities.cash
-              article.metric
-                span.label Caja inicial
-                strong= money(operational_day.opening_cash)
-            if capabilities.purchases
-              article.metric
-                span.label Compras del día
-                strong= money(operational_day.purchases_total)
-            if capabilities.close && operational_day.is_closed
-              article.metric
-                span.label Caja final
-                strong= money(operational_day.closing_cash)
+    //- Detalle de un solo día (caja, desglose, compras, cierre): solo en "Hoy".
+    //- Ventas/Compras del rango ya salen arriba; esto agrega lo de un día encima.
+    if capabilities && capabilities.operational && range.is_today
+      if operational_day
+        section.day-detail
+          h2 Hoy
+          p.meta= `${date(operational_day.operation_date)} · ${operational_day.is_closed ? "Cerrado" : "Abierto"}`
+          if capabilities.cash || (capabilities.close && operational_day.is_closed)
+            .metrics
+              if capabilities.cash
+                article.metric
+                  span.label Caja inicial
+                  strong= money(operational_day.opening_cash)
+              if capabilities.close && operational_day.is_closed
+                article.metric
+                  span.label Caja final
+                  strong= money(operational_day.closing_cash)
           if capabilities.sales && operational_day.has_sales_breakdown
             h3.panel-subhead Desglose de ventas
             .metrics
@@ -111,8 +128,8 @@ block content
           if operational_day.report_summary
             h3.panel-subhead Resumen del cierre
             p= operational_day.report_summary
-        else
-          .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
+      else
+        .empty Aún no hay actividad operativa. En cuanto el negocio registre ventas, compras o cierres por WhatsApp, aparecerán aquí.
 
     //- Tab Navigator de la cuenta: una sección a la vez (reusa el patrón pill del
     //- editor de bot — .tabs/.tab + .tab-section togglea `hidden`).
@@ -299,15 +316,35 @@ block content
         if (accountSwitcher.value) window.location.assign(base + accountSwitcher.value);
       });
 
+      // Rango de fechas con filosofía autosave: al mover una fecha se aplica solo
+      // (sin botón "Aplicar"). Los presets (Hoy/7d/30d) ya navegan y el calendario
+      // siempre refleja el rango activo (el server pinta value=from/to).
+      document.querySelectorAll('.period-range-form input[type="date"]').forEach((input) => {
+        input.addEventListener("change", () => {
+          const form = input.form;
+          if (!form) return;
+          if (form.requestSubmit) form.requestSubmit();
+          else form.submit();
+        });
+      });
+
       const addBotPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-add-bot-popup]" }) : null;
       addBotPopup?.iniciar();
       window.TabNavigator?.render("#add-bot-tabs");
-      document.getElementById("open_add_bot")?.addEventListener("click", () => addBotPopup?.open());
+      document.getElementById("open_add_bot")?.addEventListener("click", () => {
+        // Reabrir el popup siempre arranca en "Bot Nuevo" (no deja pegado el último tab elegido).
+        document.querySelector('#add-bot-tabs .tab[data-section="custom"]')?.click();
+        addBotPopup?.open();
+      });
 
       const addChannelPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-add-channel-popup]" }) : null;
       addChannelPopup?.iniciar();
       window.TabNavigator?.render("#add-channel-tabs");
-      document.getElementById("open_add_channel")?.addEventListener("click", () => addChannelPopup?.open());
+      document.getElementById("open_add_channel")?.addEventListener("click", () => {
+        // Mismo reset: reabrir arranca en WhatsApp, no en el último tab elegido.
+        document.querySelector('#add-channel-tabs .tab[data-section="whatsapp"]')?.click();
+        addChannelPopup?.open();
+      });
 
       // Tab Navigator de la cuenta + atajos desde las tarjetas de métrica.
       window.TabNavigator?.render("#account-tabs");

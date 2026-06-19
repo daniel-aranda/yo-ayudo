@@ -5,6 +5,7 @@ import {
   get_business_dashboard_data,
   get_dashboard_home,
 } from "./dashboard_queries.js";
+import { resolve_dashboard_range } from "./date_range.js";
 import { custom_bot_service, minimal_draft_definition } from "../bots/custom_bot_service.js";
 import {
   add_task_update,
@@ -14,7 +15,7 @@ import {
   update_task_status,
 } from "../admin/admin_tasks_service.js";
 import { get_bot_by_id } from "../bots/bot_repository.js";
-import { get_account_crm_view, get_crm_client_detail, update_crm_client_stage } from "../crm/crm_repository.js";
+import { get_account_crm_view, get_crm_client_detail, update_crm_client_stage, move_crm_client } from "../crm/crm_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 
@@ -97,8 +98,10 @@ export function register_dashboard_routes(router, dependencies = {}) {
     dashboard_auth,
     async (request, response, next) => {
       try {
+        const range = resolve_dashboard_range(request.query);
         const data = await get_account_dashboard_data(pool, {
           account_id: require_param(request.params.account_id, "account_id"),
+          range,
         });
         if (!data.account) {
           response.status(404).send("La cuenta no existe.");
@@ -314,6 +317,33 @@ export function register_dashboard_routes(router, dependencies = {}) {
     },
   );
 
+  // Reordenar un prospecto con drag & drop: lo posiciona ENTRE dos vecinos del
+  // tablero (before_id arriba, after_id abajo), cambiando de columna si aplica.
+  // Responde JSON (el handler de arrastre usa fetch y solo mira res.ok).
+  router.post(
+    "/dashboard/accounts/:account_id/crm/:client_id/move",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const account_id = require_param(request.params.account_id, "account_id");
+        const result = await move_crm_client(pool, {
+          client_id: request.params.client_id,
+          account_id,
+          stage: request.body?.stage,
+          before_id: request.body?.before_id || null,
+          after_id: request.body?.after_id || null,
+        });
+        if (result.error) {
+          response.status(result.error === "not_found" ? 404 : 400).json(result);
+          return;
+        }
+        response.json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   // Alta de bot desde el dashboard de la cuenta: custom desde cero (name) o
   // clonando un bot de sistema como base (source_bot_id). Queda en draft y
   // aparece en el panel de bots; se configura en el editor del inspector.
@@ -333,6 +363,7 @@ export function register_dashboard_routes(router, dependencies = {}) {
         const source_bot_id = String(request.body?.source_bot_id ?? "").trim();
         const name = String(request.body?.name ?? "").trim();
 
+        let created;
         if (source_bot_id) {
           const source_bot = await get_bot_by_id(pool, source_bot_id);
 
@@ -341,14 +372,14 @@ export function register_dashboard_routes(router, dependencies = {}) {
             return;
           }
 
-          await bot_creator.clone_bot({ account_id, source_bot, name });
+          created = await bot_creator.clone_bot({ account_id, source_bot, name });
         } else {
           if (!name) {
             response.status(400).send("Falta el nombre del bot.");
             return;
           }
 
-          await bot_creator.create_custom_bot({
+          created = await bot_creator.create_custom_bot({
             account_id,
             name,
             slug: await bot_creator.unique_slug_for(account_id, name),
@@ -357,7 +388,8 @@ export function register_dashboard_routes(router, dependencies = {}) {
           });
         }
 
-        response.redirect(`/dashboard/accounts/${account_id}#panel-bots`);
+        // Recién creado (en draft) → directo al editor del bot para configurarlo.
+        response.redirect(`/inspector/bots/${created.id}`);
       } catch (error) {
         next(error);
       }

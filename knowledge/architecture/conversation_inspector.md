@@ -27,7 +27,7 @@ organization
 
 ## Rutas
 
-- `GET /inspector` — **no renderea**: el inspector SIEMPRE es por cuenta (no hay home global de plataforma; el overview cross-account es `/admin/bots`). El `?account=<id>` legacy redirige a `/inspector/accounts/:id`; sin cuenta, redirige a `/dashboard` (chooser de negocio→cuenta).
+- `GET /inspector` — **no renderea**: el inspector SIEMPRE es por cuenta (no hay home global de plataforma; el overview cross-account es `/admin/bots`). El `?account=<id>` legacy redirige a `/inspector/accounts/:id`; sin cuenta, redirige a **`/admin/bots`** (la lista de bots → cada uno entra a su inspector; antes caía a `/dashboard` y parecía un link roto).
 - `GET /inspector/organizations` → redirige a `/dashboard` (era alias de la vista global, ya eliminada).
 - `GET /inspector/organizations/:organization_id` (vista de un negocio: lista sus cuentas, cada una enlaza a `/inspector/accounts/:id`)
 - `GET /inspector/accounts/:account_id` — **home "Inspector por bots" scopeada a la cuenta** (path param; única home del inspector). 404 si la cuenta no existe. Sin `.scope-banner` (no hay vista global a la que escapar).

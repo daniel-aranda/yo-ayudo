@@ -202,7 +202,7 @@ export const action_catalog = [
   },
   {
     action_id: "guardar_nota",
-    nombre: "Guardar nota",
+    nombre: "Guardar nota de la conversación",
     descripcion: "Guarda una nota interna asociada al contacto o conversación.",
     categoria: "memoria",
     nivel_riesgo: risk_levels.automatico,
@@ -374,7 +374,7 @@ export const action_catalog = [
   },
   {
     action_id: "registrar_cierre_dia",
-    nombre: "Registrar cierre del día",
+    nombre: "Cerrar caja y ventas del día",
     descripcion: "Cierra el día operativo con totales, efectivo en caja y notas de merma/faltante/sobrante.",
     categoria: "operaciones",
     nivel_riesgo: risk_levels.automatico,
@@ -395,7 +395,7 @@ export const action_catalog = [
   },
   {
     action_id: "registrar_nota_dia",
-    nombre: "Registrar nota del día",
+    nombre: "Registrar merma o faltante del día",
     descripcion: "Agrega notas operativas del día (merma, faltante, sobrante o comentario libre).",
     categoria: "operaciones",
     nivel_riesgo: risk_levels.automatico,
@@ -447,7 +447,7 @@ export const action_catalog = [
   },
   {
     action_id: "generar_reporte_dia",
-    nombre: "Generar reporte del día",
+    nombre: "Reporte de ventas y caja del día",
     descripcion: "Genera el reporte operativo del día (totales, métricas y alertas).",
     categoria: "operaciones",
     nivel_riesgo: risk_levels.automatico,

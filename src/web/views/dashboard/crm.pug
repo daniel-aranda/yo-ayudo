@@ -94,12 +94,16 @@ block content
         });
       });
 
-      // Drag & drop entre columnas: mueve la tarjeta y persiste la etapa (optimista;
-      // si el POST falla, recarga para volver a la verdad del server).
+      // Drag & drop del tablero: reordenar DENTRO de una columna y mover entre
+      // columnas, posicionando la tarjeta ENTRE sus vecinos. El server le asigna un
+      // rank intermedio (LexoRank). Optimista; si el POST falla, recarga.
       const board = document.querySelector(".crm-board");
       if (!board) return;
       const accountId = board.dataset.accountId;
-      let dragged = null;
+      let dragged = null; // .crm-card en arrastre
+      let originList = null; // lista de origen (para revertir si se suelta fuera)
+      let originNext = null; // hermano siguiente original (para revertir)
+      let dropped = false; // ¿cayó en una columna válida?
 
       const recount = () => board.querySelectorAll(".crm-col").forEach((col) => {
         const n = col.querySelectorAll(".crm-card").length;
@@ -109,9 +113,31 @@ block content
         if (empty) empty.hidden = n > 0;
       });
 
+      // <li> visibles (con tarjeta, sin la que se arrastra) de una lista.
+      const visibleItems = (list) =>
+        [...list.querySelectorAll(":scope > li")].filter((li) => !li.hidden && li.querySelector(".crm-card") && !li.querySelector(".is-dragging"));
+
+      // <li> ante el cual insertar según la Y del cursor (null = al final).
+      const itemAfter = (list, y) =>
+        visibleItems(list).find((li) => {
+          const box = li.getBoundingClientRect();
+          return y < box.top + box.height / 2;
+        }) || null;
+
+      // id de la tarjeta del hermano visible anterior/siguiente (vecinos del hueco).
+      const siblingCardId = (li, dir) => {
+        let s = li[dir];
+        while (s && (s.hidden || !s.querySelector(".crm-card"))) s = s[dir];
+        return s ? s.querySelector(".crm-card").dataset.clientId || "" : "";
+      };
+
       board.querySelectorAll(".crm-card").forEach((card) => {
         card.addEventListener("dragstart", (event) => {
           dragged = card;
+          dropped = false;
+          const li = card.closest("li");
+          originList = li.parentElement;
+          originNext = li.nextElementSibling;
           card.classList.add("is-dragging");
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", card.dataset.clientId || "");
@@ -119,16 +145,29 @@ block content
         card.addEventListener("dragend", () => {
           card.classList.remove("is-dragging");
           board.querySelectorAll(".crm-col.is-drop-target").forEach((c) => c.classList.remove("is-drop-target"));
+          // Soltó fuera de una columna: revertir a la posición original.
+          if (!dropped && originList) {
+            originList.insertBefore(card.closest("li"), originNext);
+            recount();
+          }
           dragged = null;
+          originList = null;
+          originNext = null;
         });
       });
 
       board.querySelectorAll(".crm-col").forEach((col) => {
+        const list = col.querySelector(".crm-col__list");
         col.addEventListener("dragover", (event) => {
           if (!dragged) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
           col.classList.add("is-drop-target");
+          // Inserción en vivo: la tarjeta sigue al cursor dentro de la columna.
+          const li = dragged.closest("li");
+          const after = itemAfter(list, event.clientY);
+          if (after == null) list.appendChild(li);
+          else if (after !== li) list.insertBefore(li, after);
         });
         col.addEventListener("dragleave", (event) => {
           if (!col.contains(event.relatedTarget)) col.classList.remove("is-drop-target");
@@ -136,27 +175,31 @@ block content
         col.addEventListener("drop", async (event) => {
           event.preventDefault();
           col.classList.remove("is-drop-target");
-          if (!dragged || dragged.closest(".crm-col") === col) return;
+          if (!dragged) return;
+          dropped = true;
           const card = dragged;
-          const item = card.closest("li");
-          const list = col.querySelector(".crm-col__list");
-          // Mover a una etapa base: limpia la sub-categoría custom.
-          item.removeAttribute("data-subcat");
-          card.querySelector(".crm-card__subcat")?.remove();
-          list.appendChild(item);
+          const li = card.closest("li");
+          const columnChanged = originList !== list;
+          // Al entrar a una etapa base se limpia la sub-categoría custom.
+          if (columnChanged) {
+            li.removeAttribute("data-subcat");
+            card.querySelector(".crm-card__subcat")?.remove();
+          }
           recount();
-          // Celebración al mover una tarjeta a Ganado (motion = estado, no adorno).
-          if (col.dataset.stage === "ganado") {
+          if (col.dataset.stage === "ganado" && columnChanged) {
             card.classList.add("just-won");
             setTimeout(() => card.classList.remove("just-won"), 700);
           }
+          // Vecinos visibles del hueco (posición final dentro de la columna).
+          const beforeId = siblingCardId(li, "previousElementSibling");
+          const afterId = siblingCardId(li, "nextElementSibling");
           try {
-            const res = await fetch(`/dashboard/accounts/${accountId}/crm/${card.dataset.clientId}/stage`, {
+            const res = await fetch(`/dashboard/accounts/${accountId}/crm/${card.dataset.clientId}/move`, {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ stage: col.dataset.stage }),
+              body: new URLSearchParams({ stage: col.dataset.stage, before_id: beforeId, after_id: afterId }),
             });
-            if (!res.ok) throw new Error("stage update failed");
+            if (!res.ok) throw new Error("move failed");
           } catch (error) {
             window.location.reload();
           }

@@ -2887,6 +2887,105 @@ html.is-framed .conversation-view .inspector-sidebar {
   line-height: 1.35;
 }
 
+/* Picker de knowledge: mismo lenguaje visual que el de interacciones (tarjeta
+   seleccionable con icono por tipo de fuente + nombre + descripción/summary). */
+.knowledge-picker-search {
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.knowledge-picker-list {
+  display: grid;
+  gap: 10px;
+}
+
+.knowledge-pick {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  margin: 0;
+  padding: 12px 14px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.knowledge-pick:hover {
+  background: var(--surface-strong);
+}
+
+.knowledge-pick:has(.knowledge-pick-input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.knowledge-pick-input {
+  accent-color: var(--accent);
+  border: 0;
+  border-radius: 0;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  width: 18px;
+}
+
+.knowledge-pick-icon {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  color: var(--accent-dark);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.knowledge-pick-icon .ui-icon {
+  height: 20px;
+  width: 20px;
+}
+
+.knowledge-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.knowledge-pick-label {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.knowledge-pick-desc {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--muted);
+  display: -webkit-box;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.knowledge-pick-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.knowledge-pick-badge {
+  background: var(--surface-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
 /* ============================================================
    Triggered interactions — the multi-interaction router decision,
    shown in conversations, message trace, and the bot tester.
@@ -4643,6 +4742,79 @@ button.help-tip:focus-visible::after {
   color: var(--muted);
 }
 
+/* Banner de readiness del editor de bot: qué le falta para operar de verdad.
+   Bloqueantes en clay (lo detienen), avisos en ámbar (degrada pero opera). */
+.bot-warnings {
+  border: 1px solid;
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem;
+}
+
+.bot-warnings.is-blocked {
+  background: var(--clay-bg);
+  border-color: color-mix(in oklab, var(--clay-ink) 28%, var(--clay-bg));
+}
+
+.bot-warnings.is-advisory {
+  background: var(--amber-bg);
+  border-color: color-mix(in oklab, var(--amber-ink) 28%, var(--amber-bg));
+}
+
+.bot-warnings__head {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+}
+
+.bot-warnings.is-blocked .bot-warnings__head {
+  color: var(--clay-ink);
+}
+
+.bot-warnings.is-advisory .bot-warnings__head {
+  color: var(--amber-ink);
+}
+
+.bot-warnings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bot-warning {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.bot-warning__title {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.bot-warning__title::before {
+  content: "•";
+  font-weight: 700;
+  margin-right: 0.45rem;
+}
+
+.bot-warning.is-blocker .bot-warning__title::before {
+  color: var(--clay-ink);
+}
+
+.bot-warning.is-warning .bot-warning__title::before {
+  color: var(--amber-ink);
+}
+
+.bot-warning__detail {
+  color: var(--text);
+  font-size: 0.82rem;
+  opacity: 0.82;
+}
+
 .bot-actions {
   display: inline-flex;
   gap: 2px;
@@ -4705,6 +4877,33 @@ td a.icon-button {
 
 td a.icon-button:hover {
   color: var(--text);
+}
+
+.knowledge-row-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+/* El nombre de la fuente de knowledge es clickeable (abre el popup de detalle):
+   se lee como el <strong> que reemplaza, con acento al hover. */
+.knowledge-name-link {
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.knowledge-name-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .entity-head {
@@ -4787,6 +4986,62 @@ td a.icon-button:hover {
   background: var(--accent-dark);
   border-color: var(--accent-dark);
   color: #fff;
+}
+
+/* Rango libre dentro del filtro de periodo: inputs de fecha + botón compactos,
+   alineados con los presets pill. */
+.period-range-form {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.period-range-form input[type="date"] {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 3px 10px;
+}
+
+.period-range-sep {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Rango personalizado activo: cuando el periodo es "custom" (no coincide con
+   ningún preset), el grupo de fechas se resalta como la opción seleccionada —
+   así SIEMPRE hay exactamente una selección visible (preset o rango libre). */
+.period-range-form.is-active input[type="date"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.period-range-form.is-active .period-range-sep {
+  color: var(--accent-dark);
+}
+
+/* Detalle del día (caja/desglose/cierre): sección ligera, sin la caja pesada del
+   antiguo panel "Dashboard operativo" — una superficie cohesiva con las métricas. */
+.day-detail {
+  margin-top: 18px;
+}
+
+.day-detail h2 {
+  font-size: 17px;
+  margin: 0 0 4px;
+}
+
+.day-detail > .meta {
+  margin: 0 0 14px;
+}
+
+.day-detail .metrics {
+  margin-bottom: 4px;
 }
 
 /* Métricas: microcopy + tints sobrios de estado (success / warning). */

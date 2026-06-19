@@ -89,6 +89,35 @@ export function register_admin_routes(router, dependencies = {}) {
     }
   });
 
+  // Crear un bot de SISTEMA (plataforma). Vive en la cuenta oficial donde ya hay
+  // bots de sistema (o la primera cuenta si aún no hay ninguno). Queda en draft y
+  // se configura en el editor del inspector.
+  router.post("/admin/bots", admin_auth, async (request, response, next) => {
+    try {
+      const name = String(request.body?.name ?? "").trim();
+      if (!name) {
+        response.status(400).send("El nombre del bot es obligatorio.");
+        return;
+      }
+      const home =
+        (await route_pool.query("SELECT organization_id, account_id FROM bots WHERE bot_type = 'system' AND account_id IS NOT NULL ORDER BY created_at LIMIT 1")).rows[0] ??
+        (await route_pool.query("SELECT organization_id, id AS account_id FROM accounts ORDER BY created_at LIMIT 1")).rows[0];
+      if (!home?.account_id) {
+        response.status(400).send("No hay una cuenta donde crear el bot de sistema.");
+        return;
+      }
+      const bot_creator = new custom_bot_service({ pool: route_pool });
+      const bot = await bot_creator.create_system_bot({
+        account_id: home.account_id,
+        name,
+        description: request.body?.description,
+      });
+      response.redirect(`/inspector/bots/${bot.id}`);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Cambiar estado de un bot (activar / pausar a borrador / archivar).
   router.post("/admin/bots/:bot_id/status", admin_auth, async (request, response, next) => {
     try {
