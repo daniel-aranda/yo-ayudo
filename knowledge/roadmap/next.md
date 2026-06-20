@@ -31,6 +31,8 @@ Conectar gradualmente el Bot Engine configurable al flujo real sin romper el pip
 6. Dejar OCR real y voz/Twilio para fases posteriores.
    - Mantener contratos y stubs.
    - No prometer ejecucion real hasta tener provider productivo.
+   - Hecho (prerequisito): **los adjuntos inbound ya se persisten** (S3 si hay bucket, si no local) en `message_attachments` y se ven/sirven en el visor — base para OCR/transcripción sobre el binario guardado. Aplica a los tres canales con inbound (WhatsApp, Instagram, Messenger). Falta: keys S3 reales (hoy corre en fallback local).
+   - Hecho: **inbound completo de Instagram DM y Facebook Messenger** (paridad con WhatsApp: webhook + identidad + pipeline + respuesta por Send API). Falta: tokens de página reales por cuenta (hoy sin token el envío queda `not_configured`, honesto) y lookup de perfil para el nombre del remitente (hoy null si el webhook no lo trae).
 
 ## Direccion de producto (decisiones del founder, 2026-06-12)
 

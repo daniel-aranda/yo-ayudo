@@ -243,6 +243,19 @@ function present_action_label(action, trace, task) {
 // label(s) the agent fired (the rest of the interpretation — intent + confidence
 // — lives in a click popover), the agent replies, and an overall status tone.
 // No backend contract changes.
+// Adjuntos de un mensaje entrante → forma mínima para la vista: el id sirve para
+// la ruta de descarga (/inspector/media/:id) y `is_image` decide si se muestra
+// como miniatura o como enlace de archivo.
+function present_attachments(attachments) {
+  return (Array.isArray(attachments) ? attachments : []).map((attachment) => ({
+    id: attachment.id,
+    mime_type: attachment.mime_type || null,
+    is_image: typeof attachment.mime_type === "string" && attachment.mime_type.startsWith("image/"),
+    filename: attachment.original_filename || null,
+    size_bytes: attachment.size_bytes ?? null,
+  }));
+}
+
 export function present_conversation_turns(turns, options = {}) {
   const tasks = Array.isArray(options.tasks) ? options.tasks : [];
   const tasks_by_id = new Map(tasks.map((task) => [String(task.id), task]));
@@ -312,7 +325,11 @@ export function present_conversation_turns(turns, options = {}) {
       status_tone,
       awaiting_response,
       user: turn.incoming
-        ? { text: turn.incoming.message.text_body || "", at: turn.incoming.message.created_at }
+        ? {
+            text: turn.incoming.message.text_body || "",
+            at: turn.incoming.message.created_at,
+            attachments: present_attachments(turn.incoming.message.attachments),
+          }
         : null,
       understanding,
       responses,

@@ -2332,6 +2332,37 @@ td input {
   background: radial-gradient(circle at 28% 108%, #fdf497 0%, #fdf497 8%, #fd5949 38%, #d6249f 60%, #285aeb 100%);
 }
 
+/* Messenger brand gradient (purple → pink → blue). */
+.channel-icon--messenger {
+  background: radial-gradient(circle at 30% 8%, #00b2ff 0%, #006aff 38%, #a033ff 70%, #ff5280 95%);
+}
+
+/* Pastilla de canal en la cabecera de la conversación: identifica de un vistazo si
+   el chat llegó por WhatsApp, Instagram o Messenger. */
+.channel-pill {
+  border-radius: 999px;
+  color: #fff;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-right: 6px;
+  padding: 2px 9px;
+  vertical-align: middle;
+}
+
+.channel-pill--whatsapp {
+  background: #1f9d57;
+}
+
+.channel-pill--instagram {
+  background: radial-gradient(circle at 28% 108%, #fdf497 0%, #fdf497 8%, #fd5949 38%, #d6249f 60%, #285aeb 100%);
+}
+
+.channel-pill--messenger {
+  background: radial-gradient(circle at 30% 8%, #00b2ff 0%, #006aff 38%, #a033ff 70%, #ff5280 95%);
+}
+
 .channel-glyph {
   height: 1.25rem;
   width: 1.25rem;
@@ -3428,6 +3459,69 @@ html.is-framed .conversation-view .inspector-sidebar {
   /* Preserva los saltos de línea del mensaje (listas, viñetas) como en WhatsApp,
      sin colapsarlos en un párrafo corrido. */
   white-space: pre-wrap;
+}
+
+/* Adjuntos entrantes (imágenes / archivos) bajo el mensaje del usuario. Las
+   imágenes se muestran como miniatura clickeable; los demás archivos como una
+   "pastilla" con icono y nombre. Ambos abren la ruta /inspector/media/:id. */
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.msg-attachment {
+  text-decoration: none;
+}
+
+.msg-attachment--image {
+  border-radius: 10px;
+  display: block;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.msg-attachment--image img {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: block;
+  max-height: 220px;
+  max-width: 240px;
+  object-fit: cover;
+  transition: filter 0.15s ease;
+}
+
+.msg-attachment--image:hover img {
+  filter: brightness(0.95);
+}
+
+.msg-attachment--file {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  transition: border-color 0.15s ease;
+}
+
+.msg-attachment--file:hover {
+  border-color: var(--accent);
+}
+
+.msg-attachment-icon {
+  font-size: 14px;
+}
+
+.msg-attachment-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The action label(s) the agent fired, connected to the user message above with

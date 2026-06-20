@@ -124,4 +124,55 @@ export class meta_whatsapp_client {
       raw_response: { skipped: true, reason: "template_placeholder" },
     };
   }
+
+  // Descarga un media entrante por su media id de Meta: (1) pide la URL temporal
+  // del media, (2) descarga el binario (ambas con el access token). Gated en
+  // credenciales: NUNCA lanza — devuelve {downloaded:false, reason} si no puede,
+  // para no romper el inbound. `fetcher`/`access_token`/`base_url` inyectables.
+  async download_media(media_id, options = {}) {
+    const access_token = options.access_token ?? config.whatsapp_access_token;
+    const fetcher = options.fetcher ?? fetch;
+    const base_url = (options.base_url ?? "https://graph.facebook.com/v21.0").replace(/\/$/, "");
+
+    if (!access_token) {
+      return { downloaded: false, reason: "missing_whatsapp_credentials" };
+    }
+    if (!media_id) {
+      return { downloaded: false, reason: "missing_media_id" };
+    }
+
+    try {
+      // 1) URL temporal del media.
+      const meta_response = await fetcher(`${base_url}/${media_id}`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      const meta = await meta_response.json().catch(() => ({}));
+      if (!meta_response.ok || !meta.url) {
+        logger.error({ media_id, status: meta_response.status, raw_response: meta }, "whatsapp media url fetch failed");
+        return { downloaded: false, reason: "media_url_unavailable", raw_response: meta };
+      }
+
+      // 2) Descarga del binario (también con auth).
+      const binary_response = await fetcher(meta.url, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      if (!binary_response.ok) {
+        logger.error({ media_id, status: binary_response.status }, "whatsapp media download failed");
+        return { downloaded: false, reason: "download_failed", status: binary_response.status };
+      }
+
+      const array_buffer = await binary_response.arrayBuffer();
+      return {
+        downloaded: true,
+        buffer: Buffer.from(array_buffer),
+        mime_type: meta.mime_type ?? binary_response.headers?.get?.("content-type") ?? null,
+        size_bytes: meta.file_size ?? array_buffer.byteLength,
+        source_media_id: media_id,
+        original_filename: meta.filename ?? null,
+      };
+    } catch (cause) {
+      logger.error({ media_id, err: cause }, "whatsapp media download error");
+      return { downloaded: false, reason: "download_error", error: cause.message };
+    }
+  }
 }

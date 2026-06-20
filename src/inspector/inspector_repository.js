@@ -8,12 +8,17 @@ import { config } from "../app/config.js";
 import { resolve_ai_config } from "../ai/ai_config_resolver.js";
 import { is_inherit } from "../ai/ai_config_scope.js";
 import { get_platform_ai_config } from "../app/platform_settings_repository.js";
+import { list_attachments_for_messages } from "../channels/message_attachment_repository.js";
 import { get_account_by_id } from "../accounts/account_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import {
   assign_bot_to_instagram_account,
   upsert_instagram_account,
 } from "../channels/instagram/instagram_account_repository.js";
+import {
+  assign_bot_to_facebook_page,
+  upsert_facebook_page,
+} from "../channels/facebook/facebook_page_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
 import { list_crm_clients_for_conversation } from "../crm/crm_repository.js";
 import { present_conversation_summary } from "./inspector_presenter.js";
@@ -248,6 +253,11 @@ export const supported_bot_channels = [
   {
     channel: "instagram",
     label: "Instagram",
+    status: "supported",
+  },
+  {
+    channel: "messenger",
+    label: "Messenger",
     status: "supported",
   },
 ];
@@ -567,6 +577,59 @@ async function get_bot_instagram_channels(pool, bot_id) {
   return result.rows;
 }
 
+async function get_bot_facebook_channels(pool, bot_id) {
+  const result = await pool.query(
+    `
+      SELECT
+        facebook_pages.*,
+        facebook_page_bot_assignments.id AS assignment_id,
+        facebook_page_bot_assignments.assignment_type,
+        facebook_page_bot_assignments.assigned_at
+      FROM facebook_page_bot_assignments
+      JOIN facebook_pages
+        ON facebook_pages.id = facebook_page_bot_assignments.facebook_page_id
+      WHERE facebook_page_bot_assignments.bot_id = $1
+        AND facebook_page_bot_assignments.status = 'active'
+        AND facebook_page_bot_assignments.active_key = 'active'
+        AND facebook_pages.status = 'active'
+      ORDER BY facebook_page_bot_assignments.assigned_at DESC
+    `,
+    [bot_id],
+  );
+
+  return result.rows;
+}
+
+async function sync_facebook_channel_from_body(pool, bot, body) {
+  const page_name = String(body.facebook_page_name ?? "").trim();
+  const external_page_id = String(body.facebook_page_id ?? "").trim();
+
+  if (!page_name && !external_page_id) {
+    return null;
+  }
+
+  const facebook_page = await upsert_facebook_page(pool, {
+    organization_id: bot.organization_id,
+    account_id: bot.account_id,
+    external_page_id: external_page_id || page_name,
+    page_name: page_name || null,
+    status: "active",
+  });
+
+  await assign_bot_to_facebook_page(pool, {
+    organization_id: bot.organization_id,
+    account_id: bot.account_id,
+    facebook_page_id: facebook_page.id,
+    bot_id: bot.id,
+    assignment_type: "primary",
+    metadata_json: {
+      configured_from: "inspector_bot_builder",
+    },
+  });
+
+  return facebook_page;
+}
+
 async function sync_whatsapp_channel_from_body(pool, bot, body) {
   const display_phone_number = normalize_whatsapp_number(body.whatsapp_display_phone_number);
   const phone_number_id = normalize_whatsapp_phone_number_id(body.whatsapp_phone_number_id, display_phone_number);
@@ -760,6 +823,7 @@ export async function get_bot_view(pool, bot_id) {
 
   const whatsapp_channels = bot_row ? await get_bot_whatsapp_channels(pool, bot_id) : [];
   const instagram_channels = bot_row ? await get_bot_instagram_channels(pool, bot_id) : [];
+  const facebook_channels = bot_row ? await get_bot_facebook_channels(pool, bot_id) : [];
 
   // AI resuelto del bot (bot > cuenta > global > env) para readiness y el hint del
   // editor: el blocker "Sin IA real" nombra el provider que realmente usará.
@@ -780,9 +844,15 @@ export async function get_bot_view(pool, bot_id) {
     supported_channels: supported_bot_channels,
     whatsapp_channels,
     instagram_channels,
+    facebook_channels,
     resolved_ai,
     // Qué le falta para operar de verdad (canal, IA, proveedores de sus acciones).
-    readiness: compute_bot_readiness(bot_row, { whatsapp_channels, instagram_channels, resolved_ai }),
+    readiness: compute_bot_readiness(bot_row, {
+      whatsapp_channels,
+      instagram_channels,
+      facebook_channels,
+      resolved_ai,
+    }),
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,
@@ -876,8 +946,11 @@ export async function add_bot_channel_from_body(pool, bot_id, body) {
   const bot = await get_bot_by_id(pool, bot_id);
   if (!bot) return null;
 
-  if (String(body.channel_type ?? "whatsapp") === "instagram") {
+  const channel_type = String(body.channel_type ?? "whatsapp");
+  if (channel_type === "instagram") {
     await sync_instagram_channel_from_body(pool, bot, body);
+  } else if (channel_type === "messenger") {
+    await sync_facebook_channel_from_body(pool, bot, body);
   } else {
     await sync_whatsapp_channel_from_body(pool, bot, body);
   }
@@ -1189,9 +1262,23 @@ export async function get_conversation_view(pool, conversation_id) {
     "SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC",
     [conversation_id],
   );
+
+  // Adjuntos entrantes (imágenes/archivos guardados en S3/local) agrupados por
+  // mensaje, para que el turno los muestre junto al texto del usuario.
+  const attachments_by_message = new Map();
+  for (const attachment of await list_attachments_for_messages(
+    pool,
+    messages.rows.map((row) => row.id),
+  )) {
+    const list = attachments_by_message.get(attachment.message_id) ?? [];
+    list.push(attachment);
+    attachments_by_message.set(attachment.message_id, list);
+  }
+
   const messages_with_trace = [];
 
   for (const message of messages.rows) {
+    message.attachments = attachments_by_message.get(message.id) ?? [];
     messages_with_trace.push({
       message,
       compact_trace_summary: await compact_trace_for_message(pool, message),

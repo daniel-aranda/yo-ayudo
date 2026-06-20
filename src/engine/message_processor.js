@@ -10,34 +10,74 @@ import { message_intent_parser } from "./message_intent_parser.js";
 import { build_multi_reply } from "./response_builder.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
 import { extract_media_metadata, extract_text_body } from "../channels/whatsapp/whatsapp_message_parser.js";
-import { resolve_whatsapp_identity_by_phone_number_id } from "../channels/whatsapp/whatsapp_identity_resolver.js";
+import { meta_messaging_client } from "../channels/meta_messaging_client.js";
+import { parse_meta_messaging_payload } from "../channels/meta_messaging_parser.js";
+import { whatsapp_channel, instagram_channel, messenger_channel } from "../channels/channel_registry.js";
+import { store_conversation_media } from "../channels/conversation_media_store.js";
+import { create_message_attachment } from "../channels/message_attachment_repository.js";
 import { safe_ingest_message_to_memory } from "../memory/memory_ingestion_service.js";
 import { record_context_event, safe_record_processing_event } from "../processing_events/processing_event_service.js";
 import { safe_record_integration_event } from "../integrations/integration_event_repository.js";
 
 async function upsert_contact(pool, input) {
-  const result = await pool.query(
+  const channel = input.channel ?? "whatsapp";
+
+  // WhatsApp conserva su dedupe por teléfono (ON CONFLICT, race-safe) intacto; solo
+  // se rellenan también channel/external_id (backfill perezoso de filas viejas).
+  if (channel === "whatsapp") {
+    const result = await pool.query(
+      `
+        INSERT INTO contacts (account_id, organization_id, channel, external_id, whatsapp_phone, display_name, metadata_json)
+        VALUES ($1, $2, 'whatsapp', $3, $3, $4, '{}'::jsonb)
+        ON CONFLICT (account_id, whatsapp_phone)
+        DO UPDATE SET
+          organization_id = COALESCE(EXCLUDED.organization_id, contacts.organization_id),
+          display_name = COALESCE(EXCLUDED.display_name, contacts.display_name),
+          external_id = COALESCE(contacts.external_id, EXCLUDED.external_id),
+          updated_at = now()
+        RETURNING *
+      `,
+      [input.account_id, input.organization_id, input.external_id, input.display_name],
+    );
+    return result.rows[0];
+  }
+
+  // IG/Messenger: dedupe en JS por (account_id, channel, external_id) — sin índice
+  // único parcial (pg-mem-safe), mismo patrón que crm_clients.
+  const existing = await pool.query(
+    "SELECT * FROM contacts WHERE account_id = $1 AND channel = $2 AND external_id = $3 LIMIT 1",
+    [input.account_id, channel, input.external_id],
+  );
+  if (existing.rows[0]) {
+    const updated = await pool.query(
+      `
+        UPDATE contacts
+        SET organization_id = COALESCE($2, organization_id),
+            display_name = COALESCE($3, display_name),
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [existing.rows[0].id, input.organization_id, input.display_name],
+    );
+    return updated.rows[0];
+  }
+  const inserted = await pool.query(
     `
-      INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name, metadata_json)
-      VALUES ($1, $2, $3, $4, '{}'::jsonb)
-      ON CONFLICT (account_id, whatsapp_phone)
-      DO UPDATE SET
-        organization_id = COALESCE(EXCLUDED.organization_id, contacts.organization_id),
-        display_name = COALESCE(EXCLUDED.display_name, contacts.display_name),
-        updated_at = now()
+      INSERT INTO contacts (account_id, organization_id, channel, external_id, display_name, metadata_json)
+      VALUES ($1, $2, $3, $4, $5, '{}'::jsonb)
       RETURNING *
     `,
-    [input.account_id, input.organization_id, input.whatsapp_phone, input.display_name],
+    [input.account_id, input.organization_id, channel, input.external_id, input.display_name],
   );
-
-  return result.rows[0];
+  return inserted.rows[0];
 }
 
 async function upsert_conversation(pool, input) {
   const result = await pool.query(
     `
       INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, status, last_message_at)
-      VALUES ($1, $2, $4, $3, 'whatsapp', 'open', now())
+      VALUES ($1, $2, $4, $3, $5, 'open', now())
       ON CONFLICT (account_id, contact_id, channel)
       DO UPDATE SET
         organization_id = COALESCE(EXCLUDED.organization_id, conversations.organization_id),
@@ -47,7 +87,7 @@ async function upsert_conversation(pool, input) {
         updated_at = now()
       RETURNING *
     `,
-    [input.account_id, input.organization_id, input.contact_id, input.bot_id],
+    [input.account_id, input.organization_id, input.contact_id, input.bot_id, input.channel ?? "whatsapp"],
   );
 
   if (input.bot_id && !result.rows[0].bot_id) {
@@ -70,12 +110,14 @@ async function find_inbound_message_by_external_id(pool, external_message_id) {
 }
 
 async function store_inbound_message(pool, input) {
-  const media = extract_media_metadata(input.inbound_message);
-  const external_message_id = input.inbound_message.id ?? null;
+  // El evento ya viene normalizado por canal (texto/media/id extraídos por el
+  // handler del webhook), así que el store es agnóstico de canal.
+  const event = input.event;
+  const external_message_id = event.external_message_id ?? null;
 
-  // Idempotency: Meta's WhatsApp Cloud API delivers webhooks at-least-once, so a
-  // redelivered inbound message must not be stored or processed twice (which would
-  // double-count operations, e.g. record a sale twice).
+  // Idempotency: los webhooks de Meta (WhatsApp/IG/Messenger) se entregan
+  // at-least-once, así que un mensaje reentregado no debe guardarse ni procesarse
+  // dos veces (duplicaría operaciones, p. ej. registrar una venta dos veces).
   const duplicate = await find_inbound_message_by_external_id(pool, external_message_id);
   if (duplicate) {
     logger.info({ message_id: duplicate.id, external_message_id }, "duplicate inbound message ignored");
@@ -101,7 +143,7 @@ async function store_inbound_message(pool, input) {
           media_mime_type,
           processing_status
         )
-        VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'inbound', $6, $7, $8::jsonb, $9, $10, $11, 'stored')
+        VALUES ($1, $2, $3, $4, $5, $12, 'inbound', $6, $7, $8::jsonb, $9, $10, $11, 'stored')
         RETURNING *
       `,
       [
@@ -111,11 +153,12 @@ async function store_inbound_message(pool, input) {
         input.conversation_id,
         input.contact_id,
         external_message_id,
-        input.inbound_message.type ?? "unknown",
+        event.message_type ?? "unknown",
         JSON.stringify(input.raw_payload),
-        extract_text_body(input.inbound_message),
-        media.media_url,
-        media.media_mime_type,
+        event.text ?? "",
+        event.media?.media_url ?? null,
+        event.media?.media_mime_type ?? null,
+        input.channel ?? "whatsapp",
       ],
     );
 
@@ -234,7 +277,7 @@ async function store_outbound_message(pool, input) {
         text_body,
         processing_status
       )
-      VALUES ($1, $2, $3, $4, $5, 'whatsapp', 'outbound', $6, $7, 'text', $8::jsonb, $9, 'sent')
+      VALUES ($1, $2, $3, $4, $5, $10, 'outbound', $6, $7, 'text', $8::jsonb, $9, 'sent')
       RETURNING *
     `,
     [
@@ -247,6 +290,7 @@ async function store_outbound_message(pool, input) {
       input.reply_to_message_id ?? null,
       JSON.stringify(input.raw_payload),
       input.text_body,
+      input.channel ?? "whatsapp",
     ],
   );
 
@@ -329,23 +373,104 @@ async function route_and_dispatch_operations(dependencies, processing_context, o
   return results;
 }
 
-async function process_inbound_message(dependencies, input) {
-  const phone_number_id = input.value.metadata?.phone_number_id ?? config.whatsapp_phone_number_id;
-  const resolution = await resolve_whatsapp_identity_by_phone_number_id(dependencies.pool, phone_number_id);
-  const contact_profile = input.value.contacts?.find((contact) => contact.wa_id === input.inbound_message.from);
+// Descarga el media entrante (si lo hay) y lo guarda en S3/local, registrando un
+// `message_attachments`. Es **best-effort**: try/catch + integration_event; nunca
+// rompe el inbound ni finge (sin credenciales/proveedor solo registra el intento).
+async function store_inbound_attachment(channel, dependencies, { stored_message, organization_id, account_id, identity }) {
+  // WhatsApp guarda un media id (requiere lookup); IG/Messenger una URL directa.
+  // En ambos `media_url` es la referencia; el canal sabe cómo descargarla.
+  const media_ref = stored_message?.media_url;
+  if (!media_ref) {
+    return;
+  }
+  try {
+    const download = await channel.download_media(dependencies.client, identity, media_ref);
+    if (!download?.downloaded) {
+      const not_configured = ["missing_whatsapp_credentials", "missing_meta_credentials", "missing_media_url"].includes(
+        download?.reason,
+      );
+      await safe_record_integration_event(dependencies.pool, {
+        integration_key: "conversation_media",
+        operation: "download",
+        status: not_configured ? "not_configured" : "failure",
+        detail: download?.reason ?? "unknown",
+        organization_id,
+        account_id,
+        bot_id: stored_message.bot_id ?? null,
+      });
+      return;
+    }
+
+    const stored = await store_conversation_media({
+      buffer: download.buffer,
+      mime_type: download.mime_type ?? stored_message.media_mime_type,
+      original_filename: download.original_filename,
+      organization_id,
+      account_id,
+      channel: channel.name,
+      source_media_id: media_ref,
+    });
+
+    await create_message_attachment(dependencies.pool, {
+      message_id: stored_message.id,
+      organization_id,
+      account_id,
+      channel: channel.name,
+      provider: stored.provider,
+      bucket: stored.bucket,
+      s3_key: stored.s3_key,
+      local_path: stored.local_path,
+      region: stored.region,
+      mime_type: stored.mime_type,
+      size_bytes: stored.size_bytes,
+      original_filename: stored.original_filename,
+      source_media_id: media_ref,
+      status: "stored",
+    });
+
+    await safe_record_integration_event(dependencies.pool, {
+      integration_key: "conversation_media",
+      operation: "store",
+      status: "success",
+      organization_id,
+      account_id,
+      bot_id: stored_message.bot_id ?? null,
+      metadata_json: { provider: stored.provider, mime_type: stored.mime_type },
+    });
+  } catch (error) {
+    logger.error({ err: error, message_id: stored_message.id }, "inbound attachment store failed");
+    await safe_record_integration_event(dependencies.pool, {
+      integration_key: "conversation_media",
+      operation: "store",
+      status: "failure",
+      detail: error.message,
+      organization_id,
+      account_id,
+      bot_id: stored_message.bot_id ?? null,
+    }).catch(() => {});
+  }
+}
+
+// Núcleo del inbound, agnóstico de canal. `channel` (whatsapp/instagram/messenger)
+// abstrae identidad, envío y descarga de media; `event` es el mensaje ya
+// normalizado por el handler del webhook ({channel_ref, sender_id, text, media, ...}).
+async function process_inbound_message(channel, dependencies, event) {
+  const resolution = await channel.resolve_identity(dependencies.pool, event.channel_ref);
   const account_id = resolution.account?.id ?? null;
   const organization_id = resolution.organization?.id ?? resolution.account?.organization_id ?? null;
   const contact = await upsert_contact(dependencies.pool, {
     account_id,
     organization_id,
-    whatsapp_phone: input.inbound_message.from,
-    display_name: contact_profile?.profile?.name ?? null,
+    channel: channel.name,
+    external_id: event.sender_id,
+    display_name: event.display_name ?? null,
   });
   const conversation = await upsert_conversation(dependencies.pool, {
     account_id,
     organization_id,
     bot_id: resolution.bot?.id ?? null,
     contact_id: contact.id,
+    channel: channel.name,
   });
   const stored_message = await store_inbound_message(dependencies.pool, {
     account_id,
@@ -353,12 +478,9 @@ async function process_inbound_message(dependencies, input) {
     bot_id: resolution.bot?.id ?? null,
     conversation_id: conversation.id,
     contact_id: contact.id,
-    inbound_message: input.inbound_message,
-    raw_payload: {
-      metadata: input.value.metadata ?? {},
-      contact: contact_profile ?? null,
-      message: input.inbound_message,
-    },
+    channel: channel.name,
+    event,
+    raw_payload: event.raw,
   });
 
   if (stored_message.already_processed) {
@@ -373,6 +495,14 @@ async function process_inbound_message(dependencies, input) {
     };
   }
 
+  // Adjuntos: si el mensaje trae media, se descarga y guarda en S3/local (best-effort).
+  await store_inbound_attachment(channel, dependencies, {
+    stored_message,
+    organization_id,
+    account_id,
+    identity: resolution,
+  });
+
   const event_identity = {
     organization_id: resolution.organization?.id ?? null,
     account_id: resolution.account?.id ?? null,
@@ -386,9 +516,10 @@ async function process_inbound_message(dependencies, input) {
     event_type: "webhook_received",
     event_stage: "webhook",
     title: "Webhook received",
-    summary: "Inbound WhatsApp webhook message received.",
+    summary: `Inbound ${channel.name} webhook message received.`,
     details_json: {
-      phone_number_id,
+      channel: channel.name,
+      channel_ref: event.channel_ref,
       whatsapp_phone_number_id: resolution.whatsapp_phone_number?.id ?? null,
       phone_number_bot_assignment_id: resolution.phone_number_bot_assignment?.id ?? null,
     },
@@ -604,18 +735,17 @@ async function process_inbound_message(dependencies, input) {
 
   if (reply_text) {
     const send_started_at = Date.now();
-    const send_result = await dependencies.whatsapp_client.send_text({
-      to: input.inbound_message.from,
-      body: reply_text,
+    const send_result = await channel.send_text(dependencies.client, resolution, {
+      to: event.sender_id,
+      text: reply_text,
     });
+    const not_configured =
+      send_result.reason === "missing_meta_credentials" ||
+      send_result.raw_response?.reason === "missing_whatsapp_credentials";
     await safe_record_integration_event(dependencies.pool, {
-      integration_key: "whatsapp",
+      integration_key: channel.integration_key,
       operation: "send_message",
-      status: send_result.sent
-        ? "success"
-        : send_result.raw_response?.reason === "missing_whatsapp_credentials"
-          ? "not_configured"
-          : "failure",
+      status: send_result.sent ? "success" : not_configured ? "not_configured" : "failure",
       latency_ms: Date.now() - send_started_at,
       organization_id,
       account_id,
@@ -627,11 +757,12 @@ async function process_inbound_message(dependencies, input) {
       bot_id: resolution.bot?.id ?? null,
       conversation_id: conversation.id,
       contact_id: contact.id,
+      channel: channel.name,
       external_message_id: send_result.external_message_id,
       reply_to_message_id: stored_message.id,
       text_body: reply_text,
       raw_payload: {
-        request: { to: input.inbound_message.from, body: reply_text },
+        request: { to: event.sender_id, text: reply_text },
         response: send_result.raw_response,
       },
     });
@@ -660,40 +791,78 @@ async function process_inbound_message(dependencies, input) {
   };
 }
 
-export async function handle_whatsapp_webhook_payload(payload, dependencies) {
-  logger.info({ object: payload.object }, "inbound webhook received");
-  const complete_dependencies = {
+// Dependencias comunes a todos los canales. El provider inyectado (tests/spies)
+// GANA y conserva el logging env (provider_name "mock"); sin inyección el provider
+// se construye por mensaje desde la config resuelta (bot > cuenta > global > env).
+// `client` es el cliente de envío/descarga del canal (inyectable en tests).
+async function build_channel_dependencies(dependencies, client) {
+  return {
     pool: dependencies.pool,
-    // Provider inyectado (tests/spies) GANA — se usa tal cual y se conserva el
-    // logging env (provider_name "mock"). Sin inyección (producción) el provider
-    // se construye por mensaje desde la config resuelta (bot > cuenta > global > env).
     provider: dependencies.provider ?? create_model_provider(),
     provider_injected: Boolean(dependencies.provider),
     global_ai: await get_platform_ai_config(dependencies.pool),
-    whatsapp_client: dependencies.whatsapp_client ?? new meta_whatsapp_client(),
+    client,
     memory_store: dependencies.memory_store,
     embedding_gateway: dependencies.embedding_gateway,
   };
+}
+
+export async function handle_whatsapp_webhook_payload(payload, dependencies) {
+  logger.info({ object: payload.object }, "inbound webhook received");
+  const client = dependencies.whatsapp_client ?? new meta_whatsapp_client();
+  const complete_dependencies = await build_channel_dependencies(dependencies, client);
   const results = [];
 
+  // WhatsApp Cloud API: entry[].changes[].value.messages[] (forma distinta a
+  // IG/Messenger). Se normaliza a un evento de canal antes del núcleo compartido,
+  // preservando exactamente el texto/media/raw_payload del comportamiento previo.
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value;
-
       if (!value?.messages?.length) {
         continue;
       }
-
       for (const inbound_message of value.messages) {
-        results.push(
-          await process_inbound_message(complete_dependencies, {
-            value,
-            inbound_message,
-          }),
-        );
+        const contact_profile = value.contacts?.find((contact) => contact.wa_id === inbound_message.from) ?? null;
+        const media = extract_media_metadata(inbound_message);
+        const event = {
+          channel: whatsapp_channel.name,
+          channel_ref: value.metadata?.phone_number_id ?? config.whatsapp_phone_number_id,
+          sender_id: inbound_message.from,
+          display_name: contact_profile?.profile?.name ?? null,
+          external_message_id: inbound_message.id ?? null,
+          text: extract_text_body(inbound_message),
+          message_type: inbound_message.type ?? "unknown",
+          media: media.media_url ? { media_url: media.media_url, media_mime_type: media.media_mime_type } : null,
+          timestamp: inbound_message.timestamp ?? null,
+          raw: { metadata: value.metadata ?? {}, contact: contact_profile, message: inbound_message },
+        };
+        results.push(await process_inbound_message(whatsapp_channel, complete_dependencies, event));
       }
     }
   }
 
   return results;
+}
+
+// Instagram DM + Facebook Messenger comparten la forma de webhook (Messenger
+// Platform): un parser genérico produce los eventos y el núcleo es el mismo.
+async function handle_meta_messaging_webhook_payload(channel, payload, dependencies) {
+  logger.info({ object: payload.object, channel: channel.name }, "inbound webhook received");
+  const client = dependencies.messaging_client ?? new meta_messaging_client({ channel: channel.name });
+  const complete_dependencies = await build_channel_dependencies(dependencies, client);
+  const events = parse_meta_messaging_payload(payload, channel.name);
+  const results = [];
+  for (const event of events) {
+    results.push(await process_inbound_message(channel, complete_dependencies, event));
+  }
+  return results;
+}
+
+export function handle_instagram_webhook_payload(payload, dependencies) {
+  return handle_meta_messaging_webhook_payload(instagram_channel, payload, dependencies);
+}
+
+export function handle_messenger_webhook_payload(payload, dependencies) {
+  return handle_meta_messaging_webhook_payload(messenger_channel, payload, dependencies);
 }

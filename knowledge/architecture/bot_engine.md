@@ -57,7 +57,16 @@ El ciclo de arriba es el contrato. Hoy `execute_action` (la cadena unificada y a
 
 - `bot_engine_test_service.test_message()`: el tab "Probar bot" y los tests de preflight. Usa el Prompt Compiler + seleccion de acciones por AI.
 - `POST /internal/action-executions` (`src/commercial/commercial_routes.js`): ejecucion directa de una accion por API.
-- El inbound real de WhatsApp (`webhook -> handle_whatsapp_webhook_payload` en `src/engine/message_processor.js`): ejecuta operaciones a traves de `execute_action` (auditado).
+- El inbound real (`webhook -> handle_*_webhook_payload` en `src/engine/message_processor.js`): ejecuta operaciones a traves de `execute_action` (auditado).
+
+### Inbound multicanal (WhatsApp / Instagram / Messenger)
+
+El núcleo del inbound es **agnóstico de canal**: `process_inbound_message(channel, dependencies, event)` recibe un **descriptor de canal** y un `event` ya normalizado. Los descriptores viven en `src/channels/channel_registry.js` (`whatsapp_channel`, `instagram_channel`, `messenger_channel`) y abstraen solo lo específico: `resolve_identity` (a qué bot/cuenta rutea), `send_text` (cómo responde) y `download_media`. Los handlers por canal normalizan su webhook y llaman al mismo núcleo:
+
+- **WhatsApp**: `handle_whatsapp_webhook_payload` lee `entry[].changes[].value.messages[]` (WhatsApp Cloud API) y arma el evento con el parser de WhatsApp. Cliente `meta_whatsapp_client` (token en config).
+- **Instagram DM + Messenger**: comparten el webhook "Messenger Platform" (`entry[].messaging[]` con `sender`/`recipient`/`message`). `handle_instagram_webhook_payload` / `handle_messenger_webhook_payload` usan **un solo parser** (`meta_messaging_parser.js`: ignora echoes/reads/eventos vacíos, extrae el adjunto por URL) y **un solo cliente** (`meta_messaging_client.js`: Send API `POST /me/messages` con el `access_token` de la página/cuenta resuelto en la identidad). Identidad por `meta_identity.js` (recipient.id = cuenta IG / página FB → bot). Webhooks en `meta_webhook_routes.js` (`/webhooks/instagram`, `/webhooks/messenger`): verify `hub.challenge` + firma `META_APP_SECRET`, ack inmediato + proceso async.
+
+El contacto se identifica por `(account_id, channel, external_id)`. **Honesto**: sin `access_token` de página el envío de IG/Messenger queda `not_configured` (integration_event), pero la respuesta del bot se genera y guarda igual; los adjuntos entrantes se guardan en los 3 canales. WhatsApp queda **byte-idéntico** (su path de contacto/parser/cliente no cambió).
 
 ### Inbound real: multi-ejecucion
 
@@ -70,6 +79,8 @@ El inbound corre por `execute_action` (auditado) y soporta **multi-ejecucion** (
 5. `build_multi_reply` combina la respuesta de cada operacion en un solo mensaje de WhatsApp.
 
 Ejemplo: "abrimos con 1500, vendimos 3200 y compre 5 kg pastor por 600" -> `registrar_inicio_dia` + `registrar_venta` + `registrar_compra` (3 interacciones, una respuesta combinada). Un mensaje de una sola operacion produce un segmento = texto completo, identico al comportamiento anterior.
+
+**Adjuntos (media inbound):** tras guardar el mensaje (después del check de duplicados, antes de clasificar), `store_inbound_attachment` corre como **side-channel best-effort**: si el evento trae media, baja el binario con `channel.download_media` (WhatsApp por media id; IG/Messenger por la URL del webhook) y lo guarda con `store_conversation_media` (S3 o local) + fila en `message_attachments`. Va en su propio try/catch y **no participa del flujo de intents**: cualquier fallo (sin credenciales, descarga caída, S3 no disponible) registra un guardrail y deja seguir el pipeline. No bloquea ni la clasificación ni la respuesta. Detalle en `IMPLEMENTATION_STATUS.md` y `database.md` (`message_attachments`).
 
 El mismo pipeline cubre **CRM**: el intent `lead_capture` (`INTENT_TO_OPERATION_ACTION.lead_capture = crear_contacto`) guarda un prospecto/cliente desde un WhatsApp/IG (p. ej. "registra al prospecto Juan, su CURP es ..."). Detalle en `architecture/crm.md`.
 

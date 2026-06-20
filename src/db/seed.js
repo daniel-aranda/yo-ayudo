@@ -9,6 +9,10 @@ import {
   assign_bot_to_instagram_account,
   upsert_instagram_account,
 } from "../channels/instagram/instagram_account_repository.js";
+import {
+  assign_bot_to_facebook_page,
+  upsert_facebook_page,
+} from "../channels/facebook/facebook_page_repository.js";
 import { logger } from "../shared/logger.js";
 import { is_entrypoint } from "../shared/entrypoint.js";
 import { hash_password } from "../auth/password_service.js";
@@ -2406,6 +2410,21 @@ export async function seed_development_data(pool) {
     organization_id,
     account_id,
     instagram_account_id: instagram_account.id,
+    bot_id: yoayudo_commercial_bot_id,
+    metadata_json: { source: "seed", purpose: "main_configurable_agent" },
+  });
+  // ...y en Facebook Messenger (misma paridad que WhatsApp/Instagram).
+  const facebook_page = await upsert_facebook_page(pool, {
+    organization_id,
+    account_id,
+    external_page_id: "demo-yoayudo-facebook-page-id",
+    page_name: "YoAyudo Ventas",
+    status: "active",
+  });
+  await assign_bot_to_facebook_page(pool, {
+    organization_id,
+    account_id,
+    facebook_page_id: facebook_page.id,
     bot_id: yoayudo_commercial_bot_id,
     metadata_json: { source: "seed", purpose: "main_configurable_agent" },
   });

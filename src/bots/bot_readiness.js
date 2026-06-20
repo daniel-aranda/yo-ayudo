@@ -32,14 +32,17 @@ const AI_PROVIDER_LABEL = { openai: "OpenAI", gemini: "Gemini", claude: "Claude"
 // derivado de su config real (estado + canales + acciones habilitadas) cruzada
 // con los proveedores configurados. No basta `status='active'`: un bot sin canal,
 // sin IA o con una acción sin proveedor está "activo" pero no funciona realmente.
-export function compute_bot_readiness(bot, { whatsapp_channels = [], instagram_channels = [], config = default_config, resolved_ai = null } = {}) {
+export function compute_bot_readiness(
+  bot,
+  { whatsapp_channels = [], instagram_channels = [], facebook_channels = [], config = default_config, resolved_ai = null } = {},
+) {
   if (!bot) return { warnings: [], blockers: 0, ready: false };
 
   const warnings = [];
   const add = (severity, title, detail) => warnings.push({ severity, title, detail });
 
   const enabled_actions = Array.isArray(bot.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : [];
-  const has_channel = whatsapp_channels.length + instagram_channels.length > 0;
+  const has_channel = whatsapp_channels.length + instagram_channels.length + facebook_channels.length > 0;
 
   // 1) Estado: en borrador/pausado no entra al pipeline inbound.
   if (bot.status !== "active") {

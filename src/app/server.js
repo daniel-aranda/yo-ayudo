@@ -13,6 +13,7 @@ import { register_inspector_routes } from "../inspector/inspector_routes.js";
 import { register_admin_routes } from "../admin/admin_routes.js";
 import { register_review_routes } from "../review/review_routes.js";
 import { register_whatsapp_routes } from "../channels/whatsapp/whatsapp_webhook_routes.js";
+import { register_instagram_routes, register_messenger_routes } from "../channels/meta_webhook_routes.js";
 import { json_text, message_alignment, format_phone } from "../inspector/inspector_presenter.js";
 import { navigation_context } from "./navigation_middleware.js";
 import { create_auth_policy, create_current_user_middleware } from "../auth/auth_middleware.js";
@@ -60,6 +61,8 @@ export function create_app() {
 
   register_auth_routes(router);
   register_whatsapp_routes(router);
+  register_instagram_routes(router);
+  register_messenger_routes(router);
   register_dashboard_routes(router);
   register_commercial_routes(router);
   register_inspector_routes(router);

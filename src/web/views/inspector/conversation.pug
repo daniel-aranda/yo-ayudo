@@ -11,6 +11,9 @@ block content
     // Identidad para la cabecera del popup (modo framed): el host la pinta.
     const conv_meta_json = conversation ? JSON.stringify({ type: "yoayudo:conv-meta", name: contact_name, status_label: status_label, status_tone: status_value }) : "null";
     const bot_phone = conversation ? (conversation.bot_display_phone_number || conversation.bot_phone_number_id || "") : "";
+    const channel_value = conversation ? (conversation.channel || "whatsapp") : "whatsapp";
+    const channel_labels = { whatsapp: "WhatsApp", instagram: "Instagram", messenger: "Messenger" };
+    const channel_label = channel_labels[channel_value] || channel_value;
     const value = value_summary || {};
     const task_count = Array.isArray(tasks) ? tasks.length : 0;
     const open_task_count = Array.isArray(tasks) ? tasks.filter((task) => task.status !== "hecha").length : 0;
@@ -53,7 +56,9 @@ block content
     section.page-header.conversation-header
       .conversation-header-main
         h1= `Conversación con ${contact_name}`
-        p.meta= `${conversation.bot_name || "sin bot"} · ${conversation.whatsapp_phone || "sin teléfono"}`
+        p.meta
+          span.channel-pill(class=`channel-pill--${channel_value}`)= channel_label
+          = ` ${conversation.bot_name || "sin bot"}${conversation.whatsapp_phone ? " · " + conversation.whatsapp_phone : ""}`
       .conversation-header-aside
         span.status-badge(class=`is-${status_value}`)= status_label
         a.button.button-ghost(href=dashboard_url) ← Volver al dashboard
@@ -97,7 +102,20 @@ block content
                       .msg-head
                         span.msg-author Usuario
                         span.msg-time= datetime(turn.user.at)
-                      p.msg-text= turn.user.text || "(sin texto)"
+                      if turn.user.text
+                        p.msg-text= turn.user.text
+                      else if !(turn.user.attachments && turn.user.attachments.length)
+                        p.msg-text (sin texto)
+                      if turn.user.attachments && turn.user.attachments.length
+                        .msg-attachments
+                          each attachment in turn.user.attachments
+                            if attachment.is_image
+                              a.msg-attachment.msg-attachment--image(href=`/inspector/media/${attachment.id}`, target="_blank", rel="noopener", title=attachment.filename || "Imagen adjunta")
+                                img(src=`/inspector/media/${attachment.id}`, alt=attachment.filename || "Imagen adjunta", loading="lazy")
+                            else
+                              a.msg-attachment.msg-attachment--file(href=`/inspector/media/${attachment.id}`, target="_blank", rel="noopener")
+                                span.msg-attachment-icon(aria-hidden="true") 📎
+                                span.msg-attachment-name= attachment.filename || attachment.mime_type || "Archivo adjunto"
                   if turn.understanding
                     //- Labels de acción derivados del mensaje del usuario (flecha
                     //- conectora). El detalle (intención + confianza) vive en un

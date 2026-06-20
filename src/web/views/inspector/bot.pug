@@ -22,6 +22,7 @@ block content
     const primary_whatsapp_channel = whatsapp_channel_rows[0] || {};
     const instagram_channel_rows = Array.isArray(instagram_channels) ? instagram_channels : [];
     const primary_instagram_channel = instagram_channel_rows[0] || {};
+    const facebook_channel_rows = Array.isArray(facebook_channels) ? facebook_channels : [];
     const human_group_options = Array.isArray(human_groups) ? human_groups : [];
     const human_group_options_json = JSON.stringify(human_group_options).replace(/</g, "\\u003c");
     const is_system_bot = (bot?.bot_type || identity.type) === "system";
@@ -253,6 +254,7 @@ block content
             #channel-popup-tabs.tabs(data-initial-tab="whatsapp", role="tablist", aria-label="Tipo de canal")
               button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true") WhatsApp
               button.tab(type="button", data-section="instagram", role="tab", aria-selected="false") Instagram
+              button.tab(type="button", data-section="messenger", role="tab", aria-selected="false") Messenger
           .tab-section(data-parent-tab="channel-popup-tabs", data-section="whatsapp")
             form.popup-form(method="post", action=`/inspector/bots/${bot.id}/channels`)
               input(type="hidden", name="channel_type", value="whatsapp")
@@ -276,6 +278,19 @@ block content
               label(for="channel_ig_meta") ID de la cuenta en Meta
               input#channel_ig_meta(type="text", name="instagram_account_id", placeholder="17841400000000000", required, autocomplete="off")
               p.field-hint En Meta → Instagram (Instagram Business Account ID).
+              .form-actions
+                button.secondary-button(type="button", data-popup-close) Cancelar
+                button(type="submit") Guardar canal
+          .tab-section(data-parent-tab="channel-popup-tabs", data-section="messenger", hidden)
+            form.popup-form(method="post", action=`/inspector/bots/${bot.id}/channels`)
+              input(type="hidden", name="channel_type", value="messenger")
+              input(type="hidden", name="return_to", value=editor_self_path)
+              label(for="channel_fb_name") Nombre de la página
+              input#channel_fb_name(type="text", name="facebook_page_name", placeholder="Mi Negocio", required, autocomplete="off")
+              p.field-hint El nombre de la página de Facebook que ven tus clientes.
+              label(for="channel_fb_meta") ID de la página en Meta
+              input#channel_fb_meta(type="text", name="facebook_page_id", placeholder="1234567890", required, autocomplete="off")
+              p.field-hint En Meta → Configuración de la página (Page ID).
               .form-actions
                 button.secondary-button(type="button", data-popup-close) Cancelar
                 button(type="submit") Guardar canal
@@ -514,7 +529,7 @@ block content
         div.section-title
           +section_head("broadcast", "Canales", "Conecta los canales por donde te escriben tus clientes.")
           button#open_add_channel.button(type="button") Agregar canal
-        if whatsapp_channel_rows.length || instagram_channel_rows.length
+        if whatsapp_channel_rows.length || instagram_channel_rows.length || facebook_channel_rows.length
           div.channel-list
             each whatsapp_channel in whatsapp_channel_rows
               div.channel-row
@@ -546,8 +561,24 @@ block content
                   data-username=instagram_channel.username || "",
                   data-meta-id=instagram_channel.external_account_id || ""
                 ) Editar
+            each facebook_channel in facebook_channel_rows
+              div.channel-row
+                span.channel-icon.channel-icon--messenger(aria-hidden="true")
+                  svg.channel-glyph(viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke-width="2", stroke-linecap="round", stroke-linejoin="round")
+                    path(d="M12 3C7 3 3 6.8 3 11.4c0 2.6 1.3 4.9 3.3 6.4V21l3-1.7c.9.2 1.8.4 2.7.4 5 0 9-3.8 9-8.3S17 3 12 3z")
+                    path(d="M7.5 13.5l2.7-2.8 2 1.8 2.5-2.3-2.7 2.8-2-1.8z", fill="currentColor", stroke="none")
+                div.channel-row__main
+                  div.channel-row__title= facebook_channel.page_name || "Sin nombre"
+                  div.channel-row__meta Messenger · ID Meta: #{facebook_channel.external_page_id}
+                span(class=`channel-status ${facebook_channel.status === "active" ? "is-connected" : "is-idle"}`)= facebook_channel.status === "active" ? "Conectado" : (facebook_channel.status || "Sin conectar")
+                button.secondary-button.channel-edit(
+                  type="button",
+                  data-channel-type="messenger",
+                  data-page-name=facebook_channel.page_name || "",
+                  data-meta-id=facebook_channel.external_page_id || ""
+                ) Editar
         else
-          div.empty Aún no hay canales conectados. Usa "Agregar canal" para conectar WhatsApp o Instagram.
+          div.empty Aún no hay canales conectados. Usa "Agregar canal" para conectar WhatsApp, Instagram o Messenger.
 
       section.panel.tab-section(data-parent-tab="bot-editor-tabs", data-section="interacciones", hidden)
         +section_head("bolt", "Interacciones", "Lo que el agente puede hacer y cómo. Cada interacción tiene su propio prompt que define cuándo y cómo usarla.")
@@ -1406,6 +1437,8 @@ block content
       const waMeta = document.getElementById("channel_wa_meta");
       const igUser = document.getElementById("channel_ig_user");
       const igMeta = document.getElementById("channel_ig_meta");
+      const fbName = document.getElementById("channel_fb_name");
+      const fbMeta = document.getElementById("channel_fb_meta");
 
       function openAddChannel() {
         if (titleEl) titleEl.textContent = "Agregar canal";
@@ -1413,19 +1446,25 @@ block content
         if (waMeta) { waMeta.value = ""; waMeta.readOnly = false; }
         if (igUser) igUser.value = "";
         if (igMeta) { igMeta.value = ""; igMeta.readOnly = false; }
+        if (fbName) fbName.value = "";
+        if (fbMeta) { fbMeta.value = ""; fbMeta.readOnly = false; }
         channelTabs?.activate_by_section("whatsapp");
         channelPopup?.open();
       }
 
       function openEditChannel(button) {
-        const type = button.dataset.channelType === "instagram" ? "instagram" : "whatsapp";
+        const raw = button.dataset.channelType;
+        const type = raw === "instagram" || raw === "messenger" ? raw : "whatsapp";
         if (titleEl) titleEl.textContent = "Editar canal";
         channelTabs?.activate_by_section(type);
+        // El ID de Meta identifica el canal: en edición queda readonly para no crear
+        // un canal nuevo por upsert. Para reemplazarlo, agrega otro.
         if (type === "instagram") {
           if (igUser) igUser.value = button.dataset.username || "";
-          // El ID de Meta identifica el canal: en edición queda readonly para no crear
-          // un canal nuevo por upsert. Para reemplazarlo, agrega otro.
           if (igMeta) { igMeta.value = button.dataset.metaId || ""; igMeta.readOnly = true; }
+        } else if (type === "messenger") {
+          if (fbName) fbName.value = button.dataset.pageName || "";
+          if (fbMeta) { fbMeta.value = button.dataset.metaId || ""; fbMeta.readOnly = true; }
         } else {
           if (waDisplay) waDisplay.value = button.dataset.display || "";
           if (waMeta) { waMeta.value = button.dataset.metaId || ""; waMeta.readOnly = true; }

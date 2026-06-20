@@ -14,6 +14,8 @@ import {
   supported_ai_model_options,
 } from "./inspector_repository.js";
 import { get_account_by_id, update_account_ai_config } from "../accounts/account_repository.js";
+import { get_message_attachment } from "../channels/message_attachment_repository.js";
+import { read_conversation_media } from "../channels/conversation_media_store.js";
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
 import { present_conversation_overview, present_conversation_turns } from "./inspector_presenter.js";
 import { list_tasks_for_conversation } from "../admin/admin_tasks_service.js";
@@ -630,6 +632,28 @@ export function register_inspector_routes(router, dependencies = {}) {
       }
 
       await render_conversation_view(response, conversation_id);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Sirve el binario de un adjunto de conversación desde S3/local. La vista de la
+  // conversación apunta aquí (<img>/enlace de descarga); nunca expone la URL
+  // temporal de Meta ni la ruta de almacenamiento directamente.
+  router.get("/inspector/media/:attachment_id", inspector_auth, async (request, response, next) => {
+    try {
+      const attachment = await get_message_attachment(route_pool, route_value(request.params.attachment_id));
+      if (!attachment) {
+        response.status(404).send("Adjunto no encontrado");
+        return;
+      }
+      const media = await read_conversation_media(attachment);
+      response.setHeader("Content-Type", attachment.mime_type || media.mime_type || "application/octet-stream");
+      response.setHeader("Cache-Control", "private, max-age=300");
+      if (attachment.original_filename) {
+        response.setHeader("Content-Disposition", `inline; filename="${attachment.original_filename}"`);
+      }
+      response.send(media.buffer);
     } catch (error) {
       next(error);
     }

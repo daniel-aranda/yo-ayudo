@@ -49,6 +49,8 @@ En producto/UI una fila de `organizations` es un "Negocio"; el dashboard lista N
 
 `instagram_accounts` + `instagram_account_bot_assignments` (migracion `0014`) son el espejo exacto de WhatsApp para el canal Instagram: una cuenta IG (`external_account_id` UNIQUE, `username`) por org/account, asignada a un bot activo (`UNIQUE(instagram_account_id, active_key)`). Mismo patron de upsert + assign (`src/channels/instagram/instagram_account_repository.js`).
 
+`facebook_pages` + `facebook_page_bot_assignments` (migracion `0022`) son el mismo espejo para Facebook Messenger: una página (`external_page_id` UNIQUE, `page_name`) por org/account, asignada a un bot activo (`UNIQUE(facebook_page_id, active_key)`). Repo `src/channels/facebook/facebook_page_repository.js`. Tanto `instagram_accounts` como `facebook_pages` tienen `access_token` (nullable) para la Send API de Meta — sin token el envío queda `not_configured`, nunca finge. La identidad de canal (IG account id / page id → bot) la resuelve `src/channels/meta_identity.js`.
+
 ### Core Negocio
 
 - `organizations`
@@ -59,13 +61,20 @@ En producto/UI una fila de `organizations` es un "Negocio"; el dashboard lista N
 - `phone_number_bot_assignments`
 - `instagram_accounts`
 - `instagram_account_bot_assignments`
+- `facebook_pages`
+- `facebook_page_bot_assignments`
+
+`contacts` identifica al remitente por `(account_id, channel, external_id)` (migracion `0022`): `channel` (whatsapp/instagram/messenger) + `external_id` (teléfono / IGSID / PSID). WhatsApp conserva su `whatsapp_phone` y su índice único `(account_id, whatsapp_phone)` (dedupe race-safe por ON CONFLICT, intacto); IG/Messenger deduplican en JS por `(account_id, channel, external_id)` (sin único parcial, pg-mem-safe). `whatsapp_phone` es nullable (los contactos IG/FB no tienen teléfono).
 
 ### Conversaciones Y Mensajes
 
 - `conversations`
 - `messages`
+- `message_attachments`
 
 `messages.raw_payload_json` conserva el payload original y se guarda antes de parsear.
+
+`message_attachments` (migración `0021`) guarda los archivos adjuntos entrantes (imágenes/documentos/audio/video) de una conversación: FK a `messages` (`ON DELETE CASCADE`), `channel`, `provider` (`s3`|`local`), ubicación según provider (`bucket`/`s3_key`/`region` o `local_path`), `mime_type`, `size_bytes`, `original_filename`, `source_media_id` (id del media en Meta) y `status`. El binario vive en S3 (si hay bucket) o en disco local (`.storage/conversation-media`), **nunca en la fila**. Lo escribe `store_inbound_attachment` (best-effort) y lo sirve `GET /inspector/media/:attachment_id`. Lo producen los tres canales con inbound (WhatsApp, Instagram, Messenger). Ver `architecture/bot_engine.md`.
 
 `conversations.bot_id` y `messages.bot_id` permiten inspeccionar datos por bot sin inferencias ambiguas.
 
@@ -250,6 +259,9 @@ src/db/migrations
 0017_task_activity   # assigned_to + task_updates (seguimiento de tareas)
 0018_crm_clients     # crm_clients: prospectos/clientes con identidad y clave de negocio derivada
 0019_crm_pipeline_rank # pipeline_rank: orden manual del tablero CRM (LexoRank, drag & drop)
+0020_ai_config_settings # accounts.settings_json + platform_settings (AI provider por scope)
+0021_message_attachments # adjuntos de conversación (S3/local) ligados a messages
+0022_messaging_channels # Messenger (facebook_pages) + identidad de contacto por canal
 ```
 
 Las migraciones 0005 a 0011 siguen un enfoque expand-migrate-contract: agregan `account_id`/`organization_id`, migran los datos y finalmente eliminan tenant/branch (`0010_drop_tenant_branch` elimina fisicamente las tablas y columnas) hasta unificar todo en organization/account. El runner registra archivos aplicados en `schema_migrations`.

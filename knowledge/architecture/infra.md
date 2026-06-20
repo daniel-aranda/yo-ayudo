@@ -32,6 +32,7 @@ Variables actuales:
 - `WHATSAPP_VERIFY_TOKEN`
 - `WHATSAPP_APP_SECRET`
 - `WHATSAPP_ACCESS_TOKEN`
+- `META_VERIFY_TOKEN` / `META_APP_SECRET` (Instagram DM + Messenger; **caen a los de WhatsApp** si no se definen, porque comparten la app de Meta). El token de envío por página/cuenta NO va en env: vive en `instagram_accounts.access_token` / `facebook_pages.access_token`.
 - `WHATSAPP_PHONE_NUMBER_ID`
 - `AI_PROVIDER` (enum `mock|bedrock|openai|gemini|claude`)
 - `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL`
@@ -39,6 +40,7 @@ Variables actuales:
 - `ANTHROPIC_API_KEY` (alias `CLAUDE_API_KEY`) / `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_VERSION`
 - `AWS_REGION`
 - `BEDROCK_MODEL_ID`
+- `CONVERSATION_MEDIA_S3_BUCKET` (adjuntos de conversación; **vacío = fallback local**, no S3), `CONVERSATION_MEDIA_S3_PREFIX` (default `yoayudo/conversation-media`), `CONVERSATION_MEDIA_LOCAL_DIR` (default `.storage/conversation-media`), `CONVERSATION_MEDIA_MAX_BYTES` (default 25MB)
 - `LOG_LEVEL`
 - `AUTH_ENABLED` (default `false`; activa login y la politica owner/usuario-de-negocio)
 - `SESSION_SECRET` (obligatorio en production si `AUTH_ENABLED=true`; en dev hay default)
@@ -98,14 +100,22 @@ La app necesita un endpoint público HTTPS para Meta:
 
 - `GET /webhooks/whatsapp`
 - `POST /webhooks/whatsapp`
+- `GET/POST /webhooks/instagram` (Instagram DM) y `GET/POST /webhooks/messenger` (Facebook Messenger): mismo patrón (verify `hub.challenge` + firma `X-Hub-Signature-256` con `META_APP_SECRET`, ack inmediato + proceso async). Ver `architecture/bot_engine.md`.
 
-El verify token se valida con `WHATSAPP_VERIFY_TOKEN`.
+El verify token se valida con `WHATSAPP_VERIFY_TOKEN` (WhatsApp) y `META_VERIFY_TOKEN` (IG/Messenger; cae al de WhatsApp).
 
 ## AI Providers
 
 `AI_PROVIDER=mock` es el default de desarrollo (env = piso de la resolución por scope). Los valores soportados son `mock`, `bedrock`, `openai`, `gemini` y `claude`. El **provider efectivo se resuelve por scope** (bot > cuenta > global > env; `src/ai/ai_config_resolver.js`) — el env es solo el default global más bajo. Cada provider se activa con su key (`OPENAI_API_KEY`/`GEMINI_API_KEY`/`ANTHROPIC_API_KEY`); **sin key, el factory cae a `mock_provider`** (nunca finge). Adapters: `openai_provider`, `gemini_provider`, `claude_provider` (todos extienden `mock_provider`).
 
 S3 y Bedrock están como stub/opcionales y se activan via `.env`; no deben bloquear el core. Cualquier integración real debe mantener el contrato de `model_provider`.
+
+## Almacenamiento de archivos
+
+Dos almacenes con el mismo patrón **S3-si-hay-bucket / fallback local**, para que el core funcione sin keys AWS:
+
+- **Knowledge** (documentos de conocimiento): `knowledge_s3_uploader` / `local_memory_store`.
+- **Adjuntos de conversación** (media inbound de WhatsApp): `src/channels/conversation_media_store.js` (`store_/read_conversation_media`). Con `CONVERSATION_MEDIA_S3_BUCKET` sube a S3 (`PutObjectCommand`); sin él escribe en `CONVERSATION_MEDIA_LOCAL_DIR`. El `s3_client` y `config` son inyectables (tests sin red). El binario se sirve por `GET /inspector/media/:attachment_id`.
 
 ## Dependencias
 
