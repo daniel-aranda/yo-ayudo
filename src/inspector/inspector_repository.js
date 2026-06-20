@@ -4,6 +4,11 @@ import { get_action } from "../actions/action_registry.js";
 import { assign_bot_to_whatsapp_phone_number } from "../bots/bot_assignment_repository.js";
 import { get_bot_by_id, get_bot_with_definition, update_bot_configuration } from "../bots/bot_repository.js";
 import { compute_bot_readiness } from "../bots/bot_readiness.js";
+import { config } from "../app/config.js";
+import { resolve_ai_config } from "../ai/ai_config_resolver.js";
+import { is_inherit } from "../ai/ai_config_scope.js";
+import { get_platform_ai_config } from "../app/platform_settings_repository.js";
+import { get_account_by_id } from "../accounts/account_repository.js";
 import { upsert_whatsapp_phone_number } from "../channels/whatsapp/whatsapp_number_repository.js";
 import {
   assign_bot_to_instagram_account,
@@ -130,6 +135,33 @@ export const available_agent_interactions = [
     action_id: "generar_resumen",
   },
   {
+    type: "generar_imagen",
+    key: "generar_imagen",
+    label: "Generar imagen",
+    description: "Genera una imagen a partir de una descripción (requiere un proveedor de imágenes configurado).",
+    instructions_placeholder:
+      "Describe cuándo generar una imagen y qué debe representar (producto, promoción, comprobante, etc.).",
+    action_id: "generar_imagen",
+  },
+  {
+    type: "generar_documento",
+    key: "generar_documento",
+    label: "Generar documento",
+    description: "Genera un documento estructurado (p. ej. cotización o reporte) a partir de datos aprobados.",
+    instructions_placeholder:
+      "Describe qué documentos puede generar y con qué datos (tipo de documento, contenido, formato).",
+    action_id: "generar_documento",
+  },
+  {
+    type: "generar_excel",
+    key: "generar_excel",
+    label: "Generar Excel",
+    description: "Genera una hoja de cálculo (Excel) a partir de datos o una consulta.",
+    instructions_placeholder:
+      "Describe cuándo generar un Excel y qué columnas/datos debe incluir.",
+    action_id: "generar_excel",
+  },
+  {
     type: "responder_voz",
     key: "responder_voz",
     label: "Responder con voz",
@@ -235,6 +267,41 @@ export const supported_ai_model_options = [
     model: "gpt-5.2",
     label: "OpenAI -> GPT 5.2 económico",
   },
+  {
+    id: "claude:claude-opus-4-8",
+    provider: "claude",
+    provider_label: "Claude",
+    model: "claude-opus-4-8",
+    label: "Claude -> Opus 4.8 (máxima capacidad)",
+  },
+  {
+    id: "claude:claude-sonnet-4-6",
+    provider: "claude",
+    provider_label: "Claude",
+    model: "claude-sonnet-4-6",
+    label: "Claude -> Sonnet 4.6 (balanceado)",
+  },
+  {
+    id: "claude:claude-haiku-4-5",
+    provider: "claude",
+    provider_label: "Claude",
+    model: "claude-haiku-4-5",
+    label: "Claude -> Haiku 4.5 (rápido y económico)",
+  },
+  {
+    id: "gemini:gemini-2.5-pro",
+    provider: "gemini",
+    provider_label: "Gemini",
+    model: "gemini-2.5-pro",
+    label: "Gemini -> 2.5 Pro",
+  },
+  {
+    id: "gemini:gemini-2.5-flash",
+    provider: "gemini",
+    provider_label: "Gemini",
+    model: "gemini-2.5-flash",
+    label: "Gemini -> 2.5 Flash (rápido y económico)",
+  },
 ];
 
 export const supported_human_groups = [
@@ -278,10 +345,20 @@ function supported_ai_model_by_provider_model(provider, model) {
 
 function resolve_ai_model_selection(body, current_ai) {
   const requested_selection = String(body.ai_model_selection ?? "").trim();
-  const selected_option = requested_selection ? supported_ai_model_by_id(requested_selection) : null;
 
+  // "Heredar (cuenta / sistema)": persiste inherit en vez de forzar un provider.
+  if (requested_selection === "inherit") {
+    return { provider: "inherit", model: "" };
+  }
+
+  const selected_option = requested_selection ? supported_ai_model_by_id(requested_selection) : null;
   if (selected_option) {
     return selected_option;
+  }
+
+  // Sin selección explícita en el body: conserva inherit si el bot ya lo tenía.
+  if (is_inherit(current_ai?.provider)) {
+    return { provider: "inherit", model: "" };
   }
 
   const requested_provider = String(body.ai_provider ?? current_ai.provider ?? supported_ai_model_options[0].provider).trim();
@@ -684,6 +761,17 @@ export async function get_bot_view(pool, bot_id) {
   const whatsapp_channels = bot_row ? await get_bot_whatsapp_channels(pool, bot_id) : [];
   const instagram_channels = bot_row ? await get_bot_instagram_channels(pool, bot_id) : [];
 
+  // AI resuelto del bot (bot > cuenta > global > env) para readiness y el hint del
+  // editor: el blocker "Sin IA real" nombra el provider que realmente usará.
+  const ai_account = bot_row ? await get_account_by_id(pool, bot_row.account_id) : null;
+  const ai_global = await get_platform_ai_config(pool);
+  const resolved_ai = resolve_ai_config({
+    bot: bot_row,
+    account: ai_account,
+    global: ai_global,
+    env: { provider: config.ai_provider, model: config.ai_provider === "bedrock" ? config.bedrock_model_id : config.openai_model },
+  });
+
   return {
     bot: bot_row,
     stats: stats.rows[0],
@@ -692,8 +780,9 @@ export async function get_bot_view(pool, bot_id) {
     supported_channels: supported_bot_channels,
     whatsapp_channels,
     instagram_channels,
+    resolved_ai,
     // Qué le falta para operar de verdad (canal, IA, proveedores de sus acciones).
-    readiness: compute_bot_readiness(bot_row, { whatsapp_channels, instagram_channels }),
+    readiness: compute_bot_readiness(bot_row, { whatsapp_channels, instagram_channels, resolved_ai }),
     ai_models: supported_ai_model_options,
     human_groups: supported_human_groups,
     available_interactions: available_agent_interactions,

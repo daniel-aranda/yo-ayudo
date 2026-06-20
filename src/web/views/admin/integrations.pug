@@ -7,6 +7,9 @@ block content
     const when = (value) => {
       try { return value ? new Date(value).toLocaleString("es-MX") : "—"; } catch (error) { return "—"; }
     };
+    const ai_model_options = Array.isArray(ai_models) ? ai_models : [];
+    const platform_ai = (typeof platform_ai_config !== "undefined" && platform_ai_config) ? platform_ai_config : null;
+    const platform_ai_selected_id = platform_ai ? `${platform_ai.provider}:${platform_ai.model}` : ((ai_model_options[0] && ai_model_options[0].id) || "");
 
   .admin-subnav
     a.is-active(href="/admin/integrations") Integraciones
@@ -37,6 +40,15 @@ block content
     article.metric
       span.label Eventos con error
       strong= totals.failure
+
+  section.panel.ai-scope-card
+    h2 IA por defecto (plataforma)
+    p.meta Proveedor de IA global. Las cuentas y los bots heredan esto salvo que definan el suyo.
+    form.inline-form(method="post", action="/admin/platform/ai")
+      select#platform_ai_selection(name="ai_model_selection", aria-label="Modelo IA por defecto")
+        each model_option in ai_model_options
+          option(value=model_option.id, selected=platform_ai_selected_id === model_option.id)= model_option.label
+      button(type="submit") Guardar
 
   section.panel
     h2 Estado de integraciones

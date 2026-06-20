@@ -33,7 +33,10 @@ Variables actuales:
 - `WHATSAPP_APP_SECRET`
 - `WHATSAPP_ACCESS_TOKEN`
 - `WHATSAPP_PHONE_NUMBER_ID`
-- `AI_PROVIDER`
+- `AI_PROVIDER` (enum `mock|bedrock|openai|gemini|claude`)
+- `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL`
+- `GEMINI_API_KEY` / `GEMINI_MODEL` / `GEMINI_BASE_URL`
+- `ANTHROPIC_API_KEY` (alias `CLAUDE_API_KEY`) / `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_VERSION`
 - `AWS_REGION`
 - `BEDROCK_MODEL_ID`
 - `LOG_LEVEL`
@@ -100,7 +103,7 @@ El verify token se valida con `WHATSAPP_VERIFY_TOKEN`.
 
 ## AI Providers
 
-`AI_PROVIDER=mock` es el default de desarrollo. Los otros valores soportados son `bedrock` y `openai`.
+`AI_PROVIDER=mock` es el default de desarrollo (env = piso de la resolución por scope). Los valores soportados son `mock`, `bedrock`, `openai`, `gemini` y `claude`. El **provider efectivo se resuelve por scope** (bot > cuenta > global > env; `src/ai/ai_config_resolver.js`) — el env es solo el default global más bajo. Cada provider se activa con su key (`OPENAI_API_KEY`/`GEMINI_API_KEY`/`ANTHROPIC_API_KEY`); **sin key, el factory cae a `mock_provider`** (nunca finge). Adapters: `openai_provider`, `gemini_provider`, `claude_provider` (todos extienden `mock_provider`).
 
 S3 y Bedrock están como stub/opcionales y se activan via `.env`; no deben bloquear el core. Cualquier integración real debe mantener el contrato de `model_provider`.
 

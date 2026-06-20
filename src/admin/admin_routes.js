@@ -7,7 +7,8 @@ import { get_businesses_admin_view } from "./admin_businesses_service.js";
 import { get_guardrails_admin_view } from "./admin_guardrails_service.js";
 import { get_conversations_admin_view } from "./admin_conversations_service.js";
 import { add_task_update, get_task_detail, get_tasks_admin_view, update_task_assignee, update_task_status } from "./admin_tasks_service.js";
-import { available_agent_interactions } from "../inspector/inspector_repository.js";
+import { available_agent_interactions, supported_ai_model_options } from "../inspector/inspector_repository.js";
+import { get_platform_ai_config, upsert_platform_ai_config } from "../app/platform_settings_repository.js";
 import { upsert_interaction_setting } from "../interactions/interaction_settings_repository.js";
 import {
   create_organization,
@@ -55,7 +56,25 @@ export function register_admin_routes(router, dependencies = {}) {
         fetcher: dependencies.fetcher,
         s3_probe: dependencies.s3_probe,
       });
+      view.ai_models = supported_ai_model_options;
+      view.platform_ai_config = await get_platform_ai_config(route_pool);
       response.render("admin/integrations", view);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // IA por defecto de la plataforma (default global; cuentas/bots heredan).
+  router.post("/admin/platform/ai", admin_auth, async (request, response, next) => {
+    try {
+      const selection = String(request.body?.ai_model_selection ?? "").trim();
+      const idx = selection.indexOf(":");
+      const provider = idx === -1 ? selection : selection.slice(0, idx);
+      const model = idx === -1 ? "" : selection.slice(idx + 1);
+      if (provider) {
+        await upsert_platform_ai_config(route_pool, { provider, model });
+      }
+      response.redirect("/admin/integrations");
     } catch (error) {
       next(error);
     }

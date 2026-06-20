@@ -11,7 +11,9 @@ import {
   get_organization_view,
   update_bot_builder_view,
   add_bot_channel_from_body,
+  supported_ai_model_options,
 } from "./inspector_repository.js";
+import { get_account_by_id, update_account_ai_config } from "../accounts/account_repository.js";
 import { bot_engine_test_service } from "../bot_engine/bot_engine_test_service.js";
 import { present_conversation_overview, present_conversation_turns } from "./inspector_presenter.js";
 import { list_tasks_for_conversation } from "../admin/admin_tasks_service.js";
@@ -188,9 +190,31 @@ export function register_inspector_routes(router, dependencies = {}) {
         return;
       }
 
+      // IA de la cuenta (settings_json.ai) + opciones para el selector.
+      const ai_account = await get_account_by_id(route_pool, route_value(request.params.account_id));
+      view.ai_models = supported_ai_model_options;
+      view.account_ai_config = ai_account?.settings_json?.ai ?? null;
+
       // El top-nav ya queda scopeado por navigation_middleware (deriva la cuenta
       // del path /inspector/accounts/:account_id).
       response.render("inspector/index", view);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // IA por cuenta: el provider/model por defecto de los bots de esta cuenta.
+  router.post("/inspector/accounts/:account_id/ai", inspector_auth, async (request, response, next) => {
+    try {
+      const account_id = route_value(request.params.account_id);
+      const selection = String(request.body?.ai_model_selection ?? "").trim();
+      const split = (s) => {
+        if (!s || s === "inherit") return { provider: "inherit", model: "" };
+        const idx = s.indexOf(":");
+        return idx === -1 ? { provider: s, model: "" } : { provider: s.slice(0, idx), model: s.slice(idx + 1) };
+      };
+      await update_account_ai_config(route_pool, account_id, split(selection));
+      response.redirect(`/inspector/accounts/${account_id}`);
     } catch (error) {
       next(error);
     }

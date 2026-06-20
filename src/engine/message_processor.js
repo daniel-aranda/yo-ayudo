@@ -4,6 +4,8 @@ import { logger } from "../shared/logger.js";
 import { action_execution_service } from "../actions/action_execution_service.js";
 import { create_model_provider } from "../ai/provider_factory.js";
 import { observed_model_provider } from "../ai/observed_provider.js";
+import { resolve_ai_config } from "../ai/ai_config_resolver.js";
+import { get_platform_ai_config } from "../app/platform_settings_repository.js";
 import { message_intent_parser } from "./message_intent_parser.js";
 import { build_multi_reply } from "./response_builder.js";
 import { meta_whatsapp_client } from "../channels/whatsapp/whatsapp_client.js";
@@ -402,10 +404,28 @@ async function process_inbound_message(dependencies, input) {
     source_table: "messages",
     source_id: stored_message.id,
   });
-  const observed_provider = new observed_model_provider(dependencies.provider, {
+  // AI por scope: provider/model salen de bot > cuenta > global > env. El env es
+  // el piso (config.ai_provider, default "mock"). El provider inyectado en tests
+  // gana y conserva su logging; en producción se construye desde lo resuelto.
+  const ai = resolve_ai_config({
+    bot: resolution.bot,
+    account: resolution.account,
+    global: dependencies.global_ai,
+    env: { provider: config.ai_provider, model: config.ai_provider === "bedrock" ? config.bedrock_model_id : config.openai_model },
+  });
+  const base_provider = dependencies.provider_injected
+    ? dependencies.provider
+    : create_model_provider({ provider: ai.provider, model: ai.model });
+  const observed_provider = new observed_model_provider(base_provider, {
     pool: dependencies.pool,
-    provider_name: config.ai_provider,
-    model: config.ai_provider === "mock" ? "mock-local" : config.bedrock_model_id,
+    provider_name: dependencies.provider_injected ? config.ai_provider : ai.provider,
+    model: dependencies.provider_injected
+      ? config.ai_provider === "mock"
+        ? "mock-local"
+        : config.bedrock_model_id
+      : ai.provider === "mock"
+        ? "mock-local"
+        : ai.model,
     account_id,
     organization_id,
     message_id: stored_message.id,
@@ -644,7 +664,12 @@ export async function handle_whatsapp_webhook_payload(payload, dependencies) {
   logger.info({ object: payload.object }, "inbound webhook received");
   const complete_dependencies = {
     pool: dependencies.pool,
+    // Provider inyectado (tests/spies) GANA — se usa tal cual y se conserva el
+    // logging env (provider_name "mock"). Sin inyección (producción) el provider
+    // se construye por mensaje desde la config resuelta (bot > cuenta > global > env).
     provider: dependencies.provider ?? create_model_provider(),
+    provider_injected: Boolean(dependencies.provider),
+    global_ai: await get_platform_ai_config(dependencies.pool),
     whatsapp_client: dependencies.whatsapp_client ?? new meta_whatsapp_client(),
     memory_store: dependencies.memory_store,
     embedding_gateway: dependencies.embedding_gateway,

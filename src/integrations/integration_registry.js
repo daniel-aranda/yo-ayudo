@@ -148,6 +148,47 @@ export const integration_definitions = [
     },
   },
   {
+    key: "gemini",
+    label: "Gemini",
+    group: "ai",
+    is_configured: (cfg = default_config) => Boolean(cfg.gemini_api_key),
+    async check(deps = {}) {
+      const cfg = deps.config ?? default_config;
+      if (!this.is_configured(cfg)) {
+        return not_configured("Falta GEMINI_API_KEY.");
+      }
+      const base = String(cfg.gemini_base_url ?? "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
+      const probe = await http_probe({
+        url: `${base}/models?key=${cfg.gemini_api_key}`,
+        fetcher: deps.fetcher,
+      });
+      return probe.ok
+        ? ok("API key válida.", probe.latency_ms)
+        : error(`Gemini respondió ${probe.status ?? probe.error}.`, probe.latency_ms);
+    },
+  },
+  {
+    key: "claude",
+    label: "Claude (Anthropic)",
+    group: "ai",
+    is_configured: (cfg = default_config) => Boolean(cfg.anthropic_api_key),
+    async check(deps = {}) {
+      const cfg = deps.config ?? default_config;
+      if (!this.is_configured(cfg)) {
+        return not_configured("Falta ANTHROPIC_API_KEY.");
+      }
+      const base = String(cfg.anthropic_base_url ?? "https://api.anthropic.com/v1").replace(/\/$/, "");
+      const probe = await http_probe({
+        url: `${base}/models`,
+        headers: { "x-api-key": cfg.anthropic_api_key, "anthropic-version": cfg.anthropic_version ?? "2023-06-01" },
+        fetcher: deps.fetcher,
+      });
+      return probe.ok
+        ? ok("API key válida.", probe.latency_ms)
+        : error(`Claude respondió ${probe.status ?? probe.error}.`, probe.latency_ms);
+    },
+  },
+  {
     key: "google_places",
     label: "Google Places (prospección)",
     group: "prospecting",

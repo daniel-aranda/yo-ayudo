@@ -10,7 +10,7 @@ block content
       return "Texto";
     };
 
-  section.page-header.builder-header
+  section.page-header.builder-header.knowledge-detail-header
     div
       h1= source.name
       p Knowledge source
@@ -21,30 +21,34 @@ block content
 
     section.panel
       h2 Editar knowledge
-      div.form-grid
+      //- Campos editables a mano: Nombre (primario, ancho) + Estado (select compacto).
+      div.form-grid.knowledge-edit-grid
         div
           label Nombre
           input(type="text", name="name", value=source.name)
-        div
-          label Tipo de knowledge
-          input(type="text", value=knowledge_type_label(source.source_type), readonly)
-        div
-          label Scope
-          input(type="text", value=source.scope, readonly)
         div
           label Estado
           select(name="status")
             each option in ["ready", "active", "draft", "archived"]
               option(value=option, selected=source.status === option)= option
-        div
-          label Summary status
-          select(name="summary_status")
-            each option in ["ready", "pending_ingestion", "draft", "failed"]
-              option(value=option, selected=(source.summary_status || "ready") === option)= option
+      //- Datos de solo lectura: una tira de hechos compacta en vez de inputs falsos.
+      //- summary_status lo fija la ingesta (no el usuario) → se muestra, no se edita;
+      //- un hidden conserva su valor al guardar. Tipo/Scope/Origen no se postean.
+      dl.task-facts.knowledge-facts
+        div.task-fact
+          dt Tipo de knowledge
+          dd= knowledge_type_label(source.source_type)
+        div.task-fact
+          dt Scope
+          dd= source.scope
         if source.origin
-          div
-            label Origen
-            input(type="text", value=source.origin, readonly)
+          div.task-fact
+            dt Origen
+            dd= source.origin
+        div.task-fact
+          dt Summary status
+          dd= source.summary_status || "ready"
+      input(type="hidden", name="summary_status", value=source.summary_status || "ready")
 
       label Descripción
       textarea(name="description", rows="4")= source.description || ""
@@ -53,8 +57,8 @@ block content
         div.section-title
           label(for="knowledge_source_body") Knowledge
           div.segmented-control(role="tablist", aria-label="Vista de knowledge")
-            button.secondary-button#show_knowledge_preview(type="button", aria-pressed="true") Preview
-            button.secondary-button#show_knowledge_source(type="button", aria-pressed="false") Source
+            button#show_knowledge_preview(type="button", aria-pressed="true") Preview
+            button#show_knowledge_source(type="button", aria-pressed="false") Source
         div.markdown-preview#knowledge_preview
         textarea#knowledge_source_body.markdown-source(name="summary", rows="22", hidden)= source.summary || ""
 

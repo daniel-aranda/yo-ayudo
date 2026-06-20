@@ -12,6 +12,11 @@ block content
     const selected_ai_model = ai.model || (ai_model_options[0] && ai_model_options[0].model) || "gpt-5.5";
     const selected_ai_model_option = ai_model_options.find((option) => option.provider === selected_ai_provider && option.model === selected_ai_model) || ai_model_options[0] || {};
     const selected_ai_model_option_id = selected_ai_model_option.id || `${selected_ai_provider}:${selected_ai_model}`;
+    const ai_is_inherit = !ai.provider || String(ai.provider).trim().toLowerCase() === "inherit";
+    const resolved_ai_value = (typeof resolved_ai !== "undefined" && resolved_ai) ? resolved_ai : null;
+    const resolved_ai_option = resolved_ai_value ? ai_model_options.find((option) => option.provider === resolved_ai_value.provider && option.model === resolved_ai_value.model) : null;
+    const resolved_ai_label = resolved_ai_value ? (resolved_ai_option ? resolved_ai_option.label : `${resolved_ai_value.provider} ${resolved_ai_value.model}`.trim()) : "";
+    const resolved_ai_source_label = resolved_ai_value ? ({ bot: "configurado en este bot", account: "heredado de la cuenta", global: "heredado del sistema", env: "default del sistema", default: "default del sistema" }[resolved_ai_value.source] || "") : "";
     const supported_channel_rows = Array.isArray(supported_channels) ? supported_channels : [];
     const whatsapp_channel_rows = Array.isArray(whatsapp_channels) ? whatsapp_channels : [];
     const primary_whatsapp_channel = whatsapp_channel_rows[0] || {};
@@ -83,6 +88,7 @@ block content
       box: `${svg_open}<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg>`,
       code: `${svg_open}<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg>`,
       eye: `${svg_open}<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>`,
+      arrow_up_right: `${svg_open}<path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>`,
     };
     const editor_icon = (name) => editor_icons[name] || `${svg_open}<circle cx="12" cy="12" r="9"/></svg>`;
     const interaction_icons = {
@@ -206,7 +212,7 @@ block content
           .popup__header-text
             h3.popup__title Knowledge Center
             .popup__subtitle Crea y edita knowledge sin salir del editor.
-          a.button.secondary-button(href=`/inspector/accounts/${bot.account_id}/knowledge`, target="_blank", rel="noreferrer") Abrir en página
+          a.icon-button.is-framed(href=`/inspector/accounts/${bot.account_id}/knowledge`, target="_blank", rel="noreferrer", title="Abrir en página nueva", aria-label="Abrir en página nueva")!= editor_icon("arrow_up_right")
           button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
         .popup__body.popup__body--frame
           iframe#knowledge_center_frame(data-src=`/inspector/accounts/${bot.account_id}/knowledge`, title="Knowledge Center")
@@ -222,7 +228,7 @@ block content
           .popup__header-text
             h3.popup__title Knowledge
             .popup__subtitle.popup__subtitle--knowledge-detail Fuente de conocimiento
-          a#knowledge_detail_open_page.button.secondary-button(href="#", target="_blank", rel="noreferrer") Abrir en página
+          a#knowledge_detail_open_page.icon-button.is-framed(href="#", target="_blank", rel="noreferrer", title="Abrir en página nueva", aria-label="Abrir en página nueva")!= editor_icon("arrow_up_right")
           button.popup__close(type="button", data-popup-close, aria-label="Cerrar")!= editor_icon("x")
         .popup__body.popup__body--frame
           iframe#knowledge_detail_frame(title="Knowledge")
@@ -368,8 +374,11 @@ block content
             div.field-control.has-leading
               span.field-lead-icon(aria-hidden="true")!= editor_icon("sparkles")
               select#ai_model_selection(name="ai_model_selection")
+                option(value="inherit", selected=ai_is_inherit) Heredar (cuenta / sistema)
                 each model_option in ai_model_options
-                  option(value=model_option.id, selected=selected_ai_model_option_id === model_option.id)= model_option.label
+                  option(value=model_option.id, selected=!ai_is_inherit && selected_ai_model_option_id === model_option.id)= model_option.label
+            if resolved_ai_label
+              p.field-hint Actualmente usa #[strong= resolved_ai_label] (#{resolved_ai_source_label}).
         div.field-with-counter
           label(for="instrucciones_operativas") Instrucciones
           textarea#instrucciones_operativas(

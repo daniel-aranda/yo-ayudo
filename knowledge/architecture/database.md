@@ -19,6 +19,8 @@ PostgreSQL es la fuente de verdad. AI no escribe hechos operativos directamente 
 
 `bots` conecta organization/account con bot profile y canal. Un `bot` pertenece a un account y a su organization.
 
+**AI por scope** (migración `0020`): `accounts.settings_json` (jsonb, default `{}`) guarda la config de AI por cuenta en `settings_json.ai = {provider, model}`; la tabla genérica `platform_settings (key text PK, value_json jsonb, updated_at)` guarda el default global de AI (fila key `ai_provider`). El bot guarda su AI en `definition_json.ai`. Resolución **bot > cuenta > global > env** en `src/ai/ai_config_resolver.js` (default global, "Heredar" = ausencia/inherit).
+
 `bots.bot_type` distingue:
 
 - `system`: bot predefinido o legacy, normalmente conectado a `bot_profiles`.

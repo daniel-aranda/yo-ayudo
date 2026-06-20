@@ -45,6 +45,7 @@ function row_to_identity(row) {
           name: row.account_name,
           slug: row.account_slug,
           timezone: row.account_timezone,
+          settings_json: row.account_settings_json ?? {},
         }
       : null,
     bot: row.bot_id
@@ -97,7 +98,8 @@ async function resolve_from_active_assignment(pool, phone_number_id) {
         accounts.id AS account_id,
         accounts.name AS account_name,
         accounts.slug AS account_slug,
-        accounts.timezone AS account_timezone
+        accounts.timezone AS account_timezone,
+        accounts.settings_json AS account_settings_json
       FROM whatsapp_phone_numbers
       JOIN phone_number_bot_assignments
         ON phone_number_bot_assignments.whatsapp_phone_number_id = whatsapp_phone_numbers.id
@@ -151,7 +153,8 @@ async function resolve_legacy_identity(pool, phone_number_id) {
         accounts.id AS account_id,
         accounts.name AS account_name,
         accounts.slug AS account_slug,
-        accounts.timezone AS account_timezone
+        accounts.timezone AS account_timezone,
+        accounts.settings_json AS account_settings_json
       FROM whatsapp_phone_numbers
       LEFT JOIN accounts ON accounts.id = whatsapp_phone_numbers.account_id
       LEFT JOIN organizations

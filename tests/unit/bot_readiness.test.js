@@ -54,4 +54,31 @@ describe("compute_bot_readiness", () => {
     expect(r.warnings.some((w) => w.severity === "warning" && /implementada/i.test(w.title))).toBe(true);
     expect(r.blockers).toBe(0);
   });
+
+  it("blocker: provider resuelto Gemini sin key (nombra el provider)", () => {
+    const r = compute_bot_readiness(bot(), {
+      whatsapp_channels: [{ id: "1" }],
+      config: { openai_api_key: "k" }, // openai presente pero el resuelto es gemini
+      resolved_ai: { provider: "gemini", model: "gemini-2.5-flash" },
+    });
+    expect(has_blocker(r, /Gemini/i)).toBe(true);
+  });
+
+  it("listo: provider resuelto Claude con su key", () => {
+    const r = compute_bot_readiness(bot(), {
+      whatsapp_channels: [{ id: "1" }],
+      config: { anthropic_api_key: "a" },
+      resolved_ai: { provider: "claude", model: "claude-opus-4-8" },
+    });
+    expect(r.ready).toBe(true);
+  });
+
+  it("blocker: provider resuelto mock = sin IA real", () => {
+    const r = compute_bot_readiness(bot(), {
+      whatsapp_channels: [{ id: "1" }],
+      config: full_config,
+      resolved_ai: { provider: "mock" },
+    });
+    expect(has_blocker(r, /IA real/i)).toBe(true);
+  });
 });

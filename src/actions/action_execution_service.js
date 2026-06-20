@@ -73,6 +73,12 @@ function human_only_result(action) {
   };
 }
 
+// Generación que depende de un proveedor (imagen/documento): mientras no haya
+// proveedor/handler real, reporta pending_provider (no not_implemented) para que
+// el guardrail sea "proveedor no configurado", honesto. generar_excel queda como
+// not_implemented (es interno: datos→xlsx, sin proveedor externo).
+const PENDING_PROVIDER_STUBS = new Set(["generar_imagen", "generar_documento"]);
+
 function stub_result(action) {
   if (action.categoria === "voz") {
     return {
@@ -82,6 +88,18 @@ function stub_result(action) {
       output: {
         provider: "voice_provider_stub",
         message: "Proveedor de voz no configurado todavía.",
+      },
+    };
+  }
+
+  if (PENDING_PROVIDER_STUBS.has(action.action_id)) {
+    return {
+      status: "pending_provider",
+      action_id: action.action_id,
+      confirmation_required: false,
+      output: {
+        provider: "generation_provider_stub",
+        message: "Proveedor de generación (imagen/documento) no configurado todavía.",
       },
     };
   }
