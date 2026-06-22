@@ -84,6 +84,15 @@ Ejemplo: "abrimos con 1500, vendimos 3200 y compre 5 kg pastor por 600" -> `regi
 
 El mismo pipeline cubre **CRM**: el intent `lead_capture` (`INTENT_TO_OPERATION_ACTION.lead_capture = crear_contacto`) guarda un prospecto/cliente desde un WhatsApp/IG (p. ej. "registra al prospecto Juan, su CURP es ..."). Detalle en `architecture/crm.md`.
 
+### Recolectar información (entrevista stateful con memoria viva)
+
+A diferencia del resto del pipeline (stateless por mensaje), "recolectar información" es **multi-turno**: el bot hace **una pregunta a la vez, derivada de la respuesta anterior**, hasta tener suficiente. No es un formulario fijo — la IA improvisa y decide el cierre.
+
+- **Captura**: antes de clasificar, `process_inbound_message` consulta `get_active_collection_session(conversation_id)`. Si hay una sesión `collecting`, **bypassa la clasificación** e inyecta el intent `collect_information` — el mensaje es la RESPUESTA a la pregunta pendiente, no una operación nueva (un "vendimos 3200" en medio NO se registra como venta). Al cerrar (`ready`), la conversación vuelve a la clasificación normal.
+- **Arranque**: por frase configurable → intent `collect_information_start` (mock por keyword; IA por el glosario). Gateado a `is_collection_enabled(bot)` (la interacción habilitada). `collect_information_start` tiene prioridad sobre otros intents del mismo mensaje.
+- **El turno** vive en `src/collection/collection_service.js` (NO en un action handler: necesita el provider de IA + la sesión). `provider.advance_information_collection({objective, guidance, findings, transcript, answer, answers_count, max_turns})` → `{findings, is_complete, next_question, closing_message, completion_reason}`. Mock determinístico (banco de preguntas) + override real en openai/gemini/claude (sin key → mock). Cada turno se loguea en `ai_calls` (provider observado) y persiste la **memoria viva** en `information_collection_sessions`.
+- **Cierre desacoplado de la generación**: al completar, la sesión queda `ready` con `findings_json`. **Modo A** (opción `generar_documento_al_terminar`): dispara `generar_documento` con los findings. **Modo B** (default): deja el resultado en cola; un intent `generate_document_request` ("genera el documento de eso") lo **consume** después (`consume_ready_collection` → `completed`). `generar_documento` es stub → `pending_provider` (honesto). Las tres ramas se manejan en `dispatch_one_operation` (como `human_help`, sin `execute_action` para el turno de recolección).
+
 Hecho: el inbound ya selecciona intenciones/acciones por AI (opt-in por bot, fallback deterministico). Pendiente: usar el **Prompt Compiler completo** en el inbound (hoy solo `test_message` compila prompt) y extraccion de campos por AI (hoy determinista).
 
 ### Como se deciden las acciones (en `test_message`)

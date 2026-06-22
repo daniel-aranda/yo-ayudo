@@ -1,0 +1,27 @@
+{
+  "name": "multi-operacion",
+  "description": "Un solo mensaje con apertura, venta y compra: el bot debe disparar las tres.",
+  "status": "expected_passing",
+  "tags": ["operacion", "multi-intent"],
+  "setup": { "channel": "whatsapp", "from": "5215550000000" },
+  "turns": [
+    {
+      "user": "abrimos con 1500 en caja, vendimos 3200 hasta ahorita y compré 5 kg pastor por 600 con Juan",
+      "expect": {
+        "intents": ["day_start", "sales_update", "purchase"],
+        "actions": [
+          { "action_id": "registrar_inicio_dia", "status": "executed" },
+          { "action_id": "registrar_venta", "status": "executed" },
+          { "action_id": "registrar_compra", "status": "executed" }
+        ]
+      }
+    }
+  ],
+  "expect_final": {
+    "db": [
+      { "table": "op_business_days", "count": 1 },
+      { "table": "op_sales_updates", "count": 1 },
+      { "table": "op_purchases", "count": 1 }
+    ]
+  }
+}

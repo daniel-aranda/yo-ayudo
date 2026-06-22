@@ -1,6 +1,7 @@
 import { config } from "../app/config.js";
 import { mock_provider } from "./mock_provider.js";
 import { intents as valid_intents } from "./intents.js";
+import { collection_instructions, build_collection_user_payload, normalize_collection_output } from "./ai_prompts.js";
 
 // Glosa compacta de cada intent para que el modelo mapee lenguaje libre a la
 // categoría operativa correcta. Es prompt, no lógica: el routing real vive en
@@ -140,6 +141,37 @@ export class openai_provider extends mock_provider {
     }
 
     return { intents: classified, provider: "openai", model: this.model, response_id: body.id };
+  }
+
+  // Un turno de la entrevista de recolección por AI (preguntas derivadas). Sin key
+  // cae al piso determinístico (super = mock). Un fallo del modelo tampoco rompe la
+  // entrevista: degrada a mock en vez de lanzar.
+  async advance_information_collection(input) {
+    if (!this.api_key) {
+      return super.advance_information_collection(input);
+    }
+    try {
+      const response = await fetch(`${this.base_url}/responses`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.api_key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.model,
+          instructions: collection_instructions(),
+          input: [{ role: "user", content: build_collection_user_payload(input) }],
+          text: { format: { type: "json_object" } },
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return super.advance_information_collection(input);
+      }
+      return normalize_collection_output(parse_json_output(extract_output_text(body)), input.findings ?? {});
+    } catch {
+      return super.advance_information_collection(input);
+    }
   }
 
   async decide_bot_test_message(input) {

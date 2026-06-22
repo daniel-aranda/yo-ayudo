@@ -83,3 +83,12 @@ Antes de agregar un test, preguntar:
 > Si esto falla en producción, ¿el negocio pierde datos, dinero, confianza o tiempo?
 
 Si la respuesta es sí, probablemente vale la pena.
+
+## Eval de conversaciones (golden conversations)
+
+Harness aparte de Vitest para **medir y optimizar el comportamiento de los bots** con conversaciones reales. NO es un gate de CI: corre con `npm run eval` y produce un **reporte de % que pasa** (dashboard de avance). La idea: empezar con un corpus de conversaciones que HOY fallan ("el bot no supo qué hacer") y subir el % a medida que mejoramos.
+
+- **Fixtures** en `eval/conversations/*.json`: `setup` (canal, `from`, overrides al bot: `bot.enable`/`instructions`/`options`), `turns` (cada uno `user` + `expect`), y `expect_final.db`. `status`: `expected_passing` (regresión) o `baseline_failing` (backlog que queremos volver verde).
+- **Asserts por turno**: `intents`, `reply_contains`, `reply_matches` (regex), `reply_empty`, `needs_review`, `actions` (`action_id`+`status` desde `action_audit_logs`), `no_action`. **Finales**: `db` (`table`/`where`/`count`/`exists`) medidos como **DELTA** (filas que la conversación agregó — el pool está sembrado, los totales absolutos contaminarían).
+- **Corre el pipeline REAL** (`handle_*_webhook_payload`) sobre un pool `pg-mem` fresco por fixture, contra el **proveedor de IA real** configurado (`--provider=`/`--model=` para A/B; sin key avisa y cae a mock). El runner (`eval/eval_runner.js`) es reusable; el CLI (`eval/run_eval.js`) escribe `eval/results/report.html` (dashboard) + `latest.json` + histórico (gitignored).
+- Cuando una `baseline_failing` empieza a pasar, el reporte sugiere **promoverla** a `expected_passing`. Ese es el ciclo de mejora.

@@ -327,6 +327,21 @@ export const action_catalog = [
     version: 1,
   },
   {
+    action_id: "recolectar_informacion",
+    nombre: "Recolectar información",
+    descripcion:
+      "Entrevista abierta multi-turno: hace una pregunta a la vez, derivada de la respuesta anterior, hasta tener lo necesario; guarda el resultado (memoria viva) reutilizable por una generación. Su ejecución vive en el engine (no es un handler de DB).",
+    categoria: "conversacion",
+    nivel_riesgo: risk_levels.automatico,
+    input_schema: object_schema({ objetivo: { type: "string" }, respuesta: { type: "string" } }),
+    output_schema: object_schema({ session_id: { type: "string" }, is_complete: { type: "boolean" } }),
+    permisos_requeridos: ["conversations:collect"],
+    handler: "recolectar_informacion",
+    habilitada: true,
+    habilitada_por_default: false,
+    version: 1,
+  },
+  {
     action_id: "generar_imagen",
     nombre: "Generar imagen",
     descripcion: "Genera una imagen a partir de una descripción (prompt).",

@@ -1,0 +1,37 @@
+{
+  "name": "recoleccion-propuesta",
+  "description": "El vendedor pide armar una propuesta; el bot entrevista (una pregunta a la vez) y cierra con la info lista.",
+  "status": "expected_passing",
+  "tags": ["recoleccion", "propuesta"],
+  "setup": {
+    "channel": "whatsapp",
+    "from": "5215550000000",
+    "bot": {
+      "enable": ["recolectar_informacion", "generar_documento"],
+      "instructions": {
+        "recolectar_informacion": "Arma una propuesta de bot para el negocio del vendedor. Explora el dolor principal, quién lo resuelve hoy, qué han intentado y el resultado esperado."
+      }
+    }
+  },
+  "turns": [
+    {
+      "user": "quiero que me ayudes a armar una propuesta para un negocio",
+      "expect": { "intents": ["collect_information_start"], "reply_contains": "¿Qué es lo que más le duele" }
+    },
+    {
+      "user": "lo que más le duele es que pierden clientes por no contestar rápido",
+      "expect": { "reply_matches": ".+\\?\\s*$" }
+    },
+    {
+      "user": "hoy lo resuelve una recepcionista a medias",
+      "expect": { "reply_matches": ".+\\?\\s*$" }
+    },
+    {
+      "user": "ya con eso tienes suficiente, gracias",
+      "expect": { "reply_contains": "Esto es lo que tengo" }
+    }
+  ],
+  "expect_final": {
+    "db": [{ "table": "information_collection_sessions", "where": { "status": "ready" }, "count": 1 }]
+  }
+}

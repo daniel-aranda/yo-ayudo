@@ -71,10 +71,13 @@ En producto/UI una fila de `organizations` es un "Negocio"; el dashboard lista N
 - `conversations`
 - `messages`
 - `message_attachments`
+- `information_collection_sessions`
 
 `messages.raw_payload_json` conserva el payload original y se guarda antes de parsear.
 
 `message_attachments` (migración `0021`) guarda los archivos adjuntos entrantes (imágenes/documentos/audio/video) de una conversación: FK a `messages` (`ON DELETE CASCADE`), `channel`, `provider` (`s3`|`local`), ubicación según provider (`bucket`/`s3_key`/`region` o `local_path`), `mime_type`, `size_bytes`, `original_filename`, `source_media_id` (id del media en Meta) y `status`. El binario vive en S3 (si hay bucket) o en disco local (`.storage/conversation-media`), **nunca en la fila**. Lo escribe `store_inbound_attachment` (best-effort) y lo sirve `GET /inspector/media/:attachment_id`. Lo producen los tres canales con inbound (WhatsApp, Instagram, Messenger). Ver `architecture/bot_engine.md`.
+
+`information_collection_sessions` (migración `0023`) es la **memoria viva** de la interacción "recolectar información": entrevista abierta multi-turno por conversación. FK a `conversations` (`ON DELETE CASCADE`); `objective`/`guidance` (snapshot de la config del bot), `findings_json` (lo recolectado, crece por turno), `transcript_json` (Q/A en orden), `last_question` (la pregunta pendiente), `status` (`collecting`→`ready`→`completed`/`abandoned`), `turn_count`/`max_turns`, `completion_reason`, `follow_up_action`. Es **estado operativo, no conocimiento** → tabla dedicada e indexada, no `memory_documents`. Una sesión `collecting` "captura" la conversación; al cerrar queda `ready` (en cola) hasta que una generación la consume. Repo `src/collection/collection_session_repository.js`, orquestación `src/collection/collection_service.js`. Ver `architecture/bot_engine.md`.
 
 `conversations.bot_id` y `messages.bot_id` permiten inspeccionar datos por bot sin inferencias ambiguas.
 
@@ -262,6 +265,7 @@ src/db/migrations
 0020_ai_config_settings # accounts.settings_json + platform_settings (AI provider por scope)
 0021_message_attachments # adjuntos de conversación (S3/local) ligados a messages
 0022_messaging_channels # Messenger (facebook_pages) + identidad de contacto por canal
+0023_information_collection_sessions # entrevista de recolección (memoria viva)
 ```
 
 Las migraciones 0005 a 0011 siguen un enfoque expand-migrate-contract: agregan `account_id`/`organization_id`, migran los datos y finalmente eliminan tenant/branch (`0010_drop_tenant_branch` elimina fisicamente las tablas y columnas) hasta unificar todo en organization/account. El runner registra archivos aplicados en `schema_migrations`.

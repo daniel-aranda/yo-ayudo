@@ -15,6 +15,8 @@ import { parse_meta_messaging_payload } from "../channels/meta_messaging_parser.
 import { whatsapp_channel, instagram_channel, messenger_channel } from "../channels/channel_registry.js";
 import { store_conversation_media } from "../channels/conversation_media_store.js";
 import { create_message_attachment } from "../channels/message_attachment_repository.js";
+import { get_active_collection_session } from "../collection/collection_session_repository.js";
+import { start_or_advance_collection, consume_ready_collection } from "../collection/collection_service.js";
 import { safe_ingest_message_to_memory } from "../memory/memory_ingestion_service.js";
 import { record_context_event, safe_record_processing_event } from "../processing_events/processing_event_service.js";
 import { safe_record_integration_event } from "../integrations/integration_event_repository.js";
@@ -311,6 +313,53 @@ const INTENT_TO_OPERATION_ACTION = {
   lead_capture: "crear_contacto",
 };
 
+// ¿El bot tiene habilitada la interacción de recolección? Sin esto, cualquier bot
+// arrancaría una entrevista al oír "arma una propuesta". El gate solo aplica al
+// INICIO; una sesión ya activa siempre avanza.
+function is_collection_enabled(bot) {
+  const enabled_actions = Array.isArray(bot?.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : [];
+  if (enabled_actions.includes("recolectar_informacion")) {
+    return true;
+  }
+  const interactions = Array.isArray(bot?.definition_json?.interactions) ? bot.definition_json.interactions : [];
+  return interactions.some(
+    (interaction) =>
+      (interaction?.action_id === "recolectar_informacion" || interaction?.type === "recolectar_informacion") &&
+      interaction.enabled !== false,
+  );
+}
+
+// Reply honesto según el status de una generación de documento (stub hasta que
+// haya proveedor): nunca dice que generó algo si no se ejecutó de verdad.
+function describe_generation(result) {
+  switch (result?.status) {
+    case "executed":
+      return "Documento generado.";
+    case "pending_provider":
+      return "Tengo lista la información para la propuesta. La generación del documento queda pendiente de proveedor (registrado).";
+    case "pending_confirmation":
+      return "Tengo lista la propuesta; la generación del documento queda pendiente de confirmación.";
+    default:
+      return "Tengo lista la información; la generación del documento no está disponible todavía.";
+  }
+}
+
+async function execute_generation_from_findings(actions, processing_context, findings, session_id) {
+  return actions.execute_action({
+    organization_id: processing_context.organization?.id ?? processing_context.bot?.organization_id ?? null,
+    account_id: processing_context.account?.id ?? processing_context.bot?.account_id ?? null,
+    bot_id: processing_context.bot?.id ?? null,
+    conversation_id: processing_context.conversation.id,
+    message_id: processing_context.message.id,
+    action_id: "generar_documento",
+    input_json: { tipo_documento: "propuesta", datos: findings ?? {}, collection_session_id: session_id ?? null },
+    actor_type: "system",
+    // La petición del vendedor (o el cierre de la recolección) ES la confirmación.
+    confirmed_by: "system",
+    prompt_fragment: "generar documento desde recolección",
+  });
+}
+
 async function dispatch_one_operation(actions, processing_context, parsed) {
   if (parsed.needs_review) {
     return { intent: parsed.intent, parsed, handled: false, needs_review: true };
@@ -322,6 +371,69 @@ async function dispatch_one_operation(actions, processing_context, parsed) {
       parsed,
       handled: true,
       reply_text: "Te canalizo con una persona. Mientras tanto, sigo guardando los mensajes operativos.",
+    };
+  }
+
+  // Solo arranca la entrevista si el bot tiene la interacción habilitada.
+  if (parsed.intent === "collect_information_start" && !is_collection_enabled(processing_context.bot)) {
+    return { intent: parsed.intent, parsed, handled: false };
+  }
+
+  // Recolección de información: entrevista abierta multi-turno con memoria viva.
+  // Un turno = una pregunta o el cierre. La IA decide; el backend persiste.
+  if (parsed.intent === "collect_information_start" || parsed.intent === "collect_information") {
+    const turn = await start_or_advance_collection({
+      pool: processing_context.pool,
+      provider: processing_context.provider,
+      processing_context,
+      answer_text: processing_context.message?.text_body ?? processing_context.text ?? "",
+    });
+    let reply_text = turn.reply;
+    // Modo A (config): al cerrar dispara la acción configurada (generar_documento).
+    // Modo B (default): no dispara nada; el resultado queda `ready` (en cola).
+    if (turn.is_complete && turn.follow_up_action === "generar_documento") {
+      const generation = await execute_generation_from_findings(actions, processing_context, turn.findings, turn.session?.id);
+      reply_text = `${reply_text}\n\n${describe_generation(generation)}`;
+    }
+    return {
+      intent: parsed.intent,
+      parsed,
+      action_id: "recolectar_informacion",
+      handled: true,
+      action_status: turn.is_complete ? "ready" : "collecting",
+      metadata: {
+        session_id: turn.session?.id ?? null,
+        is_complete: turn.is_complete,
+        completion_reason: turn.completion_reason ?? null,
+      },
+      reply_text,
+    };
+  }
+
+  // Generar documento on-demand (Modo B): consume el último resultado `ready`.
+  if (parsed.intent === "generate_document_request") {
+    const ready = await consume_ready_collection({
+      pool: processing_context.pool,
+      conversation_id: processing_context.conversation.id,
+    });
+    if (!ready) {
+      return {
+        intent: parsed.intent,
+        parsed,
+        handled: false,
+        reply_text:
+          "Aún no tengo información recolectada lista para generar un documento. Primero hagamos la recolección (puedes pedirme: arma una propuesta).",
+      };
+    }
+    const generation = await execute_generation_from_findings(actions, processing_context, ready.findings_json, ready.id);
+    return {
+      intent: parsed.intent,
+      parsed,
+      action_id: "generar_documento",
+      handled: generation.status === "executed",
+      action_status: generation.status,
+      metadata: { ...(generation.output ?? {}), collection_session_id: ready.id },
+      reply_text: describe_generation(generation),
     };
   }
 
@@ -571,25 +683,39 @@ async function process_inbound_message(channel, dependencies, event) {
   // intenta clasificar con el modelo. El provider decide capacidad (OpenAI con
   // key → AI; mock o sin key → keywords). En error de AI degradamos a
   // determinístico — el inbound nunca se rompe y el fallo queda en ai_calls.
+  // Si hay una entrevista de recolección ACTIVA, la conversación está "capturada":
+  // el mensaje es la respuesta a la pregunta pendiente, no un intent operativo nuevo.
+  // Salir de ese modo ocurre cuando la sesión se cierra (queda `ready`).
+  const active_collection = await get_active_collection_session(dependencies.pool, conversation.id);
   let intents;
-  try {
-    ({ intents } = await observed_provider.classify_intents({
-      text: normalized.normalized_text,
-      use_ai_classification: true,
-    }));
-  } catch {
-    ({ intents } = await observed_provider.classify_intents({
-      text: normalized.normalized_text,
-      use_ai_classification: false,
-    }));
+  if (active_collection) {
+    intents = [
+      { intent: "collect_information", confidence: 1, reason: "entrevista de recolección activa", segment: normalized.normalized_text },
+    ];
+  } else {
+    try {
+      ({ intents } = await observed_provider.classify_intents({
+        text: normalized.normalized_text,
+        use_ai_classification: true,
+      }));
+    } catch {
+      ({ intents } = await observed_provider.classify_intents({
+        text: normalized.normalized_text,
+        use_ai_classification: false,
+      }));
+    }
   }
   const detected_intents =
     Array.isArray(intents) && intents.length ? intents : [{ intent: "unknown", confidence: 0, reason: "no classification" }];
+  // Iniciar recolección tiene prioridad: si el mensaje pide arrancar la entrevista,
+  // esa es LA operación del turno (no se mezcla con ventas/compras del mismo texto).
+  const start_classification = detected_intents.find((classification) => classification.intent === "collect_information_start");
+  const effective_classifications = start_classification ? [start_classification] : detected_intents;
   // One message can carry several operations. Each detected intent carries its
   // own text segment (falling back to the full text for providers that don't
   // segment), so its extractor only parses its own clause.
   const operations = [];
-  for (const classification of detected_intents) {
+  for (const classification of effective_classifications) {
     operations.push(await parser.parse(classification.segment ?? normalized.normalized_text, classification));
   }
   // The first operation is the "primary" one — it drives the message's headline
@@ -598,6 +724,9 @@ async function process_inbound_message(channel, dependencies, event) {
   const needs_review_any = operations.some((operation) => operation.needs_review);
   const processing_context = {
     pool: dependencies.pool,
+    // El provider observado (AI con logging) para el turno de recolección, que
+    // necesita IA en el dispatch (no es un action handler de DB).
+    provider: observed_provider,
     bot_profile: resolution.bot_profile,
     solution_template: resolution.solution_template,
     organization: resolution.organization,

@@ -7,5 +7,6 @@ coverage/
 *.log
 package-lock.json
 .storage/
+eval/results/
 .claude/settings.local.json
 .claude/skills/

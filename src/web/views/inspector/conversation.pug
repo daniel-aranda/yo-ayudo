@@ -14,6 +14,13 @@ block content
     const channel_value = conversation ? (conversation.channel || "whatsapp") : "whatsapp";
     const channel_labels = { whatsapp: "WhatsApp", instagram: "Instagram", messenger: "Messenger" };
     const channel_label = channel_labels[channel_value] || channel_value;
+    // Recolección en vivo (entrevista): memoria viva read-only en el sidebar.
+    const collection = collection_session || null;
+    const collection_status_labels = { collecting: "Recolectando", ready: "Lista (en cola)", completed: "Usada", abandoned: "Abandonada" };
+    const collection_status_label = collection ? (collection_status_labels[collection.status] || collection.status) : "";
+    const collection_findings = collection && collection.findings_json && typeof collection.findings_json === "object" ? collection.findings_json : {};
+    const collection_notes = Array.isArray(collection_findings.notes) ? collection_findings.notes : [];
+    const collection_struct = Object.entries(collection_findings).filter(([key]) => key !== "notes");
     const value = value_summary || {};
     const task_count = Array.isArray(tasks) ? tasks.length : 0;
     const open_task_count = Array.isArray(tasks) ? tasks.filter((task) => task.status !== "hecha").length : 0;
@@ -192,6 +199,40 @@ block content
               dt Estado
               dd
                 span.status-badge(class=`is-${status_value}`)= status_label
+
+        if collection
+          section.inspector-panel.collection-panel
+            h2 Recolección en vivo
+            dl.compact
+              div
+                dt Estado
+                dd
+                  span.collection-badge(class=`is-${collection.status}`)= collection_status_label
+              if collection.objective
+                div
+                  dt Objetivo
+                  dd= collection.objective
+              div
+                dt Turnos
+                dd= collection.max_turns ? `${collection.turn_count} / ${collection.max_turns}` : String(collection.turn_count)
+              if collection.status === "collecting" && collection.last_question
+                div
+                  dt Pregunta pendiente
+                  dd= collection.last_question
+              if collection.completion_reason
+                div
+                  dt Cierre
+                  dd= collection.completion_reason
+            if collection_struct.length || collection_notes.length
+              .collection-findings
+                h3 Lo recolectado
+                ul.collection-findings-list
+                  each entry in collection_struct
+                    li
+                      span.collection-key= entry[0]
+                      span.collection-val= typeof entry[1] === "string" ? entry[1] : JSON.stringify(entry[1])
+                  each note in collection_notes
+                    li.collection-note= note
 
         if has_value_summary
           section.inspector-panel.conv-value-panel

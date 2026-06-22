@@ -52,6 +52,20 @@ function confidence_for_missing(base_confidence, missing_fields) {
   return missing_fields.length ? Math.min(base_confidence, 0.58) : base_confidence;
 }
 
+// Banco de preguntas del piso determinístico (sin AI). Con un provider real las
+// preguntas son derivadas de la respuesta anterior; sin key, esta secuencia da una
+// entrevista coherente y predecible (también la usan los tests).
+export const COLLECTION_DEFAULT_QUESTIONS = [
+  "¿Qué es lo que más le duele al negocio hoy?",
+  "De eso que te duele, ¿quién lo resuelve hoy y cómo lo resuelven?",
+  "¿Qué han intentado antes y por qué no terminó de funcionar?",
+  "¿Cómo se vería una solución ideal para ti? ¿Qué resultado esperarías?",
+  "¿Cada cuándo pasa esto y a cuánta gente afecta?",
+  "¿Hay un presupuesto o un plazo en mente para resolverlo?",
+];
+
+const COLLECTION_FINISH_PATTERN = /\b(ya|listo|basta|suficiente|con eso|eso es todo|gener\w*|termin\w*)\b/i;
+
 export class mock_provider {
   async normalize_message(input) {
     return { normalized_text: normalize_text(input.text) };
@@ -119,6 +133,21 @@ export class mock_provider {
         pattern: /\bprospecto\b|\bprospecta\b|nuevo cliente|nueva clienta|\blead\b|\bcurp\b|dar de alta|registra(?:r)?\s+a(?:l)?\s|guarda(?:r)?\s+(?:el|al)\s+contacto/,
         reason: "crm lead keyword",
       },
+      // Iniciar una entrevista de recolección (armar una propuesta). Específico para
+      // no robarse mensajes operativos: "arma una propuesta", "recolectar info", etc.
+      {
+        intent: "collect_information_start",
+        confidence: 0.9,
+        pattern: /arma(?:r)?\s+(?:una\s+)?propuesta|hacer\s+(?:una\s+)?propuesta|necesito\s+(?:una\s+)?propuesta|recolect\w+\s+informaci|recopil\w+\s+informaci|levantar\s+informaci|entrevista/,
+        reason: "collect info start keyword",
+      },
+      // Pedir generar el documento de lo ya recolectado.
+      {
+        intent: "generate_document_request",
+        confidence: 0.9,
+        pattern: /genera(?:r)?\s+(?:un\s+|el\s+)?documento|documento\s+(?:de\s+eso|en\s+word|word)|arma(?:r)?\s+el\s+documento|gener\w*\s+(?:la\s+)?propuesta\s+(?:en\s+word|word|documento)|exporta(?:r)?\s+(?:la\s+)?propuesta/,
+        reason: "generate document keyword",
+      },
       { intent: "human_help", confidence: 0.92, pattern: /ayuda|humano|persona|soporte/, reason: "human help keyword" },
     ];
 
@@ -148,6 +177,45 @@ export class mock_provider {
           segment: text.slice(match.index, end).trim(),
         };
       }),
+    };
+  }
+
+  // Un turno de la entrevista de recolección. Piso determinístico: acumula la
+  // respuesta, decide la siguiente pregunta por # de respuestas, y cierra cuando el
+  // usuario lo pide, se acaban las preguntas, o se llega al tope. Los providers con
+  // key real lo sobre-escriben para derivar preguntas naturales de la respuesta.
+  async advance_information_collection(input) {
+    const findings = { ...(input.findings ?? {}) };
+    const notes = Array.isArray(findings.notes) ? [...findings.notes] : [];
+    const answer = String(input.answer ?? "").trim();
+    if (answer) {
+      notes.push(answer);
+    }
+    findings.notes = notes;
+
+    const answers_count = Number.isFinite(input.answers_count) ? input.answers_count : 0;
+    const max_turns = Number.isFinite(input.max_turns) ? input.max_turns : COLLECTION_DEFAULT_QUESTIONS.length;
+    const wants_finish = COLLECTION_FINISH_PATTERN.test(answer);
+    const out_of_questions = answers_count >= COLLECTION_DEFAULT_QUESTIONS.length;
+    const hit_cap = answers_count >= max_turns;
+    const is_complete = wants_finish || out_of_questions || hit_cap;
+
+    if (is_complete) {
+      return {
+        findings,
+        is_complete: true,
+        completion_reason: wants_finish ? "user_requested" : hit_cap ? "max_turns" : "llm_ready",
+        next_question: null,
+        closing_message: "Listo, con esto tengo lo necesario para armar la propuesta.",
+      };
+    }
+
+    return {
+      findings,
+      is_complete: false,
+      completion_reason: null,
+      next_question: COLLECTION_DEFAULT_QUESTIONS[answers_count],
+      closing_message: null,
     };
   }
 

@@ -119,6 +119,10 @@ export class observed_model_provider {
     return this.observe("extract_lead_capture", input, () => this.provider.extract_lead_capture(input));
   }
 
+  advance_information_collection(input) {
+    return this.observe("advance_information_collection", input, () => this.provider.advance_information_collection(input));
+  }
+
   draft_daily_report(input) {
     return this.observe("draft_daily_report", input, () => this.provider.draft_daily_report(input));
   }

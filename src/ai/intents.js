@@ -7,6 +7,9 @@ export const intents = [
   "daily_note",
   "report_request",
   "lead_capture",
+  "collect_information_start",
+  "collect_information",
+  "generate_document_request",
   "human_help",
   "unknown",
 ];

@@ -1,0 +1,20 @@
+{
+  "name": "venta-whatsapp",
+  "description": "El operador reporta una venta por WhatsApp; el bot debe registrarla.",
+  "status": "expected_passing",
+  "tags": ["operacion", "ventas"],
+  "setup": { "channel": "whatsapp", "from": "5215550000000" },
+  "turns": [
+    {
+      "user": "vendimos 3200 hoy",
+      "expect": {
+        "intents": ["sales_update"],
+        "actions": [{ "action_id": "registrar_venta", "status": "executed" }],
+        "reply_contains": "venta"
+      }
+    }
+  ],
+  "expect_final": {
+    "db": [{ "table": "op_sales_updates", "count": 1 }]
+  }
+}

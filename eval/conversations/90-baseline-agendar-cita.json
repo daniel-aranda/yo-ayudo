@@ -1,0 +1,20 @@
+{
+  "name": "baseline-agendar-cita",
+  "description": "FALLA HOY (baseline): un cliente quiere agendar una cita y el bot no tiene esa capacidad. Cuando agreguemos 'agendar_cita', esto debe volverse verde.",
+  "status": "baseline_failing",
+  "tags": ["citas", "baseline"],
+  "setup": { "channel": "whatsapp", "from": "5215550000001" },
+  "turns": [
+    {
+      "user": "quiero agendar una cita para mañana a las 10 de la mañana",
+      "expect": {
+        "intents": ["appointment_request"],
+        "actions": [{ "action_id": "agendar_cita", "status": "executed" }],
+        "reply_contains": "agendé tu cita"
+      }
+    }
+  ],
+  "expect_final": {
+    "db": [{ "table": "op_appointments", "exists": true }]
+  }
+}

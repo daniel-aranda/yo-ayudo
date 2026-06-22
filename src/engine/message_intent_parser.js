@@ -57,6 +57,11 @@ export class message_intent_parser {
         return validate_extraction(await this.provider.extract_lead_capture({ text }), lead_capture_schema);
       case "report_request":
       case "human_help":
+      // La recolección y la generación no extraen campos deterministas: el turno
+      // de entrevista (IA + sesión) y el consumo viven en el engine/collection_service.
+      case "collect_information_start":
+      case "collect_information":
+      case "generate_document_request":
         return {
           parser_name: "message_intent_parser",
           intent: classification.intent,

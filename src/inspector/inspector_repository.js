@@ -149,6 +149,24 @@ export const available_agent_interactions = [
     action_id: "generar_imagen",
   },
   {
+    type: "recolectar_informacion",
+    key: "recolectar_informacion",
+    label: "Recolectar información",
+    description:
+      "Entrevista abierta: hace preguntas una por una, derivadas de las respuestas, hasta tener lo necesario (memoria viva). El resultado queda listo para una generación (p. ej. un documento).",
+    instructions_placeholder:
+      "Describe el objetivo (p. ej. armar una propuesta para un negocio) y QUÉ explorar: el dolor principal, quién lo resuelve hoy y cómo, qué han intentado, el resultado esperado, presupuesto/plazo. Indica cuándo considerar que ya tienes suficiente. El agente improvisa las preguntas; no es una lista fija.",
+    action_id: "recolectar_informacion",
+    options: [
+      {
+        key: "generar_documento_al_terminar",
+        label: "Al terminar, generar el documento automáticamente",
+        description:
+          "Si está activo, al cerrar la entrevista dispara 'Generar documento' con lo recolectado. Si no, el resultado queda en cola para cuando pidan generarlo.",
+      },
+    ],
+  },
+  {
     type: "generar_documento",
     key: "generar_documento",
     label: "Generar documento",
@@ -1326,11 +1344,19 @@ export async function get_conversation_view(pool, conversation_id) {
     operational_day = day.rows[0] ?? null;
   }
 
+  // Recolección en vivo (memoria viva de la entrevista): la última sesión de esta
+  // conversación, en cualquier estado. La vista la muestra read-only.
+  const collection = await pool.query(
+    "SELECT * FROM information_collection_sessions WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1",
+    [conversation_id],
+  );
+
   return {
     conversation: conversation_row,
     messages: messages_with_trace,
     turns,
     operational_day,
+    collection_session: collection.rows[0] ?? null,
     value_summary: await get_conversation_value_summary(pool, conversation_id),
   };
 }

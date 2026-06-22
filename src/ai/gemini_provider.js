@@ -3,6 +3,9 @@ import { mock_provider } from "./mock_provider.js";
 import {
   classification_instructions,
   test_runtime_instructions,
+  collection_instructions,
+  build_collection_user_payload,
+  normalize_collection_output,
   parse_json_output,
   normalize_classified_intents,
   normalize_action_requests,
@@ -76,6 +79,23 @@ export class gemini_provider extends mock_provider {
       throw parse_error;
     }
     return { intents: normalize_classified_intents(parsed, text), provider: "gemini", model: this.model, response_id: id };
+  }
+
+  async advance_information_collection(input) {
+    if (!this.api_key) {
+      return super.advance_information_collection(input);
+    }
+    try {
+      const { text: output } = await this.generate({
+        system: collection_instructions(),
+        user: build_collection_user_payload(input),
+        max_tokens: 1024,
+      });
+      return normalize_collection_output(parse_json_output(output), input.findings ?? {});
+    } catch {
+      // La entrevista no se rompe: cae al piso determinístico.
+      return super.advance_information_collection(input);
+    }
   }
 
   async decide_bot_test_message(input) {
