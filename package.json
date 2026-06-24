@@ -14,7 +14,9 @@
     "db:seed": "node src/db/seed.js",
     "demo:bot-engine": "node scripts/demo_bot_engine_preflight.js",
     "test": "vitest run",
-    "eval": "node eval/run_eval.js"
+    "eval": "node eval/run_eval.js",
+    "convo:explain": "node eval/explain_conversation.js",
+    "convo:export": "node eval/export_conversation.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1058.0",

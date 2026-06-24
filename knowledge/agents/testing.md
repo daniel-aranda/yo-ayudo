@@ -92,3 +92,12 @@ Harness aparte de Vitest para **medir y optimizar el comportamiento de los bots*
 - **Asserts por turno**: `intents`, `reply_contains`, `reply_matches` (regex), `reply_empty`, `needs_review`, `actions` (`action_id`+`status` desde `action_audit_logs`), `no_action`. **Finales**: `db` (`table`/`where`/`count`/`exists`) medidos como **DELTA** (filas que la conversación agregó — el pool está sembrado, los totales absolutos contaminarían).
 - **Corre el pipeline REAL** (`handle_*_webhook_payload`) sobre un pool `pg-mem` fresco por fixture, contra el **proveedor de IA real** configurado (`--provider=`/`--model=` para A/B; sin key avisa y cae a mock). El runner (`eval/eval_runner.js`) es reusable; el CLI (`eval/run_eval.js`) escribe `eval/results/report.html` (dashboard) + `latest.json` + histórico (gitignored).
 - Cuando una `baseline_failing` empieza a pasar, el reporte sugiere **promoverla** a `expected_passing`. Ese es el ciclo de mejora.
+
+### Debuggear / importar una conversación real
+
+Dos comandos (solo lectura del DB; aceptan un id o el URL completo del inspector):
+
+- `npm run convo:explain -- <id-o-url>` ([eval/explain_conversation.js](../../eval/explain_conversation.js)): imprime el **diagnóstico turno por turno** de una conversación real (intents+confianza, acciones+status, respuesta del bot, sesión de recolección, llamadas de IA fallidas, guardrails) y marca señales de falla (needs_review, sin respuesta, errores). Reusa `get_conversation_view` (misma verdad que el inspector).
+- `npm run convo:export -- <id-o-url> [--stdout]` ([eval/export_conversation.js](../../eval/export_conversation.js)): **convierte la conversación real en un fixture** del eval (`eval/conversations/<slug>.json`), con los mensajes del usuario como `turns` y el `expect` **precargado con lo que el bot hizo HOY**. Editas el `expect` a lo ESPERADO → entra al corpus como `baseline_failing` → la vuelves verde.
+
+Apunta `DATABASE_URL` al DB donde vive la conversación (p. ej. `postgres://yoayudo:yoayudo@127.0.0.1:5433/yoayudo`). Flujo típico: el founder pega un URL del inspector → `convo:explain` para entender por qué falló → `convo:export` para fijarla como caso → mejorar hasta que `npm run eval` la marque verde.

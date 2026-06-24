@@ -125,12 +125,16 @@ export class mock_provider {
       { intent: "daily_note", confidence: 0.86, pattern: /sobro|sobrante|falto|faltante|merma|nota/, reason: "daily note keyword" },
       { intent: "daily_close", confidence: 0.94, pattern: /cerramos|cierre|cerrar dia/, reason: "daily close keyword" },
       { intent: "report_request", confidence: 0.9, pattern: /reporte|resumen|como vamos|como salio/, reason: "report keyword" },
-      // CRM lead/prospect capture. Keywords are deliberately CRM-specific (not a
-      // bare "registra"/"cliente") so they don't steal operational messages.
+      // CRM lead/prospect capture. Dos voces:
+      // 1) el OPERADOR registra un prospecto ("registra al prospecto Juan…");
+      // 2) el LEAD entrante escribe en primera persona ("me interesa su servicio,
+      //    soy X, mi tel es Y") — un lead de campaña/inbound. Las palabras son
+      //    CRM-específicas para no robarse mensajes operativos.
       {
         intent: "lead_capture",
         confidence: 0.9,
-        pattern: /\bprospecto\b|\bprospecta\b|nuevo cliente|nueva clienta|\blead\b|\bcurp\b|dar de alta|registra(?:r)?\s+a(?:l)?\s|guarda(?:r)?\s+(?:el|al)\s+contacto/,
+        pattern:
+          /\bprospecto\b|\bprospecta\b|nuevo cliente|nueva clienta|\blead\b|\bcurp\b|dar de alta|registra(?:r)?\s+a(?:l)?\s|guarda(?:r)?\s+(?:el|al)\s+contacto|me interesa|me interesan|estoy interesad|me gustaria\s+(?:mas\s+)?(?:informaci|informes|saber|una cotiza)|quiero\s+(?:mas\s+)?(?:informaci|informes|info|contratar|cotiza)|me pueden dar informes|(?:una|su)\s+cotizaci/,
         reason: "crm lead keyword",
       },
       // Iniciar una entrevista de recolección (armar una propuesta). Específico para

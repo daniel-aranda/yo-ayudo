@@ -15,7 +15,7 @@ const PHONE_PATTERN = /(\+?\d[\d\s().-]{7,}\d)/;
 // punctuation (a comma is not a name char); clean_name then trims at the first
 // connector/stopword, so "prospecto Juan Pérez, su curp es ..." -> "Juan Pérez".
 const NAME_PATTERN =
-  /(?:prospecto|prospecta|cliente|clienta|lead|contacto|se llama|llamad[oa])\s*:?\s+([a-záéíóúüñ]+(?:\s+[a-záéíóúüñ]+){0,3})/i;
+  /(?:prospecto|prospecta|cliente|clienta|lead|contacto|se llama|llamad[oa]|soy|mi nombre es)\s*:?\s+([a-záéíóúüñ]+(?:\s+[a-záéíóúüñ]+){0,3})/i;
 
 // Words that are never part of a captured name: articles/prepositions plus the
 // field-label connectors that introduce an identifier ("su curp es ...").

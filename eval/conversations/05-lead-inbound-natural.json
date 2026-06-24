@@ -1,0 +1,24 @@
+{
+  "name": "lead-inbound-natural",
+  "description": "Caso real (conv ce26064a): un lead entrante escribe en lenguaje natural su interés + nombre + teléfono. ANTES caía en 'unknown' y el bot decía 'no entendí'. Debe capturarse como prospecto.",
+  "status": "expected_passing",
+  "tags": ["crm", "lead", "inbound", "regresion-real"],
+  "setup": {
+    "channel": "messenger",
+    "from": "psid-carlos-ibanez",
+    "bot": { "enable": ["crear_contacto"] }
+  },
+  "turns": [
+    {
+      "user": "Buenas, me interesa su servicio. Soy Carlos Ibáñez, tel 5551112233.",
+      "expect": {
+        "intents": ["lead_capture"],
+        "needs_review": false,
+        "actions": [{ "action_id": "crear_contacto", "status": "executed" }]
+      }
+    }
+  ],
+  "expect_final": {
+    "db": [{ "table": "crm_clients", "count": 1 }]
+  }
+}

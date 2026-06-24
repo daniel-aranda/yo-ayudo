@@ -1,0 +1,59 @@
+{
+  "name": "vendedor-entrevista-propuesta-word",
+  "description": "Flujo completo: un vendedor es entrevistado por el bot para conocer un negocio (clínica dental), el bot recolecta lo necesario y al final el vendedor pide el documento de la propuesta en Word. La generación queda pendiente de proveedor (honesto) pero la info recolectada queda lista y se consume.",
+  "status": "expected_passing",
+  "tags": ["recoleccion", "propuesta", "documento", "flujo-completo"],
+  "setup": {
+    "channel": "whatsapp",
+    "from": "5215550000000",
+    "bot": {
+      "enable": ["recolectar_informacion", "generar_documento"],
+      "instructions": {
+        "recolectar_informacion": "Eres un consultor de YoAyudo entrevistando a un vendedor para armar una propuesta de bot de WhatsApp para un negocio. Explora, una pregunta a la vez: el dolor principal del negocio, quién lo resuelve hoy y cómo, qué han intentado antes, y el resultado que esperarían. Cuando tengas lo necesario para una propuesta, cierra.",
+        "generar_documento": "Cuando el vendedor lo pida, genera la propuesta en Word con la información recolectada."
+      }
+    }
+  },
+  "turns": [
+    {
+      "user": "Hola, quiero armar una propuesta para una clínica dental que visité",
+      "comment": "Asserts robustos a cualquier proveedor: arrancó la entrevista (intent) e hizo una pregunta (termina en '?'). No fijamos la frase exacta para no atarnos al wording del mock.",
+      "expect": {
+        "intents": ["collect_information_start"],
+        "reply_matches": ".+\\?\\s*$"
+      }
+    },
+    {
+      "user": "Pierden muchas citas porque nadie contesta el WhatsApp a tiempo",
+      "expect": { "reply_matches": ".+\\?\\s*$" }
+    },
+    {
+      "user": "Hoy la recepcionista contesta entre pacientes y se le acumulan los mensajes",
+      "expect": { "reply_matches": ".+\\?\\s*$" }
+    },
+    {
+      "user": "Intentaron contratar a alguien de medio tiempo pero no les alcanza el presupuesto",
+      "expect": { "reply_matches": ".+\\?\\s*$" }
+    },
+    {
+      "user": "Les encantaría que se agenden las citas solas por WhatsApp las 24 horas",
+      "expect": { "reply_matches": ".+\\?\\s*$" }
+    },
+    {
+      "user": "Ya con eso tienes suficiente para armar la propuesta",
+      "comment": "El bot debe CERRAR (no seguir preguntando). La señal robusta del cierre es el estado de la sesión (expect_final), no el wording; aquí solo verificamos que no quedó en revisión.",
+      "expect": { "needs_review": false }
+    },
+    {
+      "user": "Perfecto, ahora genérame el documento en Word de la propuesta",
+      "expect": {
+        "intents": ["generate_document_request"],
+        "actions": [{ "action_id": "generar_documento", "status": "pending_provider" }],
+        "reply_contains": "pendiente de proveedor"
+      }
+    }
+  ],
+  "expect_final": {
+    "db": [{ "table": "information_collection_sessions", "where": { "status": "completed" }, "count": 1 }]
+  }
+}
