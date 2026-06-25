@@ -326,5 +326,17 @@ describe("WhatsApp inbound pipeline", () => {
     // El fallo de AI quedó registrado en ai_calls (no se ocultó).
     const failed = await pool.query("SELECT * FROM ai_calls WHERE function_name = 'classify_intents' AND status = 'failed'");
     expect(failed.rowCount).toBeGreaterThanOrEqual(1);
+    const routing = await pool.query(
+      "SELECT * FROM processing_events WHERE event_type = 'routing_decision' AND event_stage = 'routing' LIMIT 1",
+    );
+    expect(routing.rows[0].details_json.classification).toMatchObject({
+      mode: "deterministic_fallback",
+      fallback_used: true,
+      requested_ai: true,
+    });
+    expect(routing.rows[0].details_json.operations[0]).toMatchObject({
+      intent: "sales_update",
+      action_id: "registrar_venta",
+    });
   });
 });

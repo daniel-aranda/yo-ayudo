@@ -147,7 +147,7 @@ block content
                               button.turn-action-chip(type="button", class=`is-${action.tone}`, aria-haspopup="dialog", aria-expanded="false")= action.label
                         else
                           span.turn-action-none Sin acción ejecutada
-                      if turn.understanding.intent_human || turn.understanding.confidence_pct != null
+                      if turn.understanding.intent_human || turn.understanding.confidence_pct != null || turn.understanding.route
                         .turn-detail(role="dialog", aria-label="Interpretación del agente", hidden)
                           if turn.understanding.intent_human
                             .turn-detail-row
@@ -157,6 +157,26 @@ block content
                             .turn-detail-row
                               span.turn-detail-key Confianza
                               span.turn-detail-val(class=`is-${turn.understanding.confidence_tone}`)= `${turn.understanding.confidence_pct}%`
+                          if turn.understanding.route
+                            - const route_fallback_suffix = turn.understanding.route.fallback_used && turn.understanding.route.mode_label !== "Fallback determinístico" ? " · fallback" : "";
+                            if turn.understanding.route.mode_label
+                              .turn-detail-row
+                                span.turn-detail-key Ruta
+                                span.turn-detail-val= `${turn.understanding.route.mode_label}${route_fallback_suffix}`
+                            if turn.understanding.route.provider_label
+                              .turn-detail-row
+                                span.turn-detail-key Modelo
+                                span.turn-detail-val= turn.understanding.route.provider_label
+                            if turn.understanding.route.reason
+                              .turn-detail-row.turn-detail-row--stacked
+                                span.turn-detail-key Señal
+                                span.turn-detail-note= turn.understanding.route.reason
+                            if turn.understanding.route.segments && turn.understanding.route.segments.length
+                              .turn-detail-segments
+                                each segment in turn.understanding.route.segments
+                                  .turn-detail-segment
+                                    span.turn-detail-key= segment.intent
+                                    span.turn-detail-note= segment.segment
                   if turn.responses && turn.responses.length
                     each response in turn.responses
                       .turn-msg.turn-msg--agent

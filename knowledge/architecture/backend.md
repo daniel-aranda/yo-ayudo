@@ -126,7 +126,7 @@ Ubicación: `src/processing_events`
 - `processing_event_repository.js`: inserta eventos tecnicos del pipeline.
 - `processing_event_service.js`: helper seguro para registrar eventos sin romper el flujo principal.
 
-Estos eventos alimentan el Conversation Inspector.
+Estos eventos alimentan el Conversation Inspector. El inbound registra, entre otros, `routing_decision` (`event_stage='routing'`) con provider/model resueltos, modo AI/fallback/recoleccion, intents detectados vs efectivos, segmentos y operaciones parseadas; es la caja negra compacta para depurar por que un mensaje disparo N interacciones.
 
 ### Inspector
 
@@ -216,7 +216,7 @@ Ubicación: `src/voice`
 6. Normalizar texto con provider.
 7. Clasificar intención.
 8. Parsear y validar con Zod.
-9. Guardar `parsing_results`.
+9. Guardar `parsing_results` y `processing_events.routing_decision`.
 10. Si hay baja confianza o datos faltantes, crear `review_items`.
 11. Recuperar `business_knowledge` y `conversation_memory` como bloques separados para el router.
 12. Ejecutar `agent_router` si `AGENT_ROUTER_ENABLED=true`.

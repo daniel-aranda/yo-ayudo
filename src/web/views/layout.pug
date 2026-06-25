@@ -85,6 +85,7 @@ mixin conversation_list(conversations, opts)
         - const chips = chips_de(conversation);
         - const ini = iniciales(conversation);
         - const meta_partes = [s.subtitle, cl.show_bot ? conversation.bot_name : null].filter(Boolean);
+        - const pending_review = Number(conversation.pending_review_count || 0);
         li(data-conv-text=cl_text(conversation))
           a.conversacion-card(href=cl_href(conversation), aria-label=`Abrir conversación con ${s.title || "contacto"}`)
             span.conversacion-card__avatar(class=tipo_avatar(conversation, chips), aria-hidden="true")
@@ -105,6 +106,8 @@ mixin conversation_list(conversations, opts)
                     span.conversacion-chip.es-extra= `+${chips.extra}`
             .conversacion-card__lado
               span.conversacion-card__tiempo= s.relative_time
+              if pending_review > 0
+                span.conversacion-alert= `${pending_review} ${pending_review === 1 ? "revisión" : "revisiones"}`
               span.conversacion-estado(class=tono_estado[s.status_tone] || "es-cerrada")= s.status_label
               span.conversacion-card__abrir(aria-hidden="true")!= chevron_svg
     p.empty(data-conv-empty, hidden) Sin conversaciones que coincidan con la búsqueda.

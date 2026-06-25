@@ -161,6 +161,12 @@ describe("Conversation Inspector", () => {
     expect(trace.operational_writes.some((write) => write.type === "purchase")).toBe(true);
     expect(trace.outbound_responses[0].text_body).toContain("Compra registrada");
     expect(trace.processing_events.some((event) => event.event_stage === "operation_write")).toBe(true);
+    expect(trace.routing_events[0].details_json.classification.mode).toBe("ai_requested");
+    expect(trace.routing_events[0].details_json.operations[0]).toMatchObject({
+      intent: "purchase",
+      action_id: "registrar_compra",
+      needs_review: false,
+    });
   });
 
   it("builds a trace when optional pipeline sections are missing", async () => {
@@ -418,7 +424,7 @@ describe("Conversation Inspector", () => {
     expect(trace.agent_runs.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders the per-bot conversations list with Spanish columns and interaction chips", async () => {
+  it("renders the per-bot conversations list as a compact inbox with interaction chips", async () => {
     const app = create_inspector_test_app(pool);
     const bot = (
       await pool.query("SELECT id, account_id, organization_id FROM bots WHERE slug = 'agente-whatsapp-yoayudo' LIMIT 1")
@@ -431,18 +437,19 @@ describe("Conversation Inspector", () => {
 
     const page = await request(app).get(`/inspector/bots/${bot.id}/conversations`).expect(200);
 
-    // Encabezados en español (ya no en inglés).
-    expect(page.text).toContain("Contacto");
-    expect(page.text).toContain("Interacciones");
-    expect(page.text).toContain("Última actividad");
-    expect(page.text).toContain("Estado");
+    // La vista por bot usa la misma bandeja compacta que dashboard/editor:
+    // previews de dos líneas, tarjetas clickeables y rollup arriba.
+    expect(page.text).toContain("conversation-rollup");
+    expect(page.text).toContain("bandeja-conversaciones");
+    expect(page.text).toContain("multi-interacción");
     expect(page.text).not.toContain("Last intent");
     expect(page.text).not.toContain("Last agent");
 
     // Las interacciones ejecutadas (action_audit_logs status='executed') se
     // muestran como chips con etiqueta humana — reemplazan intent/agent crudos.
-    expect(page.text).toContain("conv-tag");
-    expect(page.text).toContain("Crear tarea");
+    expect(page.text).toContain("conversacion-chip");
+    expect(page.text).toContain("Requiere seguimiento");
+    expect(page.text).toContain("Caja inicial");
 
     // Última actividad = fecha corta, no el Date crudo con zona horaria.
     expect(page.text).not.toContain("GMT");

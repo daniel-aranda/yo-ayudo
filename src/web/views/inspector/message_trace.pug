@@ -28,6 +28,12 @@ block content
     const summary = compact_trace_summary || {};
     const summary_conf = confidence_pct(summary.confidence);
     const summary_intent_human = intent_human(summary.intent);
+    const routing_mode_label = (mode) => {
+      if (mode === "active_collection") return "Sesión de recolección activa";
+      if (mode === "deterministic_fallback") return "Fallback determinístico";
+      if (mode === "ai_requested") return "Clasificación con AI";
+      return mode || "Sin modo";
+    };
     const author = message && message.direction === "outbound" ? "Agente" : "Usuario";
     const trace_account_url = message && message.account_id ? `/dashboard/accounts/${message.account_id}` : "/dashboard";
     const trace_bc = [{ label: "Dashboard", href: "/dashboard" }];
@@ -153,6 +159,37 @@ block content
         p.trace-empty Sin llamadas de AI registradas.
 
   section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="routing", hidden)
+    article.trace-section
+      h2 Decisión de clasificación
+      if routing_events && routing_events.length
+        each event in routing_events
+          - const details = event.details_json || {};
+          - const classification = details.classification || {};
+          - const effective = Array.isArray(details.effective_intents) ? details.effective_intents : [];
+          - const operations = Array.isArray(details.operations) ? details.operations : [];
+          div.trace-card
+            strong= routing_mode_label(classification.mode)
+            p.meta= `${details.provider || "-"} · ${details.model || "-"}${classification.fallback_used ? " · fallback usado" : ""}`
+            if classification.error_message
+              p.trace-badge-error= classification.error_message
+            if effective.length
+              div.route-decision
+                each item, index in effective
+                  - const item_conf = confidence_pct(item.confidence)
+                  span.fact-chip.is-intent(title=item.reason || "")= intent_human(item.intent) || item.intent
+                  if item_conf != null
+                    span.u-confidence(class=(item_conf < 72 ? "is-low" : "is-ok"))= `${item_conf}%`
+                  if index + 1 < effective.length
+                    span.route-arrow(aria-hidden="true") +
+            if operations.length
+              details.json-details
+                summary Operaciones parseadas
+                pre= json(operations)
+            details.json-details
+              summary Detalle completo
+              pre= json(details)
+      else
+        p.trace-empty Sin decisión de clasificación registrada.
     article.trace-section
       h2 Decisión de ruteo
       if router_runs.length

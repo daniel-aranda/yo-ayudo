@@ -18,42 +18,18 @@ block content
       p Senders y conversaciones del bot.
 
   section.panel
-    form(method="get").filters
-      label(for="search") Buscar
-      input#search(name="search", value=search || "")
-      button(type="submit") Filtrar
-
-  section.panel
+    -
+      const pending_review_total = conversations.reduce((sum, c) => sum + Number(c.pending_review_count || 0), 0);
+      const multi_interaction_total = conversations.filter((c) => Array.isArray(c.interactions) && c.interactions.length > 1).length;
     if conversations.length
-      table.conversations-table
-        thead
-          tr
-            th.conv-sender Contacto
-            th Último mensaje
-            th Interacciones
-            th Mensajes
-            th Revisión
-            th Última actividad
-            th Estado
-        tbody
-          each conversation in conversations
-            tr
-              td.conv-sender
-                a(href=(bot && bot.account_id ? `/inspector/accounts/${bot.account_id}/conversations/${conversation.id}` : `/inspector/conversations/${conversation.id}`))= conversation.display_name || phone(conversation.whatsapp_phone)
-                if conversation.display_name
-                  div.meta= phone(conversation.whatsapp_phone)
-              td= conversation.last_message || "-"
-              td
-                if conversation.interactions && conversation.interactions.length
-                  .conv-tags
-                    each interaction in conversation.interactions
-                      span.conv-tag= interaction.label
-                else
-                  | -
-              td= conversation.messages_count
-              td= conversation.pending_review_count
-              td= conversation.last_activity_label || "-"
-              td
-                span.status= conversation.summary ? conversation.summary.status_label : conversation.status
-    else
-      div.empty Sin conversaciones.
+      .conversation-rollup
+        span.conversation-rollup__item
+          strong= conversations.length
+          |  conversaciones
+        span.conversation-rollup__item(class=pending_review_total ? "is-warning" : "")
+          strong= pending_review_total
+          |  en revisión
+        span.conversation-rollup__item
+          strong= multi_interaction_total
+          |  multi-interacción
+    +conversation_list(conversations, { account_id: bot && bot.account_id, show_bot: false })

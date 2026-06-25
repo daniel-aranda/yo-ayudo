@@ -107,6 +107,30 @@ export function interactions_from_action_logs(action_logs) {
   });
 }
 
+function routing_decision_from_events(events) {
+  const event = (Array.isArray(events) ? events : []).find((item) => item.event_type === "routing_decision");
+  if (!event) {
+    return null;
+  }
+
+  const details = event.details_json && typeof event.details_json === "object" ? event.details_json : {};
+  const classification = details.classification && typeof details.classification === "object" ? details.classification : {};
+  const effective_intents = Array.isArray(details.effective_intents) ? details.effective_intents : [];
+  const operations = Array.isArray(details.operations) ? details.operations : [];
+
+  return {
+    mode: classification.mode ?? null,
+    requested_ai: Boolean(classification.requested_ai),
+    fallback_used: Boolean(classification.fallback_used),
+    error_message: classification.error_message ?? null,
+    provider: details.provider ?? null,
+    model: details.model ?? null,
+    effective_intents,
+    operations,
+    summary: event.summary ?? null,
+  };
+}
+
 export function compact_trace_summary(input) {
   const parsing_result = input.parsing_results?.[0] ?? null;
   const router_run = input.router_runs?.[0] ?? null;
@@ -117,6 +141,7 @@ export function compact_trace_summary(input) {
   const failed_memory = input.memory_documents?.find((document) => document.status === "failed") ?? null;
   const error_event = input.processing_events?.find((event) => event.status === "error") ?? null;
   const interactions = interactions_from_action_logs(input.action_logs);
+  const routing_decision = routing_decision_from_events(input.processing_events);
 
   return {
     intent: parsing_result?.intent ?? input.message?.parsed_intent ?? null,
@@ -130,6 +155,7 @@ export function compact_trace_summary(input) {
     review_status: pending_review?.status ?? null,
     interactions,
     interaction_count: interactions.length,
+    routing_decision,
   };
 }
 
@@ -238,6 +264,37 @@ function present_action_label(action, trace, task) {
   return action.label;
 }
 
+function routing_mode_label(mode) {
+  if (mode === "active_collection") return "Recolección activa";
+  if (mode === "deterministic_fallback") return "Fallback determinístico";
+  if (mode === "ai_requested") return "Clasificación con AI";
+  return mode || null;
+}
+
+function present_routing_decision(route) {
+  if (!route) {
+    return null;
+  }
+
+  const effective = Array.isArray(route.effective_intents) ? route.effective_intents : [];
+  const operations = Array.isArray(route.operations) ? route.operations : [];
+  const first_intent = effective[0] ?? null;
+  const segments = operations
+    .map((operation) => ({
+      intent: conversation_intent_label(operation.intent) ?? operation.intent,
+      segment: String(operation.segment ?? "").trim(),
+    }))
+    .filter((item) => item.segment);
+
+  return {
+    mode_label: routing_mode_label(route.mode),
+    provider_label: route.provider ? `${route.provider}${route.model ? `/${route.model}` : ""}` : null,
+    fallback_used: Boolean(route.fallback_used),
+    reason: first_intent?.reason ?? null,
+    segments,
+  };
+}
+
 // A conversation turn (one inbound + its replies, already grouped server-side)
 // → a view-model the timeline can render directly: the user message, the action
 // label(s) the agent fired (the rest of the interpretation — intent + confidence
@@ -298,6 +355,7 @@ export function present_conversation_turns(turns, options = {}) {
       trace && trace.confidence != null && trace.confidence !== ""
         ? Math.round(Number(trace.confidence) * 100)
         : null;
+    const route = present_routing_decision(trace?.routing_decision);
 
     let status_tone = "ok";
     if (trace?.has_error) {
@@ -317,6 +375,7 @@ export function present_conversation_turns(turns, options = {}) {
           intent_human: conversation_intent_label(trace?.intent) ?? trace?.intent ?? null,
           confidence_pct,
           confidence_tone: confidence_pct == null ? null : confidence_pct < CONFIDENCE_LOW_THRESHOLD ? "low" : "ok",
+          route,
         }
       : null;
 

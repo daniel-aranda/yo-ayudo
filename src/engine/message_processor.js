@@ -313,6 +313,71 @@ const INTENT_TO_OPERATION_ACTION = {
   lead_capture: "crear_contacto",
 };
 
+function trace_text(value, max = 700) {
+  const text = String(value ?? "");
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function compact_classification(classification) {
+  return {
+    intent: classification?.intent ?? "unknown",
+    confidence: Number.isFinite(Number(classification?.confidence)) ? Number(classification.confidence) : null,
+    reason: classification?.reason ? trace_text(classification.reason, 240) : null,
+    segment: trace_text(classification?.segment ?? "", 700),
+  };
+}
+
+function action_id_for_operation(intent) {
+  if (intent === "collect_information" || intent === "collect_information_start") {
+    return "recolectar_informacion";
+  }
+  if (intent === "generate_document_request") {
+    return "generar_documento";
+  }
+  return INTENT_TO_OPERATION_ACTION[intent] ?? null;
+}
+
+function compact_operation_trace(operation, classification) {
+  return {
+    intent: operation.intent,
+    confidence: Number.isFinite(Number(operation.confidence)) ? Number(operation.confidence) : null,
+    needs_review: Boolean(operation.needs_review),
+    action_id: action_id_for_operation(operation.intent),
+    segment: trace_text(classification?.segment ?? operation.data?.text ?? "", 700),
+    extracted_keys: operation.data && typeof operation.data === "object" ? Object.keys(operation.data) : [],
+    validation_errors: operation.validation_errors ?? [],
+  };
+}
+
+async function record_routing_decision(pool, processing_context, input) {
+  const operations = input.operations ?? [];
+  await record_context_event(pool, processing_context, {
+    event_type: "routing_decision",
+    event_stage: "routing",
+    title: "Routing decision",
+    summary: `${input.classification_mode} → ${operations.map((operation) => operation.intent).join(", ") || "unknown"}`,
+    details_json: {
+      provider: input.provider,
+      model: input.model,
+      provider_injected: input.provider_injected,
+      normalized_text: trace_text(input.normalized_text, 1000),
+      classification: {
+        mode: input.classification_mode,
+        requested_ai: input.requested_ai,
+        fallback_used: input.fallback_used,
+        error_message: input.error_message ? trace_text(input.error_message, 500) : null,
+      },
+      detected_intents: (input.detected_classifications ?? []).map(compact_classification),
+      effective_intents: (input.effective_classifications ?? []).map(compact_classification),
+      operations: operations.map((operation, index) =>
+        compact_operation_trace(operation, input.effective_classifications?.[index]),
+      ),
+    },
+    source_table: "messages",
+    source_id: processing_context.message.id,
+  });
+}
+
 // ¿El bot tiene habilitada la interacción de recolección? Sin esto, cualquier bot
 // arrancaría una entrevista al oír "arma una propuesta". El gate solo aplica al
 // INICIO; una sesión ya activa siempre avanza.
@@ -656,19 +721,22 @@ async function process_inbound_message(channel, dependencies, event) {
     global: dependencies.global_ai,
     env: { provider: config.ai_provider, model: config.ai_provider === "bedrock" ? config.bedrock_model_id : config.openai_model },
   });
-  const base_provider = dependencies.provider_injected
-    ? dependencies.provider
-    : create_model_provider({ provider: ai.provider, model: ai.model });
-  const observed_provider = new observed_model_provider(base_provider, {
-    pool: dependencies.pool,
-    provider_name: dependencies.provider_injected ? config.ai_provider : ai.provider,
-    model: dependencies.provider_injected
+  const observed_provider_name = dependencies.provider_injected ? config.ai_provider : ai.provider;
+  const observed_model =
+    dependencies.provider_injected
       ? config.ai_provider === "mock"
         ? "mock-local"
         : config.bedrock_model_id
       : ai.provider === "mock"
         ? "mock-local"
-        : ai.model,
+        : ai.model;
+  const base_provider = dependencies.provider_injected
+    ? dependencies.provider
+    : create_model_provider({ provider: ai.provider, model: ai.model });
+  const observed_provider = new observed_model_provider(base_provider, {
+    pool: dependencies.pool,
+    provider_name: observed_provider_name,
+    model: observed_model,
     account_id,
     organization_id,
     message_id: stored_message.id,
@@ -688,7 +756,11 @@ async function process_inbound_message(channel, dependencies, event) {
   // Salir de ese modo ocurre cuando la sesión se cierra (queda `ready`).
   const active_collection = await get_active_collection_session(dependencies.pool, conversation.id);
   let intents;
+  let classification_mode = "ai_requested";
+  let classification_fallback_used = false;
+  let classification_error_message = null;
   if (active_collection) {
+    classification_mode = "active_collection";
     intents = [
       { intent: "collect_information", confidence: 1, reason: "entrevista de recolección activa", segment: normalized.normalized_text },
     ];
@@ -698,7 +770,10 @@ async function process_inbound_message(channel, dependencies, event) {
         text: normalized.normalized_text,
         use_ai_classification: true,
       }));
-    } catch {
+    } catch (error) {
+      classification_mode = "deterministic_fallback";
+      classification_fallback_used = true;
+      classification_error_message = error instanceof Error ? error.message : "Unknown AI classification error";
       ({ intents } = await observed_provider.classify_intents({
         text: normalized.normalized_text,
         use_ai_classification: false,
@@ -747,6 +822,19 @@ async function process_inbound_message(channel, dependencies, event) {
       parsed: operation,
     });
   }
+  await record_routing_decision(dependencies.pool, processing_context, {
+    provider: observed_provider_name,
+    model: observed_model,
+    provider_injected: Boolean(dependencies.provider_injected),
+    normalized_text: normalized.normalized_text,
+    classification_mode,
+    requested_ai: !active_collection,
+    fallback_used: classification_fallback_used,
+    error_message: classification_error_message,
+    detected_classifications: detected_intents,
+    effective_classifications,
+    operations,
+  });
   await record_context_event(dependencies.pool, processing_context, {
     event_type: "parsing_completed",
     event_stage: "parsing",

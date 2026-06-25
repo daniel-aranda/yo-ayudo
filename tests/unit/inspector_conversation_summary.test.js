@@ -119,6 +119,44 @@ describe("present_conversation_turns", () => {
     expect(turn.understanding.confidence_tone).toBe("low");
   });
 
+  it("surfaces the routing decision in the turn detail model", () => {
+    const [turn] = present_conversation_turns([
+      {
+        id: "in",
+        incoming: inbound("ya vendimos 2500 y compré 600 de fruta", {
+          intent: "sales_update",
+          confidence: 0.91,
+          interactions: [
+            { action_id: "registrar_venta", label: "Registrar venta", status: "executed" },
+            { action_id: "registrar_compra", label: "Registrar compra", status: "executed" },
+          ],
+          routing_decision: {
+            mode: "ai_requested",
+            provider: "openai",
+            model: "gpt-test",
+            fallback_used: false,
+            effective_intents: [{ intent: "sales_update", confidence: 0.91, reason: "ventas acumuladas" }],
+            operations: [
+              { intent: "sales_update", segment: "ya vendimos 2500" },
+              { intent: "purchase", segment: "compré 600 de fruta" },
+            ],
+          },
+        }),
+        responses: [outbound("ok")],
+      },
+    ]);
+
+    expect(turn.understanding.route).toMatchObject({
+      mode_label: "Clasificación con AI",
+      provider_label: "openai/gpt-test",
+      reason: "ventas acumuladas",
+    });
+    expect(turn.understanding.route.segments).toEqual([
+      { intent: "Actualización de ventas", segment: "ya vendimos 2500" },
+      { intent: "Compra registrada", segment: "compré 600 de fruta" },
+    ]);
+  });
+
   it("links a task-producing action to the derived task", () => {
     const [turn] = present_conversation_turns(
       [

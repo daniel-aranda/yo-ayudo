@@ -143,6 +143,7 @@ export async function build_message_trace(pool, { message_id }) {
     message,
     parsing_results,
     guardrail_events: processing_events.filter((event) => event.event_stage === "guardrail"),
+    routing_events: processing_events.filter((event) => event.event_type === "routing_decision"),
     router_runs,
     agent_runs,
     memory_documents,

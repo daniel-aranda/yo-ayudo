@@ -12,6 +12,13 @@ import { get_conversation_view } from "../src/inspector/inspector_repository.js"
 const C = { green: "\x1b[32m", red: "\x1b[31m", yellow: "\x1b[33m", cyan: "\x1b[36m", dim: "\x1b[2m", bold: "\x1b[1m", reset: "\x1b[0m" };
 const paint = (c, t) => `${C[c]}${t}${C.reset}`;
 
+function routing_mode_label(mode) {
+  if (mode === "active_collection") return "recolección activa";
+  if (mode === "deterministic_fallback") return "fallback determinístico";
+  if (mode === "ai_requested") return "AI solicitada";
+  return mode || "sin modo";
+}
+
 function extract_id(arg) {
   const text = String(arg ?? "");
   const after = text.match(/conversations\/([0-9a-fA-F-]{36})/);
@@ -76,6 +83,19 @@ async function main() {
         if (trace?.has_error) signals.push(paint("red", "error"));
         if (!actions.length) signals.push(paint("dim", "sin acción"));
         console.log(`    intent: ${paint("bold", intent)}${conf}   acciones: ${actions.length ? actions.join(", ") : paint("dim", "ninguna")}   ${signals.join(" ")}`);
+        if (trace?.routing_decision) {
+          const route = trace.routing_decision;
+          const effective = (route.effective_intents ?? []).map((item) => {
+            const pct = item.confidence != null ? ` ${Math.round(Number(item.confidence) * 100)}%` : "";
+            const reason = item.reason ? paint("dim", ` · ${item.reason}`) : "";
+            return `${item.intent}${pct}${reason}`;
+          });
+          const fallback = route.fallback_used ? paint("yellow", " · fallback") : "";
+          console.log(
+            `    ruta: ${routing_mode_label(route.mode)} · ${route.provider || "—"}/${route.model || "—"}${fallback}${effective.length ? ` → ${effective.join(" | ")}` : ""}`,
+          );
+          if (route.error_message) console.log(`    ${paint("red", "clasificación falló:")} ${route.error_message}`);
+        }
         if (trace?.needs_review) flags.push(`turno ${turn_no}: el bot NO supo qué hacer (needs_review)`);
         if (trace?.has_error) flags.push(`turno ${turn_no}: hubo un error en el procesamiento`);
       }
