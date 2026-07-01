@@ -1,0 +1,94 @@
+extends ../layout
+
+block content
+  if !account
+    .empty Cuenta no encontrada.
+  else
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.business_name, href: `/dashboard/business/${account.organization_id}` }, { label: account.name, href: `/dashboard/accounts/${account.id}` }, { label: "Canales" }])
+    section.page-header
+      p.page-eyebrow= `Cuenta · ${account.name}`
+      h1 Canales
+      p Por dónde te escriben tus clientes en esta cuenta
+
+    section.panel#panel-canales
+      .section-title
+        h2 Canales conectados
+        button#open_add_channel(type="button") Agregar canal
+      if channels && channels.length
+        table
+          thead
+            tr
+              th Canal
+              th Identificador
+              th Estado
+          tbody
+            each channel in channels
+              tr
+                td WhatsApp
+                td= channel.display_phone_number ? phone(channel.display_phone_number) : channel.phone_number_id
+                td
+                  span.status= channel.status
+      else
+        .empty Sin canales conectados. Conecta uno con "Agregar canal".
+
+    //- Alta de canal: tabs WhatsApp | Instagram.
+    #add_channel_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-add-channel-popup)
+      .popup.popup--md.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title Agregar canal
+            .popup__subtitle Conecta el canal por donde te escriben tus clientes.
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+        .popup__body
+          .add-channel-tab-shell.wamy-tabs
+            #add-channel-tabs.tabs(data-initial-tab="whatsapp", role="tablist", aria-label="Tipo de canal")
+              button.tab.active(type="button", data-section="whatsapp", role="tab", aria-selected="true")
+                span.channel-dot.channel-dot--whatsapp(aria-hidden="true")
+                | WhatsApp
+              button.tab(type="button", data-section="instagram", role="tab", aria-selected="false")
+                span.channel-dot.channel-dot--instagram(aria-hidden="true")
+                | Instagram
+          .tab-section(data-parent-tab="add-channel-tabs", data-section="whatsapp")
+            form.popup-form.channel-add-form(method="post", action=`/dashboard/accounts/${account.id}/channels`)
+              input(type="hidden", name="channel_type", value="whatsapp")
+              .popup-field
+                label(for="channel_display_phone_number") Número de WhatsApp
+                input#channel_display_phone_number(type="tel", name="display_phone_number", placeholder="+52 55 1234 5678", required)
+                p.field-hint El número con lada que ven tus clientes.
+              .popup-field
+                label(for="channel_phone_number_id") ID del número en Meta
+                input#channel_phone_number_id(type="text", name="phone_number_id", placeholder="Phone number ID de la API de WhatsApp", required)
+                p.field-hint Lo encuentras en Meta Business → WhatsApp → Configuración de la API.
+              if bots && bots.length
+                .popup-field.popup-field--divided
+                  label(for="channel_bot_id") Conectar a un bot (opcional)
+                  select#channel_bot_id(name="bot_id")
+                    option(value="") Conectar después
+                    each bot in bots
+                      option(value=bot.id)= bot.name
+                  p.field-hint Puedes conectarlo ahora o después.
+              div.form-actions.form-actions--full
+                button(type="submit") Conectar WhatsApp
+          .tab-section(data-parent-tab="add-channel-tabs", data-section="instagram", hidden)
+            .channel-coming-soon
+              p
+                strong Instagram llega pronto.
+                |  Se conectará con tu cuenta de Instagram vía OAuth — sin capturar IDs a mano.
+
+  script
+    include ../../public/js/core/Popup.js
+
+  script
+    include ../../public/js/core/Tab_Navigator.js
+
+  script.
+    (() => {
+      const addChannelPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-add-channel-popup]" }) : null;
+      addChannelPopup?.iniciar();
+      window.TabNavigator?.render("#add-channel-tabs");
+      document.getElementById("open_add_channel")?.addEventListener("click", () => {
+        // Reabrir arranca en WhatsApp, no en el último tab elegido.
+        document.querySelector('#add-channel-tabs .tab[data-section="whatsapp"]')?.click();
+        addChannelPopup?.open();
+      });
+    })();

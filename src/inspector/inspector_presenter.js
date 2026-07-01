@@ -16,6 +16,9 @@ const CONVERSATION_INTENT_LABELS = {
   report_request: "Reporte solicitado",
   inventory: "Inventario",
   human_help: "Pide ayuda humana",
+  collect_information_start: "Inicia recolección",
+  collect_information: "Seguimiento de recolección",
+  generate_document_request: "Generar documento",
 };
 
 const CONVERSATION_STATUS = {
@@ -107,6 +110,110 @@ export function interactions_from_action_logs(action_logs) {
   });
 }
 
+const COLLECTION_ACTION_ID = "recolectar_informacion";
+const COLLECTION_INTENTS = new Set(["collect_information_start", "collect_information"]);
+
+function is_collection_intent(intent) {
+  return COLLECTION_INTENTS.has(intent);
+}
+
+function collection_interaction_label(intent, status, metadata = {}) {
+  if (status === "ready" || metadata.is_complete) {
+    return "Recolección lista";
+  }
+
+  if (intent === "collect_information_start") {
+    return "Inicia recolección";
+  }
+
+  return "Seguimiento de recolección";
+}
+
+function collection_interaction_status(status) {
+  return status || "collecting";
+}
+
+function collection_interaction({ intent, status, metadata = {} }) {
+  const normalized_status = collection_interaction_status(status);
+  return {
+    action_id: COLLECTION_ACTION_ID,
+    label: collection_interaction_label(intent, normalized_status, metadata),
+    status: normalized_status,
+    output_json: {},
+    metadata_json: {
+      stateful: true,
+      virtual: true,
+      kind: intent === "collect_information_start" ? "collection_start" : "collection_followup",
+      ...metadata,
+    },
+  };
+}
+
+function collection_interaction_from_operation_events(events, primary_intent) {
+  const event = (Array.isArray(events) ? events : []).find((item) => {
+    if (item.event_stage !== "operation_write") {
+      return false;
+    }
+    const details = item.details_json && typeof item.details_json === "object" ? item.details_json : {};
+    return details.action_id === COLLECTION_ACTION_ID && details.handled !== false;
+  });
+
+  if (!event) {
+    return null;
+  }
+
+  const details = event.details_json && typeof event.details_json === "object" ? event.details_json : {};
+  const metadata = details.metadata && typeof details.metadata === "object" ? details.metadata : {};
+  return collection_interaction({
+    intent: details.intent ?? primary_intent,
+    status: details.action_status ?? null,
+    metadata,
+  });
+}
+
+function collection_interaction_from_trace(input, primary_intent) {
+  if (!is_collection_intent(primary_intent)) {
+    return null;
+  }
+
+  const from_event = collection_interaction_from_operation_events(input.processing_events, primary_intent);
+  if (from_event) {
+    return from_event;
+  }
+
+  const has_operation_events = (Array.isArray(input.processing_events) ? input.processing_events : []).some(
+    (event) => event.event_stage === "operation_write",
+  );
+  if (has_operation_events) {
+    return null;
+  }
+
+  return collection_interaction({ intent: primary_intent, status: "collecting" });
+}
+
+export function present_collection_session_interaction(session) {
+  if (!session) {
+    return null;
+  }
+
+  const status = session.status === "ready" ? "ready" : session.status === "collecting" ? "collecting" : "executed";
+  return {
+    action_id: COLLECTION_ACTION_ID,
+    label: status === "ready" ? "Recolección lista" : "Recolección",
+    status,
+  };
+}
+
+export function merge_collection_session_interaction(interactions, session) {
+  const list = Array.isArray(interactions) ? [...interactions] : [];
+  if (!session || list.some((interaction) => interaction?.action_id === COLLECTION_ACTION_ID)) {
+    return list;
+  }
+
+  const collection = present_collection_session_interaction(session);
+  return collection ? [collection, ...list] : list;
+}
+
 function routing_decision_from_events(events) {
   const event = (Array.isArray(events) ? events : []).find((item) => item.event_type === "routing_decision");
   if (!event) {
@@ -140,11 +247,16 @@ export function compact_trace_summary(input) {
   const failed_agent = input.agent_runs?.find((run) => run.status === "failed") ?? null;
   const failed_memory = input.memory_documents?.find((document) => document.status === "failed") ?? null;
   const error_event = input.processing_events?.find((event) => event.status === "error") ?? null;
-  const interactions = interactions_from_action_logs(input.action_logs);
+  const primary_intent = parsing_result?.intent ?? input.message?.parsed_intent ?? null;
+  const action_log_interactions = interactions_from_action_logs(input.action_logs);
+  const stateful_collection = action_log_interactions.some((interaction) => interaction.action_id === COLLECTION_ACTION_ID)
+    ? null
+    : collection_interaction_from_trace(input, primary_intent);
+  const interactions = stateful_collection ? [stateful_collection, ...action_log_interactions] : action_log_interactions;
   const routing_decision = routing_decision_from_events(input.processing_events);
 
   return {
-    intent: parsing_result?.intent ?? input.message?.parsed_intent ?? null,
+    intent: primary_intent,
     confidence: parsing_result?.confidence ?? input.message?.confidence ?? null,
     needs_review: Boolean(parsing_result?.needs_review ?? input.message?.needs_review),
     selected_agent: router_run?.agent_key ?? null,
@@ -167,7 +279,7 @@ const CONFIDENCE_LOW_THRESHOLD = 72;
 
 function action_tone(status) {
   const value = String(status || "");
-  if (value === "executed") return "ok";
+  if (["executed", "collecting", "ready"].includes(value)) return "ok";
   if (value.startsWith("pending")) return "pending";
   return "blocked";
 }

@@ -1,11 +1,15 @@
 import { pool as default_pool } from "../db/client.js";
 import { dashboard_auth } from "./auth_middleware.js";
 import {
+  get_account_bots,
+  get_account_channels,
   get_account_dashboard_data,
+  get_active_system_bots,
   get_business_dashboard_data,
   get_dashboard_home,
 } from "./dashboard_queries.js";
 import { resolve_dashboard_range } from "./date_range.js";
+import { list_pending_review_items, resolve_review_item } from "../review/review_service.js";
 import { custom_bot_service, minimal_draft_definition } from "../bots/custom_bot_service.js";
 import {
   add_task_update,
@@ -74,6 +78,26 @@ export function register_dashboard_routes(router, dependencies = {}) {
     };
   }
 
+  // Contexto mínimo para las páginas de cuenta (Bots/Canales/Sin resolver):
+  // mapea resolve_account al shape `account` que esperan las vistas (id, name,
+  // business_name, organization_id) para breadcrumb + header.
+  async function account_view_context(request) {
+    const account_id = require_param(request.params.account_id, "account_id");
+    const account = await resolve_account(account_id);
+    if (!account) {
+      return null;
+    }
+    return {
+      account_id,
+      account: {
+        id: account.id,
+        name: account.account_name,
+        business_name: account.business_name,
+        organization_id: account.business_id,
+      },
+    };
+  }
+
   router.get("/dashboard", dashboard_auth, async (_request, response, next) => {
     try {
       response.render("dashboard", await get_dashboard_home(pool));
@@ -123,6 +147,90 @@ export function register_dashboard_routes(router, dependencies = {}) {
       const account_id = require_param(request.params.account_id, "account_id");
       const rest = request.params[0] ? `/${request.params[0]}` : "";
       response.redirect(301, `/dashboard/accounts/${account_id}${rest}`);
+    },
+  );
+
+  // Páginas dedicadas de la cuenta (antes pestañas del dashboard). Bots y
+  // Canales viven en el header; el dashboard solo deja Conversaciones/Actividad.
+  router.get(
+    "/dashboard/accounts/:account_id/bots",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_view_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe.");
+          return;
+        }
+        const [bots, system_bots] = await Promise.all([
+          get_account_bots(pool, context.account_id),
+          get_active_system_bots(pool),
+        ]);
+        response.render("dashboard/bots", { account: context.account, bots, system_bots });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    "/dashboard/accounts/:account_id/channels",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_view_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe.");
+          return;
+        }
+        const [channels, bots] = await Promise.all([
+          get_account_channels(pool, context.account_id),
+          get_account_bots(pool, context.account_id),
+        ]);
+        response.render("dashboard/channels", { account: context.account, channels, bots });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  // Review a nivel cuenta (owner-facing): los mensajes que el bot no supo
+  // resolver, en lenguaje llano. El dueño responde y (opt-in) el bot lo aprende.
+  // Misma data y misma lógica de resolve que /review (review_service compartido).
+  router.get(
+    "/dashboard/accounts/:account_id/review",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const context = await account_view_context(request);
+        if (!context) {
+          response.status(404).send("La cuenta no existe.");
+          return;
+        }
+        const review_items = await list_pending_review_items({ pool, account_id: context.account_id });
+        response.render("dashboard/review", { account: context.account, review_items });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/dashboard/accounts/:account_id/review/:review_item_id/resolve",
+    dashboard_auth,
+    async (request, response, next) => {
+      try {
+        const account_id = require_param(request.params.account_id, "account_id");
+        await resolve_review_item({
+          pool,
+          review_item_id: request.params.review_item_id,
+          note: request.body?.note,
+          should_learn: request.body?.learn !== undefined,
+        });
+        response.redirect(`/dashboard/accounts/${account_id}/review`);
+      } catch (error) {
+        next(error);
+      }
     },
   );
 
@@ -467,7 +575,7 @@ export function register_dashboard_routes(router, dependencies = {}) {
           });
         }
 
-        response.redirect(`/dashboard/accounts/${account_id}#panel-canales`);
+        response.redirect(`/dashboard/accounts/${account_id}/channels`);
       } catch (error) {
         next(error);
       }

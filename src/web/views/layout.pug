@@ -35,11 +35,12 @@ mixin conversation_list(conversations, opts)
       guardar_nota: "Nota",
       generar_resumen: "Resumen",
       buscar_negocios: "Prospección",
+      recolectar_informacion: "Recolección",
     };
     // Prioridad de chip (menor = primero). El seguimiento humano manda.
     const prioridad_chip = {
       crear_tarea: 1, consult_human: 1, registrar_venta: 3, registrar_inicio_dia: 4,
-      registrar_compra: 5, crear_contacto: 6, generar_resumen: 7,
+      recolectar_informacion: 2, registrar_compra: 5, crear_contacto: 6, generar_resumen: 7,
     };
     const tono_estado = { ok: "es-abierta", idle: "es-cerrada", warn: "es-atencion", error: "es-error" };
     const chevron_svg = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
@@ -72,7 +73,7 @@ mixin conversation_list(conversations, opts)
     const tipo_avatar = (c, chips) => {
       const ids = (Array.isArray(c.interactions) ? c.interactions : []).map((i) => i.action_id);
       if (chips.seguimiento) return "es-seguimiento";
-      if (ids.includes("crear_contacto")) return "es-prospecto";
+      if (ids.includes("crear_contacto") || ids.includes("recolectar_informacion")) return "es-prospecto";
       return "es-neutral";
     };
     const cl_text = (c) => [c.summary && c.summary.title, c.summary && c.summary.subtitle, c.summary && c.summary.preview, cl.show_bot ? c.bot_name : "", ...((c.interactions || []).map((i) => etiqueta_chip[i.action_id] || i.label))].filter(Boolean).join(" ").toLowerCase();
@@ -131,13 +132,11 @@ html(lang="es")
     -
       const nav_active = typeof active_nav !== "undefined" ? active_nav : "";
       const nav_ctx = (typeof nav_context !== "undefined" && nav_context) ? nav_context : null;
-      // When an account is in context, Dashboard/Inspector/Review stay scoped to it.
-      // Admin stays global on purpose.
-      // La cuenta es el único scope: Dashboard e Inspector la llevan en el path,
-      // Review en ?account= (el negocio se deriva de la cuenta, no viaja en URL).
+      // Con una cuenta en contexto, el nav del dueño (Dashboard/Bots/Canales) se
+      // queda scopeado a ella (el negocio se deriva de la cuenta, no viaja en URL).
+      // Review (?account=) y Admin son del operador: globales, fuera del nav del dueño.
       const ctx_qs = nav_ctx ? `?account=${nav_ctx.account_id}` : "";
       const dashboard_href = nav_ctx ? `/dashboard/accounts/${nav_ctx.account_id}` : "/dashboard";
-      const inspector_href = nav_ctx ? `/inspector/accounts/${nav_ctx.account_id}` : "/inspector";
       // Con auth activo: un usuario de negocio solo ve su dashboard; las
       // herramientas internas (Inspector/Review/Admin) son del owner.
       const session_user = (typeof current_user !== "undefined" && current_user) ? current_user : null;
@@ -147,8 +146,10 @@ html(lang="es")
       a.brand(href=member_home || "/dashboard") YoAyudo
       nav.nav
         a(href=member_home || dashboard_href, class=(nav_active === "dashboard" ? "is-active" : ""), aria-current=(nav_active === "dashboard" ? "page" : false)) Dashboard
+        if nav_ctx
+          a(href=`/dashboard/accounts/${nav_ctx.account_id}/bots`, class=(nav_active === "bots" ? "is-active" : ""), aria-current=(nav_active === "bots" ? "page" : false)) Bots
+          a(href=`/dashboard/accounts/${nav_ctx.account_id}/channels`, class=(nav_active === "canales" ? "is-active" : ""), aria-current=(nav_active === "canales" ? "page" : false)) Canales
         unless is_business_user
-          a(href=inspector_href, class=(nav_active === "inspector" ? "is-active" : ""), aria-current=(nav_active === "inspector" ? "page" : false)) Inspector
           a(href=`/review${ctx_qs}`, class=(nav_active === "review" ? "is-active" : ""), aria-current=(nav_active === "review" ? "page" : false)) Review
           a(href="/admin/integrations", class=(nav_active === "admin" ? "is-active" : ""), aria-current=(nav_active === "admin" ? "page" : false)) Admin
         if session_user

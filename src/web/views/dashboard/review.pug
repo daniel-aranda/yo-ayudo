@@ -1,0 +1,48 @@
+extends ../layout
+
+block content
+  -
+    const when = (value) => {
+      try { return value ? new Date(value).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : ""; } catch (error) { return ""; }
+    };
+    // El motivo del bot viene en lenguaje de máquina; lo traducimos a español
+    // de negocio para el fallback (cuando no hay texto del cliente que mostrar).
+    const motivo_legible = {
+      "Unknown intent": "No entendió el mensaje",
+      unknown_intent: "No entendió el mensaje",
+      "Low confidence": "Respuesta con baja confianza",
+      low_confidence: "Respuesta con baja confianza",
+      missing_fields: "Faltaron datos para responder",
+    };
+    const motivo = (reason) => motivo_legible[reason] || reason || "Mensaje sin resolver";
+  if !account
+    .empty Cuenta no encontrada.
+  else
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.business_name, href: `/dashboard/business/${account.organization_id}` }, { label: account.name, href: `/dashboard/accounts/${account.id}` }, { label: "Sin resolver" }])
+    section.page-header
+      p.page-eyebrow= `Cuenta · ${account.name}`
+      h1 Mensajes sin resolver
+      p Lo que tus clientes preguntaron y el bot no supo contestar. Respóndelos y, si quieres, el bot lo aprende para la próxima.
+
+    if !review_items || review_items.length === 0
+      .empty Todo al día — el bot está contestando todo. Cuando algo lo rebase, aparecerá aquí para que lo resuelvas.
+    else
+      .grid
+        each item in review_items
+          article.card
+            p.meta
+              if item.bot_name
+                = item.bot_name
+              if when(item.created_at)
+                |  · #{when(item.created_at)}
+            //- Lo que importa al dueño es el mensaje del cliente, no el motivo
+            //- técnico (item.reason, p. ej. "Unknown intent"). Encabezamos con el
+            //- mensaje; si no hay texto crudo, caemos al motivo (en español).
+            h2= item.raw_text || motivo(item.reason)
+            form(method="post", action=`/dashboard/accounts/${account.id}/review/${item.id}/resolve`)
+              label(for=`note-${item.id}`) Tu respuesta
+              textarea(id=`note-${item.id}`, name="note", rows="3", placeholder="Escribe la respuesta correcta para tu cliente…")
+              label.learn-toggle
+                input(type="checkbox", name="learn", checked)
+                span Guardar para que el bot lo aprenda
+              button(type="submit") Resolver

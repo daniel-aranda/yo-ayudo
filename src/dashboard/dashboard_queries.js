@@ -1,5 +1,8 @@
 import { get_action } from "../actions/action_registry.js";
-import { present_conversation_summary } from "../inspector/inspector_presenter.js";
+import {
+  merge_collection_session_interaction,
+  present_conversation_summary,
+} from "../inspector/inspector_presenter.js";
 import { resolve_dashboard_range } from "./date_range.js";
 
 export async function get_dashboard_home(pool) {
@@ -234,6 +237,55 @@ async function sum_operational_range(pool, account_id, range) {
   return { sales_total, purchases_total };
 }
 
+// Loaders enfocados de cuenta — reusados por el dashboard de cuenta y por las
+// páginas dedicadas de Bots/Canales (mismo SQL, una sola fuente de verdad).
+
+// Bots no archivados de la cuenta (incluye drafts: un bot recién creado debe
+// verse). Ordenados por tipo y nombre.
+export async function get_account_bots(pool, account_id) {
+  const result = await pool.query(
+    `
+      SELECT bots.*
+      FROM bots
+      WHERE bots.account_id = $1
+        AND bots.status != 'archived'
+      ORDER BY bots.bot_type, bots.name
+    `,
+    [account_id],
+  );
+  return result.rows;
+}
+
+// Canales (WhatsApp) activos de la cuenta.
+export async function get_account_channels(pool, account_id) {
+  const result = await pool.query(
+    `
+      SELECT *
+      FROM whatsapp_phone_numbers
+      WHERE account_id = $1
+        AND status = 'active'
+      ORDER BY display_phone_number NULLS LAST, phone_number_id
+    `,
+    [account_id],
+  );
+  return result.rows;
+}
+
+// Bots de sistema (mantenidos por la plataforma) disponibles como base para
+// crear un bot de la cuenta clonando su definición.
+export async function get_active_system_bots(pool) {
+  const result = await pool.query(
+    `
+      SELECT id, name, description
+      FROM bots
+      WHERE bot_type = 'system'
+        AND status = 'active'
+      ORDER BY name
+    `,
+  );
+  return result.rows;
+}
+
 export async function get_account_dashboard_data(pool, input) {
   // Rango de fechas: las métricas de actividad/ventas/compras lo respetan; bots y
   // canales (config, estado actual) NO. El día operativo (caja/desglose/cierre)
@@ -257,16 +309,7 @@ export async function get_account_dashboard_data(pool, input) {
   const organization_id = account.rows[0]?.organization_id ?? null;
   // Incluye drafts (un bot recién creado desde este dashboard debe verse);
   // solo lo archivado queda fuera.
-  const bots = await pool.query(
-    `
-      SELECT bots.*
-      FROM bots
-      WHERE bots.account_id = $1
-        AND bots.status != 'archived'
-      ORDER BY bots.bot_type, bots.name
-    `,
-    [input.account_id],
-  );
+  const bots = await get_account_bots(pool, input.account_id);
   // Cuentas hermanas (mismo negocio) para el switcher del header: cambiar de
   // cuenta sin volver al dashboard del negocio.
   const sibling_accounts = await pool.query(
@@ -280,25 +323,8 @@ export async function get_account_dashboard_data(pool, input) {
   );
   // Bots de sistema (mantenidos por la plataforma) disponibles como base para
   // crear un bot de esta cuenta clonando su definición.
-  const system_bots = await pool.query(
-    `
-      SELECT id, name, description
-      FROM bots
-      WHERE bot_type = 'system'
-        AND status = 'active'
-      ORDER BY name
-    `,
-  );
-  const channels = await pool.query(
-    `
-      SELECT *
-      FROM whatsapp_phone_numbers
-      WHERE account_id = $1
-        AND status = 'active'
-      ORDER BY display_phone_number NULLS LAST, phone_number_id
-    `,
-    [input.account_id],
-  );
+  const system_bots = await get_active_system_bots(pool);
+  const channels = await get_account_channels(pool, input.account_id);
   const conversations = await pool.query(
     `
       SELECT
@@ -357,6 +383,22 @@ export async function get_account_dashboard_data(pool, input) {
     `,
     [input.account_id, range.from_iso, range.to_excl_iso],
   );
+
+  // "Sin resolver" (review_items activos de la cuenta) — NO-range (estado
+  // actual), mismo predicado que pending_review_count. Query aparte (no subquery
+  // escalar) porque pg-mem devuelve el count como array dentro de un scalar
+  // subquery con IN; aparte es robusto en pg-mem y en Postgres real.
+  const unresolved = await pool.query(
+    `
+      SELECT count(*)::int AS unresolved_count
+      FROM review_items
+      JOIN bots ON bots.id = review_items.bot_id
+      WHERE bots.account_id = $1
+        AND review_items.status IN ('pending', 'open')
+    `,
+    [input.account_id],
+  );
+  stats.rows[0].unresolved_count = unresolved.rows[0]?.unresolved_count ?? 0;
 
   // Ventas/compras acumuladas del rango. El filtro por operation_date (columna
   // date) se hace en JS, no en SQL: pg-mem normaliza la fecha a su parte UTC y
@@ -431,7 +473,7 @@ export async function get_account_dashboard_data(pool, input) {
   // panel del dashboard y el del bot se vean idénticos (mismo componente).
   const conversation_rows = [];
   for (const conversation of conversations.rows) {
-    const [last_message, executed_actions] = await Promise.all([
+    const [last_message, executed_actions, collection_session] = await Promise.all([
       pool.query(
         "SELECT text_body, parsed_intent FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1",
         [conversation.id],
@@ -446,15 +488,28 @@ export async function get_account_dashboard_data(pool, input) {
         `,
         [conversation.id],
       ),
+      pool.query(
+        `
+          SELECT status, updated_at
+          FROM information_collection_sessions
+          WHERE conversation_id = $1
+          ORDER BY updated_at DESC, created_at DESC
+          LIMIT 1
+        `,
+        [conversation.id],
+      ),
     ]);
     const enriched = {
       ...conversation,
       last_message: last_message.rows[0]?.text_body ?? null,
       last_intent: last_message.rows[0]?.parsed_intent ?? null,
-      interactions: executed_actions.rows.map((row) => ({
-        action_id: row.action_id,
-        label: get_action(row.action_id)?.nombre ?? row.action_id,
-      })),
+      interactions: merge_collection_session_interaction(
+        executed_actions.rows.map((row) => ({
+          action_id: row.action_id,
+          label: get_action(row.action_id)?.nombre ?? row.action_id,
+        })),
+        collection_session.rows[0] ?? null,
+      ),
     };
     enriched.summary = present_conversation_summary(enriched);
     conversation_rows.push(enriched);
@@ -465,7 +520,7 @@ export async function get_account_dashboard_data(pool, input) {
   // draft (p. ej. recién clonado de un bot de sistema) no prende paneles. A
   // commercial account shows no ventas/compras/caja; an operational bot does.
   const enabled_actions = new Set(
-    bots.rows
+    bots
       .filter((bot) => bot.status === "active")
       .flatMap((bot) => (Array.isArray(bot.acciones_habilitadas_json) ? bot.acciones_habilitadas_json : [])),
   );
@@ -482,9 +537,9 @@ export async function get_account_dashboard_data(pool, input) {
     account: account.rows[0] ?? null,
     sibling_accounts: sibling_accounts.rows,
     open_tasks_count: open_tasks.rows[0]?.count ?? 0,
-    bots: bots.rows,
-    system_bots: system_bots.rows,
-    channels: channels.rows,
+    bots,
+    system_bots,
+    channels,
     conversations: conversation_rows,
     activity,
     stats: stats.rows[0] ?? {},

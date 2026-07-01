@@ -11,13 +11,16 @@ block content
       daily_note: "Nota del día",
       report_request: "Reporte del día",
       human_help: "Pide ayuda humana",
+      collect_information_start: "Inicia recolección",
+      collect_information: "Seguimiento de recolección",
+      generate_document_request: "Generar documento",
       unknown: "No identificado",
     };
     const intent_human = (intent) => intent_labels[intent] || null;
     const confidence_pct = (value) => (value == null || value === "" ? null : Math.round(Number(value) * 100));
     const interaction_status_class = (status) => {
       const value = String(status || "");
-      if (value === "executed") return "ok";
+      if (["executed", "collecting", "ready"].includes(value)) return "ok";
       if (value.startsWith("pending")) return "pending";
       return "blocked";
     };
@@ -117,7 +120,15 @@ block content
               summary Output
               pre= json(log.output_json)
       else
-        p.trace-empty Este mensaje no disparó interacciones (recibir/enviar no se registran como acciones).
+        if summary.interactions && summary.interactions.length
+          div.interaction-fired
+            span.interaction-fired-count= `${summary.interactions.length} interacción stateful`
+            div.interaction-chips
+              each ix in summary.interactions
+                span.interaction-chip(class=`is-${interaction_status_class(ix.status)}`, title=ix.status)= ix.label
+          p.trace-empty Esta interacción vive como sesión de conversación; por eso no generó action_audit_logs.
+        else
+          p.trace-empty Este mensaje no disparó interacciones (recibir/enviar no se registran como acciones).
 
   section.tab-section.trace-pane(data-parent-tab="trace-tabs", data-section="contexto", hidden)
     article.trace-section

@@ -21,7 +21,7 @@ import {
 } from "../channels/facebook/facebook_page_repository.js";
 import { list_knowledge_sources } from "../knowledge/knowledge_center_repository.js";
 import { list_crm_clients_for_conversation } from "../crm/crm_repository.js";
-import { present_conversation_summary } from "./inspector_presenter.js";
+import { merge_collection_session_interaction, present_conversation_summary } from "./inspector_presenter.js";
 import { format_short_date_es } from "../shared/dates.js";
 
 function as_array(value) {
@@ -1017,7 +1017,7 @@ export async function get_bot_conversations(pool, input) {
   const conversations = [];
 
   for (const conversation of result.rows) {
-    const [message_counts, last_message, last_agent, pending_review, executed_actions] = await Promise.all([
+    const [message_counts, last_message, last_agent, pending_review, executed_actions, collection_session] = await Promise.all([
       pool.query(
         "SELECT count(*)::int AS messages_count, max(created_at) AS last_activity FROM messages WHERE conversation_id = $1",
         [conversation.id],
@@ -1065,6 +1065,16 @@ export async function get_bot_conversations(pool, input) {
         `,
         [conversation.id],
       ),
+      pool.query(
+        `
+          SELECT status, updated_at
+          FROM information_collection_sessions
+          WHERE conversation_id = $1
+          ORDER BY updated_at DESC, created_at DESC
+          LIMIT 1
+        `,
+        [conversation.id],
+      ),
     ]);
 
     const last_activity = message_counts.rows[0]?.last_activity ?? conversation.last_message_at;
@@ -1077,10 +1087,13 @@ export async function get_bot_conversations(pool, input) {
       last_intent: last_message.rows[0]?.parsed_intent ?? null,
       last_agent: last_agent.rows[0]?.agent_key ?? null,
       last_message: last_message.rows[0]?.text_body ?? null,
-      interactions: executed_actions.rows.map((row) => ({
-        action_id: row.action_id,
-        label: get_action(row.action_id)?.nombre ?? row.action_id,
-      })),
+      interactions: merge_collection_session_interaction(
+        executed_actions.rows.map((row) => ({
+          action_id: row.action_id,
+          label: get_action(row.action_id)?.nombre ?? row.action_id,
+        })),
+        collection_session.rows[0] ?? null,
+      ),
     };
     enriched.summary = present_conversation_summary(enriched);
     conversations.push(enriched);

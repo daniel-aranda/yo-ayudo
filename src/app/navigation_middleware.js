@@ -8,15 +8,21 @@
 export function navigation_context(request, response, next) {
   const request_path = request.path || "";
 
-  response.locals.active_nav = request_path.startsWith("/dashboard")
-    ? "dashboard"
-    : request_path.startsWith("/inspector")
-      ? "inspector"
-      : request_path.startsWith("/review")
-        ? "review"
-        : request_path.startsWith("/admin")
-          ? "admin"
-          : "";
+  // Las páginas de cuenta Bots/Canales viven bajo /dashboard pero resaltan su
+  // propio item del nav (no "Dashboard"). El resto de /dashboard/* (incluida la
+  // review a nivel cuenta) resalta "dashboard".
+  const account_subpage = request_path.match(/^\/dashboard\/accounts\/[^/]+\/(bots|channels)\b/);
+  response.locals.active_nav = account_subpage
+    ? account_subpage[1] === "channels" ? "canales" : "bots"
+    : request_path.startsWith("/dashboard")
+      ? "dashboard"
+      : request_path.startsWith("/inspector")
+        ? "inspector"
+        : request_path.startsWith("/review")
+          ? "review"
+          : request_path.startsWith("/admin")
+            ? "admin"
+            : "";
 
   const account_path = request_path.match(/^\/(?:dashboard|inspector)\/accounts\/([^/]+)/);
   if (account_path) {

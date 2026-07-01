@@ -1,0 +1,121 @@
+extends ../layout
+
+block content
+  if !account
+    .empty Cuenta no encontrada.
+  else
+    +breadcrumb([{ label: "Dashboard", href: "/dashboard" }, { label: account.business_name, href: `/dashboard/business/${account.organization_id}` }, { label: account.name, href: `/dashboard/accounts/${account.id}` }, { label: "Bots" }])
+    section.page-header
+      p.page-eyebrow= `Cuenta · ${account.name}`
+      h1 Bots
+      p Los bots que atienden a tus clientes en esta cuenta
+
+    section.panel#panel-bots
+      .section-title
+        h2 Bots asignados
+        button#open_add_bot(type="button") Agregar bot
+      if bots && bots.length
+        table
+          thead
+            tr
+              th Bot
+              th Tipo
+              th Estado
+          tbody
+            each bot in bots
+              tr
+                td
+                  a(href=`/inspector/bots/${bot.id}`)= bot.name
+                  if bot.description
+                    div.meta= bot.description
+                td= bot.bot_type || bot.channel
+                td
+                  span.status= bot.status
+      else
+        .empty Sin bots asignados. Crea uno con "Agregar bot".
+
+    //- Alta de bot de la cuenta: tabs Bot Nuevo | Bot preconfigurado.
+    //- Los de sistema se eligen en tarjetas (nombre + descripción), no dropdown.
+    #add_bot_popup.popup-overlay(data-popup-overlay, data-popup-overlay-close="true", data-add-bot-popup)
+      .popup.popup--lg.popup--tall.popup--default
+        .popup__header
+          .popup__header-text
+            h3.popup__title Agregar bot
+            .popup__subtitle El bot se crea en borrador; configúralo y actívalo cuando esté listo.
+          button.popup__close(type="button", data-popup-close, aria-label="Cerrar") ✕
+        .popup__body
+          .add-bot-tab-shell.wamy-tabs
+            #add-bot-tabs.tabs(data-initial-tab="custom", role="tablist", aria-label="Tipo de bot")
+              button.tab.active(type="button", data-section="custom", role="tab", aria-selected="true") Bot Nuevo
+              if system_bots && system_bots.length
+                button.tab(type="button", data-section="system", role="tab", aria-selected="false") Bot preconfigurado
+          .tab-section(data-parent-tab="add-bot-tabs", data-section="custom")
+            form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
+              label(for="new_bot_name") Nombre del bot
+              input#new_bot_name(type="text", name="name", placeholder="Ej. Agente de ventas", required)
+              p.meta Empieza en blanco y configúralo a tu medida.
+              div.form-actions
+                button(type="submit") Crear bot
+          if system_bots && system_bots.length
+            .tab-section(data-parent-tab="add-bot-tabs", data-section="system", hidden)
+              form.popup-form(method="post", action=`/dashboard/accounts/${account.id}/bots`)
+                .system-bot-toolbar
+                  input#system_bot_search(type="search", placeholder="Buscar bot preconfigurado...", aria-label="Buscar bot preconfigurado", autocomplete="off")
+                  button.help-tip(
+                    type="button",
+                    aria-label="¿Qué es un bot preconfigurado?",
+                    data-tip="Bots listos de YoAyudo. Al usarlo como base se copia su configuración como un bot propio de esta cuenta, sin knowledge ni grupos de la cuenta origen."
+                  ) ?
+                .system-bot-list
+                  each system_bot, index in system_bots
+                    label.system-bot-pick
+                      input.system-bot-pick-input(type="radio", name="source_bot_id", value=system_bot.id, required, checked=index === 0)
+                      span.system-bot-pick-text
+                        span.system-bot-pick-name= system_bot.name
+                        if system_bot.description
+                          span.system-bot-pick-desc= system_bot.description
+                p.meta#system_bot_search_empty(hidden) Sin bots que coincidan con la búsqueda.
+                div.form-actions
+                  button#use_system_bot(type="submit") Usar como base
+
+  script
+    include ../../public/js/core/Popup.js
+
+  script
+    include ../../public/js/core/Tab_Navigator.js
+
+  script.
+    (() => {
+      const addBotPopup = window.Popup ? new window.Popup({ overlay_selector: "[data-add-bot-popup]" }) : null;
+      addBotPopup?.iniciar();
+      window.TabNavigator?.render("#add-bot-tabs");
+      document.getElementById("open_add_bot")?.addEventListener("click", () => {
+        // Reabrir el popup siempre arranca en "Bot Nuevo" (no deja pegado el último tab elegido).
+        document.querySelector('#add-bot-tabs .tab[data-section="custom"]')?.click();
+        addBotPopup?.open();
+      });
+
+      // Filtro de bots preconfigurados: oculta tarjetas que no coinciden y
+      // mantiene una selección válida (si el filtro esconde la marcada, marca
+      // la primera visible; sin coincidencias, deshabilita el submit).
+      const systemBotSearch = document.getElementById("system_bot_search");
+      systemBotSearch?.addEventListener("input", () => {
+        const query = systemBotSearch.value.trim().toLowerCase();
+        const cards = Array.from(document.querySelectorAll("#add_bot_popup .system-bot-pick"));
+        const visible = [];
+        for (const card of cards) {
+          const match = !query || card.textContent.toLowerCase().includes(query);
+          card.hidden = !match;
+          if (match) visible.push(card);
+        }
+        const checked = cards.find((card) => card.querySelector("input").checked);
+        if (visible.length && (!checked || checked.hidden)) {
+          if (checked) checked.querySelector("input").checked = false;
+          visible[0].querySelector("input").checked = true;
+        }
+        const empty = document.getElementById("system_bot_search_empty");
+        if (empty) empty.hidden = visible.length > 0;
+        const submit = document.getElementById("use_system_bot");
+        if (submit) submit.disabled = visible.length === 0;
+      });
+    })();

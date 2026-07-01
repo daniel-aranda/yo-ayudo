@@ -44,6 +44,57 @@ async function account_with_bots(pool) {
   return result.rows[0];
 }
 
+// Crea una cuenta+bot frescos (aislados del seed demo) con un review_item
+// pendiente colgado de un mensaje real (review_items.message_id es NOT NULL).
+// Devuelve { account_id, organization_id, bot_id, item_id }.
+async function seed_pending_review(pool, { slug, reason }) {
+  const organization_id = (await pool.query("SELECT id FROM organizations LIMIT 1")).rows[0].id;
+  const account = (
+    await pool.query(
+      "INSERT INTO accounts (organization_id, name, slug, status) VALUES ($1, $2, $3, 'active') RETURNING *",
+      [organization_id, `Cuenta ${slug}`, `cuenta-${slug}`],
+    )
+  ).rows[0];
+  const bot = (
+    await pool.query(
+      "INSERT INTO bots (organization_id, account_id, name, slug, bot_type, status) VALUES ($1, $2, $3, $4, 'whatsapp', 'active') RETURNING *",
+      [organization_id, account.id, `Bot ${slug}`, `bot-${slug}`],
+    )
+  ).rows[0];
+  const contact = (
+    await pool.query(
+      "INSERT INTO contacts (account_id, organization_id, whatsapp_phone, display_name) VALUES ($1, $2, $3, 'Cliente Review') RETURNING id",
+      [account.id, organization_id, `52155${String(reason.length).padStart(7, "0").slice(-7)}`],
+    )
+  ).rows[0];
+  const conversation = (
+    await pool.query(
+      "INSERT INTO conversations (account_id, organization_id, bot_id, contact_id, channel, last_message_at) VALUES ($1, $2, $3, $4, 'whatsapp', now()) RETURNING id",
+      [account.id, organization_id, bot.id, contact.id],
+    )
+  ).rows[0];
+  const message = (
+    await pool.query(
+      `
+        INSERT INTO messages (
+          account_id, organization_id, bot_id, conversation_id, contact_id,
+          direction, external_message_id, raw_payload_json, text_body, processing_status
+        )
+        VALUES ($1, $2, $3, $4, $5, 'inbound', $6, '{}'::jsonb, $7, 'stored')
+        RETURNING id
+      `,
+      [account.id, organization_id, bot.id, conversation.id, contact.id, `review-${slug}`, reason],
+    )
+  ).rows[0];
+  const item = (
+    await pool.query(
+      "INSERT INTO review_items (account_id, organization_id, bot_id, message_id, reason, status, raw_text) VALUES ($1, $2, $3, $4, $5, 'pending', $6) RETURNING id",
+      [account.id, organization_id, bot.id, message.id, reason, reason],
+    )
+  ).rows[0];
+  return { account_id: account.id, organization_id, bot_id: bot.id, item_id: item.id };
+}
+
 async function seed_operational_day(pool, account_id, organization_id) {
   const day = await pool.query(
     `
@@ -193,39 +244,42 @@ describe("Operational dashboard", () => {
     expect(response.text).not.toContain("pastor");
   });
 
-  it("scopes the top nav to the account when one is in the URL (Inspector/Review carry it; Admin stays global)", async () => {
+  it("scopes the top nav to the account when one is in the URL (Bots/Canales scoped; Review/Admin operator-only)", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
 
     const response = await request(app).get(`/dashboard/accounts/${account_id}`).expect(200);
 
-    // La cuenta es el único scope. Dashboard e Inspector la llevan en el path;
-    // Review en ?account=. Admin es global a propósito (nunca scopeado).
+    // El nav del dueño (Dashboard/Bots/Canales) se queda scopeado a la cuenta;
+    // Review (?account=) y Admin son del operador. Inspector ya no va en el header.
     const qs = `?account=${account_id}`;
     expect(response.text).toContain(`href="/dashboard/accounts/${account_id}"`);
-    expect(response.text).toContain(`href="/inspector/accounts/${account_id}"`);
+    expect(response.text).toContain(`href="/dashboard/accounts/${account_id}/bots"`);
+    expect(response.text).toContain(`href="/dashboard/accounts/${account_id}/channels"`);
+    expect(response.text).not.toContain(`href="/inspector/accounts/${account_id}"`);
     expect(response.text).toContain(`href="/review${qs}"`);
     expect(response.text).toContain('href="/admin/integrations"');
     expect(response.text).not.toContain(`href="/admin/integrations${qs}"`);
   });
 
-  it("leaves the top nav unscoped on the global dashboard (no account context)", async () => {
+  it("leaves the top nav unscoped on the global dashboard (no account context: no Bots/Canales)", async () => {
     const app = create_dashboard_test_app(pool);
 
     const response = await request(app).get("/dashboard").expect(200);
 
-    // Plain nav targets, no ?account= scope query.
-    expect(response.text).toContain('href="/inspector"');
+    // Sin cuenta en contexto no hay Bots/Canales en el nav; Review queda sin scope.
     expect(response.text).toContain('href="/review"');
     expect(response.text).not.toContain("?account=");
+    expect(response.text).not.toContain('href="/dashboard/accounts/');
+    expect(response.text).not.toContain('href="/inspector"');
   });
 
-  it("does not duplicate bots in the account view (one link per active bot)", async () => {
+  it("does not duplicate bots in the bots page (one link per active bot)", async () => {
     const { account_id, organization_id } = await account_with_bots(pool);
     const app = create_dashboard_test_app(pool);
 
     const response = await request(app)
-      .get(`/dashboard/accounts/${account_id}`)
+      .get(`/dashboard/accounts/${account_id}/bots`)
       .expect(200);
 
     const bot_link_matches = response.text.match(/href="\/inspector\/bots\//g) ?? [];
@@ -242,9 +296,9 @@ describe("Operational dashboard", () => {
     const app = create_dashboard_test_app(pool);
     const base = `/dashboard/accounts/${account_id}`;
 
-    // La página ofrece el alta con tabs (Bot Nuevo | Bot preconfigurado), los
-    // preconfigurados como tarjetas seleccionables (no dropdown) y con buscador.
-    const page = await request(app).get(base).expect(200);
+    // La página de Bots ofrece el alta con tabs (Bot Nuevo | Bot preconfigurado),
+    // los preconfigurados como tarjetas seleccionables (no dropdown) y con buscador.
+    const page = await request(app).get(`${base}/bots`).expect(200);
     expect(page.text).toContain("Agregar bot");
     expect(page.text).toContain('data-section="custom"');
     expect(page.text).toContain('data-section="system"');
@@ -267,7 +321,7 @@ describe("Operational dashboard", () => {
     expect(custom.status).toBe("draft");
     expect(custom.bot_type).toBe("custom");
     expect(custom.account_id).toBe(account_id);
-    const refreshed = await request(app).get(base).expect(200);
+    const refreshed = await request(app).get(`${base}/bots`).expect(200);
     expect(refreshed.text).toContain("Bot Dashboard Custom");
 
     // Desde bot de sistema → clon custom en draft, sin knowledge ni grupos de la
@@ -310,8 +364,8 @@ describe("Operational dashboard", () => {
     const app = create_dashboard_test_app(pool);
     const base = `/dashboard/accounts/${account_id}`;
 
-    // La página ofrece el alta con tabs WhatsApp | Instagram (coming soon).
-    const page = await request(app).get(base).expect(200);
+    // La página de Canales ofrece el alta con tabs WhatsApp | Instagram (coming soon).
+    const page = await request(app).get(`${base}/channels`).expect(200);
     expect(page.text).toContain("Agregar canal");
     expect(page.text).toContain('data-section="whatsapp"');
     expect(page.text).toContain('data-section="instagram"');
@@ -330,7 +384,7 @@ describe("Operational dashboard", () => {
         bot_id: bot.id,
       })
       .expect(302)
-      .expect("Location", `${base}#panel-canales`);
+      .expect("Location", `${base}/channels`);
 
     const channel = (
       await pool.query("SELECT * FROM whatsapp_phone_numbers WHERE phone_number_id = 'dashboard-test-phone-id' LIMIT 1")
@@ -347,7 +401,7 @@ describe("Operational dashboard", () => {
     expect(assignment).toBeTruthy();
     expect(assignment.bot_id).toBe(bot.id);
 
-    const refreshed = await request(app).get(base).expect(200);
+    const refreshed = await request(app).get(`${base}/channels`).expect(200);
     expect(refreshed.text).toContain("+52 55 9999 0000");
 
     // Un phone_number_id ya dado de alta en OTRA cuenta no se puede robar.
@@ -423,5 +477,51 @@ describe("Operational dashboard", () => {
     await request(app)
       .get(`/dashboard/accounts/${other.id}/tasks/${task.id}`)
       .expect(404);
+  });
+
+  it("surfaces unresolved messages at the account level (metric + owner-facing review page)", async () => {
+    const { account_id } = await seed_pending_review(pool, { slug: "envios", reason: "¿Hacen envíos a Monterrey?" });
+    const app = create_dashboard_test_app(pool);
+
+    // El dashboard muestra la métrica "Sin resolver" enlazando a la review de la cuenta.
+    const dash = await request(app).get(`/dashboard/accounts/${account_id}`).expect(200);
+    expect(dash.text).toContain(`href="/dashboard/accounts/${account_id}/review"`);
+    expect(dash.text).toContain("Sin resolver");
+
+    // La página (owner-facing) lista el pendiente y ofrece responder + enseñar.
+    const review = await request(app).get(`/dashboard/accounts/${account_id}/review`).expect(200);
+    expect(review.text).toContain("Mensajes sin resolver");
+    expect(review.text).toContain("¿Hacen envíos a Monterrey?");
+    expect(review.text).toContain("Tu respuesta");
+    expect(review.text).toContain('name="learn"');
+  });
+
+  it("lets the owner resolve and teach from the account-level review", async () => {
+    const { account_id, item_id } = await seed_pending_review(pool, { slug: "estacion", reason: "¿Tienen estacionamiento?" });
+    const app = create_dashboard_test_app(pool);
+
+    await request(app)
+      .post(`/dashboard/accounts/${account_id}/review/${item_id}/resolve`)
+      .type("form")
+      .send({ note: "Sí, hay estacionamiento gratis para clientes.", learn: "on" })
+      .expect(302)
+      .expect("Location", `/dashboard/accounts/${account_id}/review`);
+
+    // Quedó resuelto y aprendido como conocimiento del negocio (reusa review_service).
+    const resolved = (await pool.query("SELECT status, resolution_json FROM review_items WHERE id = $1", [item_id])).rows[0];
+    expect(resolved.status).toBe("resolved");
+    expect(resolved.resolution_json.learned).toBe(true);
+    const doc = (
+      await pool.query(
+        "SELECT content FROM memory_documents WHERE account_id = $1 AND document_type = 'business_faq' LIMIT 1",
+        [account_id],
+      )
+    ).rows[0];
+    expect(doc.content).toContain("estacionamiento gratis");
+
+    // Ya no aparece como pendiente en la review de la cuenta.
+    const review = await request(app).get(`/dashboard/accounts/${account_id}/review`).expect(200);
+    expect(review.text).not.toContain("¿Tienen estacionamiento?");
+    expect(review.text).toContain("Todo al día");
   });
 });

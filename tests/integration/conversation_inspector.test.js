@@ -8,6 +8,7 @@ import { create_simulated_whatsapp_payload } from "../../src/channels/whatsapp/w
 import { resolve_whatsapp_identity_by_phone_number_id } from "../../src/channels/whatsapp/whatsapp_identity_resolver.js";
 import { handle_whatsapp_webhook_payload } from "../../src/engine/message_processor.js";
 import { register_inspector_routes } from "../../src/inspector/inspector_routes.js";
+import { config } from "../../src/app/config.js";
 import { navigation_context } from "../../src/app/navigation_middleware.js";
 import { json_text, message_alignment, present_conversation_turns, format_phone } from "../../src/inspector/inspector_presenter.js";
 import { compact_trace_summary } from "../../src/inspector/inspector_presenter.js";
@@ -39,11 +40,12 @@ class fake_whatsapp_client {
   }
 }
 
-async function simulate(pool, client, text) {
+async function simulate(pool, client, text, options = {}) {
   return handle_whatsapp_webhook_payload(
     create_simulated_whatsapp_payload({
       from: "5215550000000",
       text,
+      message_id: options.message_id,
     }),
     {
       pool,
@@ -52,6 +54,35 @@ async function simulate(pool, client, text) {
       memory_store: new local_memory_store({ base_dir: ".storage/test-inspector-memory" }),
     },
   );
+}
+
+async function enable_collection(pool, { auto_generate = false } = {}) {
+  const row = (
+    await pool.query(
+      `SELECT b.id, b.definition_json FROM whatsapp_phone_numbers w
+       JOIN phone_number_bot_assignments a ON a.whatsapp_phone_number_id = w.id AND a.status = 'active' AND a.active_key = 'active'
+       JOIN bots b ON b.id = a.bot_id
+       WHERE w.phone_number_id = $1 LIMIT 1`,
+      [config.whatsapp_phone_number_id],
+    )
+  ).rows[0];
+  const interactions = [
+    {
+      type: "recolectar_informacion",
+      action_id: "recolectar_informacion",
+      enabled: true,
+      instructions: "Arma una propuesta de bot para el negocio del vendedor.",
+      options: { generar_documento_al_terminar: auto_generate },
+    },
+    { type: "generar_documento", action_id: "generar_documento", enabled: true, instructions: "" },
+  ];
+  const definition = { ...(row.definition_json ?? {}), interactions };
+  await pool.query("UPDATE bots SET definition_json = $2::jsonb, acciones_habilitadas_json = $3::jsonb WHERE id = $1", [
+    row.id,
+    JSON.stringify(definition),
+    JSON.stringify(["recolectar_informacion", "generar_documento"]),
+  ]);
+  return row.id;
 }
 
 function create_inspector_test_app(pool, dependencies = {}) {
@@ -454,6 +485,56 @@ describe("Conversation Inspector", () => {
     // Última actividad = fecha corta, no el Date crudo con zona horaria.
     expect(page.text).not.toContain("GMT");
     expect(page.text).not.toContain("Standard Time");
+  });
+
+  it("renders information collection as a stateful interaction, not as action-less turns", async () => {
+    const app = create_inspector_test_app(pool);
+    const bot_id = await enable_collection(pool);
+    await simulate(pool, client, "arma una propuesta para mi negocio", { message_id: "inspector-collection-start" });
+    await simulate(pool, client, "pierdo clientes porque no contestamos rápido", {
+      message_id: "inspector-collection-followup",
+    });
+    await simulate(pool, client, "ya con eso, gracias", { message_id: "inspector-collection-ready" });
+    const ids = (
+      await pool.query(
+        `
+          SELECT
+            messages.id AS message_id,
+            messages.account_id,
+            messages.conversation_id
+          FROM messages
+          WHERE messages.external_message_id = 'inspector-collection-start'
+          LIMIT 1
+        `,
+      )
+    ).rows[0];
+
+    const view = await get_conversation_view(pool, ids.conversation_id);
+    const turns = present_conversation_turns(view.turns);
+    expect(turns.map((turn) => turn.understanding?.actions?.[0]?.label).filter(Boolean)).toEqual([
+      "Inicia recolección",
+      "Seguimiento de recolección",
+      "Recolección lista",
+    ]);
+    expect(view.collection_session.status).toBe("ready");
+
+    const page = await request(app)
+      .get(`/inspector/accounts/${ids.account_id}/conversations/${ids.conversation_id}`)
+      .expect(200);
+    expect(page.text).toContain("Inicia recolección");
+    expect(page.text).toContain("Seguimiento de recolección");
+    expect(page.text).toContain("Recolección lista");
+    expect(page.text).not.toContain("Sin acción ejecutada");
+
+    const list = await request(app).get(`/inspector/bots/${bot_id}/conversations`).expect(200);
+    expect(list.text).toContain("Recolección");
+
+    await request(app)
+      .get(`/inspector/messages/${ids.message_id}`)
+      .expect(200)
+      .expect(/Inicia recolección/)
+      .expect(/interacción stateful/)
+      .expect(/no generó action_audit_logs/);
   });
 
   it("surfaces the bot-created task in the conversation visor (closes the human follow-up loop)", async () => {

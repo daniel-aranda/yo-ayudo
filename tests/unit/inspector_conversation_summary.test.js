@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  compact_trace_summary,
   format_phone,
+  present_conversation_overview,
   present_conversation_summary,
   present_conversation_turns,
 } from "../../src/inspector/inspector_presenter.js";
@@ -71,6 +73,81 @@ describe("present_conversation_summary", () => {
 });
 
 describe("present_conversation_turns", () => {
+  it("shows collection turns as stateful interactions instead of action-less messages", () => {
+    const startSummary = compact_trace_summary({
+      message: { id: "start", parsed_intent: "collect_information_start" },
+      parsing_results: [{ intent: "collect_information_start", confidence: 0.9 }],
+      router_runs: [],
+      agent_runs: [],
+      memory_documents: [],
+      review_items: [],
+      action_logs: [],
+      processing_events: [
+        {
+          event_stage: "operation_write",
+          details_json: {
+            intent: "collect_information_start",
+            action_id: "recolectar_informacion",
+            handled: true,
+            action_status: "collecting",
+            metadata: { session_id: "session-1", is_complete: false },
+          },
+        },
+      ],
+    });
+    const followupSummary = compact_trace_summary({
+      message: { id: "follow", parsed_intent: "collect_information" },
+      parsing_results: [{ intent: "collect_information", confidence: 1 }],
+      router_runs: [],
+      agent_runs: [],
+      memory_documents: [],
+      review_items: [],
+      action_logs: [],
+      processing_events: [
+        {
+          event_stage: "operation_write",
+          details_json: {
+            intent: "collect_information",
+            action_id: "recolectar_informacion",
+            handled: true,
+            action_status: "ready",
+            metadata: { session_id: "session-1", is_complete: true },
+          },
+        },
+      ],
+    });
+
+    expect(startSummary.interactions[0]).toMatchObject({
+      action_id: "recolectar_informacion",
+      label: "Inicia recolección",
+      status: "collecting",
+    });
+    expect(followupSummary.interactions[0]).toMatchObject({
+      action_id: "recolectar_informacion",
+      label: "Recolección lista",
+      status: "ready",
+    });
+
+    const turns = present_conversation_turns([
+      {
+        id: "start",
+        incoming: inbound("arma una propuesta", startSummary),
+        responses: [outbound("¿Qué es lo que más le duele al negocio hoy?")],
+      },
+      {
+        id: "follow",
+        incoming: inbound("ya con eso", followupSummary),
+        responses: [outbound("Esto es lo que tengo.")],
+      },
+    ]);
+
+    expect(turns[0].status_tone).toBe("ok");
+    expect(turns[0].understanding.has_action).toBe(true);
+    expect(turns[0].understanding.actions[0].label).toBe("Inicia recolección");
+    expect(turns[1].understanding.actions[0].label).toBe("Recolección lista");
+    expect(present_conversation_overview(turns).last_action).toBe("Recolección lista");
+  });
+
   it("builds a full turn: user message, understanding, agent reply, status", () => {
     const [turn] = present_conversation_turns([
       {
